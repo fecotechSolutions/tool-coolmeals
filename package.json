@@ -1,0 +1,21 @@
+{
+  "name": "coolmeals-leads",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:web": "npm run dev -w @coolmeals/web",
+    "dev:api": "npm run dev -w @coolmeals/api",
+    "build": "npm run build --workspaces --if-present",
+    "build:web": "npm run build -w @coolmeals/web",
+    "build:api": "npm run build -w @coolmeals/api",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

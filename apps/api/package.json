@@ -1,0 +1,26 @@
+{
+  "name": "@coolmeals/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"No lint configured yet\""
+  },
+  "dependencies": {
+    "@coolmeals/shared": "*",
+    "@hono/node-server": "^1.14.1",
+    "@hono/zod-validator": "^0.5.0",
+    "@supabase/supabase-js": "^2.49.4",
+    "hono": "^4.7.7",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
