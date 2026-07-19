@@ -322,6 +322,7 @@ export const PIPELINE_STATUSES = [
   "esperando_respuesta",
   "atencion_representante",
   "quiere_ser_distribuidor",
+  "derivado_distribuidor",
   "muestras",
   "pedido_lead",
   "pedido_cliente",
@@ -350,6 +351,16 @@ export const PROVINCES: Province[] = [
   "Neuquén",
   "Río Negro",
 ];
+
+/** Hashtag visible en card cuando está derivado a un dist. de la red. */
+export function distributorHashtag(name: string): string {
+  const slug = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
+  return `#derivado_${slug}`;
+}
 
 /** Regla demo: desde muestras, el destino de pedido depende de isCustomer. */
 export function suggestedOrderStatus(

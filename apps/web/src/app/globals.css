@@ -951,14 +951,9 @@ table.data tr:hover td {
   margin-top: 0.55rem;
 }
 
-.pipeline-hashtag {
-  font-size: 0.72rem;
-  font-weight: 700;
+.pipeline-hashtag.is-dist-tag {
+  background: var(--cyan-soft);
   color: var(--navy-deep);
-  background: var(--active);
-  padding: 0.18rem 0.45rem;
-  border-radius: 999px;
-  letter-spacing: 0.01em;
 }
 
 .pipeline-hashtag-btn {
