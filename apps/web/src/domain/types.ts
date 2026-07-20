@@ -12,6 +12,7 @@ export const ClientType = {
   REPRESENTANTE: "representante",
   DISTRIBUIDOR: "distribuidor",
   FASON: "fason",
+  OTRO: "otro",
 } as const;
 export type ClientType = (typeof ClientType)[keyof typeof ClientType];
 
@@ -49,8 +50,11 @@ export const ConversationStatus = {
   ESPERANDO_RESPUESTA: "esperando_respuesta",
   ATENCION_REPRESENTANTE: "atencion_representante",
   QUIERE_SER_DISTRIBUIDOR: "quiere_ser_distribuidor",
+  QUIERE_SER_REPRESENTANTE: "quiere_ser_representante",
+  QUIERE_SER_FASON: "quiere_ser_fason",
   DERIVADO: "derivado",
   DERIVADO_DISTRIBUIDOR: "derivado_distribuidor",
+  SIN_COBERTURA: "sin_cobertura",
   MUESTRAS: "muestras",
   PEDIDO_LEAD: "pedido_lead",
   PEDIDO_CLIENTE: "pedido_cliente",
@@ -61,7 +65,10 @@ export type ConversationStatus =
   (typeof ConversationStatus)[keyof typeof ConversationStatus];
 
 /** Hashtag que marca atención humana completada por un comercial Cool Meals. */
-export const HASHTAG_ATENDIDO_REPRESENTANTE = "#atendido_por_representante";
+/** Hashtag visible cuando la card está en Atención humana (handoff). */
+export const HASHTAG_ATENCION_HUMANA = "#atencion_humana";
+/** @deprecated Usar HASHTAG_ATENCION_HUMANA */
+export const HASHTAG_ATENDIDO_REPRESENTANTE = HASHTAG_ATENCION_HUMANA;
 
 export type Province =
   | "Buenos Aires"
@@ -73,7 +80,21 @@ export type Province =
   | "Entre Ríos"
   | "Salta"
   | "Neuquén"
-  | "Río Negro";
+  | "Río Negro"
+  | "La Rioja"
+  | "Catamarca"
+  | "Chaco"
+  | "Chubut"
+  | "Corrientes"
+  | "Formosa"
+  | "Jujuy"
+  | "La Pampa"
+  | "Misiones"
+  | "San Juan"
+  | "San Luis"
+  | "Santa Cruz"
+  | "Santiago del Estero"
+  | "Tierra del Fuego";
 
 export type Distributor = {
   id: string;
@@ -155,7 +176,8 @@ export type CommercialRuleAction =
   | { type: "derive_to_distributor"; distributorId: string }
   | { type: "own_attention" }
   | { type: "request_samples" }
-  | { type: "close" };
+  | { type: "close" }
+  | { type: "no_coverage" };
 
 export type CommercialRule = {
   id: string;
@@ -206,6 +228,24 @@ export type PromptConfig = {
   updatedAt: string;
 };
 
+/** Logística de muestras — 3 datos mínimos: nombre, teléfono, domicilio. */
+export type SampleRequest = {
+  id: string;
+  conversationId: string | null;
+  leadId: string | null;
+  fullName: string;
+  phone: string;
+  address: string;
+  city: string;
+  province: string;
+  postalCode: string;
+  status: "pendiente" | "enviado" | "entregado" | "cancelado";
+  sheetSyncedAt: string | null;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ExecutiveDashboard = {
   leadsToday: number;
   leadsMonth: number;
@@ -248,22 +288,11 @@ export type CommercialDashboard = {
     fason: number;
     quiereSerRepresentante: number;
   };
-  monthlyEvolution: Array<{
-    monthKey: string;
-    label: string;
-    mayoristas: number;
-    retail: number;
-    minoristas: number;
-    quiere_ser_distribuidor: number;
-    quiere_ser_representante: number;
-    fason: number;
-  }>;
-  vsPreviousMonth: Array<{
-    key: CommercialTypeKey;
-    label: string;
-    current: number;
-    previous: number;
-    deltaPct: number | null;
+  /** Conversaciones del período agrupadas por provincia (Pipeline). */
+  byProvince: Array<{
+    province: string;
+    count: number;
+    pct: number;
   }>;
 };
 
@@ -274,6 +303,7 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   representante: "Quiere ser representante",
   distribuidor: "Quiere ser distribuidor",
   fason: "Fasón",
+  otro: "Otro",
 };
 
 export const ORIGIN_LABELS: Record<LeadOrigin, string> = {
@@ -302,8 +332,11 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
   esperando_respuesta: "Esperando respuesta",
   atencion_representante: "Atención humana",
   quiere_ser_distribuidor: "Quiere ser distribuidor",
+  quiere_ser_representante: "Quiere ser representante",
+  quiere_ser_fason: "Quiere ser fasón",
   derivado: "Derivado",
   derivado_distribuidor: "Derivado a distribuidor",
+  sin_cobertura: "Sin cobertura",
   muestras: "Muestras",
   pedido_lead: "Pedidos (leads)",
   pedido_cliente: "Pedidos (clientes)",
@@ -314,7 +347,7 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
 /**
  * Estados fijos del pipeline.
  * Los distribuidores de red se agregan como columnas dinámicas (derivados).
- * Orden: … → quiere ser dist → [dists] → muestras → pedidos lead/cliente → …
+ * Orden: … → quiere ser dist / rep / fasón → [dists] → muestras → pedidos lead/cliente → …
  */
 export const PIPELINE_STATUSES = [
   "nuevo",
@@ -322,7 +355,10 @@ export const PIPELINE_STATUSES = [
   "esperando_respuesta",
   "atencion_representante",
   "quiere_ser_distribuidor",
+  "quiere_ser_representante",
+  "quiere_ser_fason",
   "derivado_distribuidor",
+  "sin_cobertura",
   "muestras",
   "pedido_lead",
   "pedido_cliente",
@@ -350,16 +386,30 @@ export const PROVINCES: Province[] = [
   "Salta",
   "Neuquén",
   "Río Negro",
+  "La Rioja",
+  "Catamarca",
+  "Chaco",
+  "Chubut",
+  "Corrientes",
+  "Formosa",
+  "Jujuy",
+  "La Pampa",
+  "Misiones",
+  "San Juan",
+  "San Luis",
+  "Santa Cruz",
+  "Santiago del Estero",
+  "Tierra del Fuego",
 ];
 
-/** Hashtag visible en card cuando está derivado a un dist. de la red. */
+/** Hashtag visible en card cuando está derivado: solo el nombre de la distribuidora. */
 export function distributorHashtag(name: string): string {
   const slug = name
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
-  return `#derivado_${slug}`;
+  return `#${slug}`;
 }
 
 /** Regla demo: desde muestras, el destino de pedido depende de isCustomer. */

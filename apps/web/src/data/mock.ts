@@ -569,7 +569,7 @@ export const mockConversations: Conversation[] = [
       "Ya fue atendido por representante. Quedó pendiente envío de lista de precios.",
     lastMessage: "Gracias, quedo a la espera del PDF",
     notes: "Seguimiento post llamada",
-    tags: ["#atendido_por_representante"],
+    tags: [],
     isCustomer: false,
     assignedTo: "admin@coolmeals.com",
     messages: [
@@ -943,16 +943,10 @@ export const mockPrompt: PromptConfig = {
 };
 
 export function buildExecutiveDashboard(
-  leads: Lead[],
   conversations: Conversation[],
 ): ExecutiveDashboard {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  const startOfMonth = new Date(
-    startOfDay.getFullYear(),
-    startOfDay.getMonth(),
-    1,
-  );
 
   const conversationsOpen = conversations.filter(
     (c) => c.status !== "finalizado" && c.status !== "descartado",
@@ -966,21 +960,28 @@ export function buildExecutiveDashboard(
   const conversationsTotal = conversations.length || 1;
 
   return {
-    leadsToday: leads.filter((l) => new Date(l.createdAt) >= startOfDay).length,
-    leadsMonth: leads.filter((l) => new Date(l.createdAt) >= startOfMonth)
-      .length,
+    leadsToday: conversations.filter(
+      (c) => new Date(c.createdAt) >= startOfDay,
+    ).length,
+    leadsMonth: conversations.length,
     conversationsOpen,
     conversationsClosed,
     noClientReplyCount,
     conversationsTotal: conversations.length,
     pctNoClientReply:
       Math.round((noClientReplyCount / conversationsTotal) * 1000) / 10,
-    leadsQuiereSerDistribuidor: leads.filter(
-      (l) => l.clientType === "distribuidor",
+    leadsQuiereSerDistribuidor: conversations.filter(
+      (c) =>
+        c.status === "quiere_ser_distribuidor" ||
+        c.clientType === "distribuidor",
     ).length,
-    leadsFason: leads.filter((l) => l.clientType === "fason").length,
-    leadsQuiereSerRepresentante: leads.filter(
-      (l) => l.clientType === "representante",
+    leadsFason: conversations.filter(
+      (c) => c.status === "quiere_ser_fason" || c.clientType === "fason",
+    ).length,
+    leadsQuiereSerRepresentante: conversations.filter(
+      (c) =>
+        c.status === "quiere_ser_representante" ||
+        c.clientType === "representante",
     ).length,
   };
 }
@@ -1005,7 +1006,9 @@ function emptyTypeCounts(): Record<CommercialTypeKey, number> {
   };
 }
 
-function mapLeadToCommercialKey(clientType: Lead["clientType"]): CommercialTypeKey | null {
+function mapClientTypeToCommercialKey(
+  clientType: Conversation["clientType"],
+): CommercialTypeKey | null {
   if (clientType === "mayorista") return "mayoristas";
   if (clientType === "retail") return "retail";
   if (clientType === "minorista") return "minoristas";
@@ -1015,59 +1018,43 @@ function mapLeadToCommercialKey(clientType: Lead["clientType"]): CommercialTypeK
   return null;
 }
 
-function countTypesForPeriod(leads: Lead[], from: Date, to: Date) {
-  const counts = emptyTypeCounts();
-  for (const lead of leads) {
-    const created = new Date(lead.createdAt);
-    if (created < from || created >= to) continue;
-    const key = mapLeadToCommercialKey(lead.clientType);
-    if (key) counts[key] += 1;
-  }
-  return counts;
-}
-
-function monthLabel(d: Date) {
-  return d.toLocaleDateString("es-AR", { month: "short", year: "numeric" });
-}
-
-function monthKey(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function seedMonth(
-  base: Record<CommercialTypeKey, number>,
-  factor: number,
-): Record<CommercialTypeKey, number> {
-  return {
-    mayoristas: Math.max(0, Math.round(base.mayoristas * factor + 1)),
-    retail: Math.max(0, Math.round(base.retail * factor)),
-    minoristas: Math.max(0, Math.round(base.minoristas * factor + 2)),
-    quiere_ser_distribuidor: Math.max(
-      0,
-      Math.round(base.quiere_ser_distribuidor * factor),
-    ),
-    quiere_ser_representante: Math.max(
-      0,
-      Math.round(base.quiere_ser_representante * factor),
-    ),
-    fason: Math.max(0, Math.round(base.fason * factor)),
-  };
+function provinceLabel(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "").trim();
+  return trimmed.length > 0 ? trimmed : "Sin provincia";
 }
 
 export function buildCommercialDashboard(
-  leads: Lead[],
   conversations: Conversation[],
   distributors: Distributor[],
 ): CommercialDashboard {
-  const now = new Date();
-  const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
   const counts = emptyTypeCounts();
-  for (const lead of leads) {
-    const key = mapLeadToCommercialKey(lead.clientType);
+  for (const conv of conversations) {
+    const key = mapClientTypeToCommercialKey(conv.clientType);
     if (key) counts[key] += 1;
   }
+
+  const interestDist = conversations.filter(
+    (c) =>
+      c.status === "quiere_ser_distribuidor" ||
+      c.clientType === "distribuidor",
+  ).length;
+  const interestFason = conversations.filter(
+    (c) => c.status === "quiere_ser_fason" || c.clientType === "fason",
+  ).length;
+  const interestRep = conversations.filter(
+    (c) =>
+      c.status === "quiere_ser_representante" ||
+      c.clientType === "representante",
+  ).length;
+  counts.quiere_ser_distribuidor = Math.max(
+    counts.quiere_ser_distribuidor,
+    interestDist,
+  );
+  counts.quiere_ser_representante = Math.max(
+    counts.quiere_ser_representante,
+    interestRep,
+  );
+  counts.fason = Math.max(counts.fason, interestFason);
 
   const totalTypes = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
 
@@ -1095,46 +1082,20 @@ export function buildCommercialDashboard(
     pct: Math.round((row.count / derivedTotal) * 1000) / 10,
   }));
 
-  const monthlyEvolution = [];
-  for (let i = 5; i >= 0; i -= 1) {
-    const from = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const to = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-    let period = countTypesForPeriod(leads, from, to);
-    if (!Object.values(period).some((v) => v > 0)) {
-      period = seedMonth(counts, 0.35 + (5 - i) * 0.1);
-    }
-    if (i === 0) period = { ...counts };
-    monthlyEvolution.push({
-      monthKey: monthKey(from),
-      label: monthLabel(from),
-      ...period,
-    });
+  const provinceMap = new Map<string, number>();
+  for (const conv of conversations) {
+    const label = provinceLabel(conv.province);
+    provinceMap.set(label, (provinceMap.get(label) ?? 0) + 1);
   }
-
-  const previous = countTypesForPeriod(leads, startPrevMonth, startThisMonth);
-  const previousSeeded = Object.values(previous).some((v) => v > 0)
-    ? previous
-    : seedMonth(counts, 0.75);
-
-  const vsPreviousMonth = (Object.keys(COMMERCIAL_LABELS) as CommercialTypeKey[]).map(
-    (key) => {
-      const current = counts[key];
-      const prev = previousSeeded[key];
-      const deltaPct =
-        prev === 0
-          ? current > 0
-            ? 100
-            : null
-          : Math.round(((current - prev) / prev) * 1000) / 10;
-      return {
-        key,
-        label: COMMERCIAL_LABELS[key],
-        current,
-        previous: prev,
-        deltaPct,
-      };
-    },
-  );
+  const provinceTotal =
+    Array.from(provinceMap.values()).reduce((a, b) => a + b, 0) || 1;
+  const byProvince = Array.from(provinceMap.entries())
+    .map(([province, count]) => ({
+      province,
+      count,
+      pct: Math.round((count / provinceTotal) * 1000) / 10,
+    }))
+    .sort((a, b) => b.count - a.count || a.province.localeCompare(b.province));
 
   return {
     counts,
@@ -1145,7 +1106,6 @@ export function buildCommercialDashboard(
       fason: counts.fason,
       quiereSerRepresentante: counts.quiere_ser_representante,
     },
-    monthlyEvolution,
-    vsPreviousMonth,
+    byProvince,
   };
 }

@@ -1,0 +1,8 @@
+definition: definition.json
+name: Cool Meals — Leads WhatsApp
+slug: coolmeals-leads
+status: active
+triggers:
+  - active: true
+    phoneNumberId: "597907523413541"
+    triggerType: inbound_message

@@ -7,7 +7,7 @@ import { dataApi } from "@/data/repository";
 import {
   CLIENT_TYPE_LABELS,
   CONVERSATION_STATUS_LABELS,
-  HASHTAG_ATENDIDO_REPRESENTANTE,
+  HASHTAG_ATENCION_HUMANA,
   ORIGIN_LABELS,
   PIPELINE_STATUSES,
   distributorHashtag,
@@ -26,7 +26,13 @@ type PipelineColumn = {
 
 function statusSubtitle(status: ConversationStatus) {
   if (status === "quiere_ser_distribuidor") {
-    return "Lead quiere sumarse a la red";
+    return "Handoff al agente comercial";
+  }
+  if (status === "quiere_ser_representante") {
+    return "Handoff al equipo comercial";
+  }
+  if (status === "quiere_ser_fason") {
+    return "Handoff al equipo comercial";
   }
   if (status === "derivado_distribuidor") {
     return "Una sola columna · el dist. va en el hashtag";
@@ -46,8 +52,54 @@ function statusSubtitle(status: ConversationStatus) {
   return "Estado";
 }
 
-function stripDistributorHashtags(tags: string[]) {
-  return tags.filter((tag) => !tag.startsWith("#derivado_"));
+function stripDistributorHashtags(
+  tags: string[],
+  distributors: Distributor[],
+) {
+  const known = new Set(
+    distributors.map((d) => distributorHashtag(d.name)),
+  );
+  return tags.filter(
+    (tag) => !tag.startsWith("#derivado_") && !known.has(tag),
+  );
+}
+
+/** Persiste el hashtag del dist. en tags (una vez derivado, no se borra al cambiar de columna). */
+function withDistributorHashtag(
+  tags: string[],
+  distributorName: string | null,
+  distributors: Distributor[],
+) {
+  const next = [...tags];
+  if (!distributorName) return next;
+  const tag = distributorHashtag(distributorName);
+  // Al cambiar de dist., reemplazamos el hashtag de dist. anterior por el nuevo.
+  const withoutOld = stripDistributorHashtags(next, distributors);
+  if (!withoutOld.includes(tag)) withoutOld.push(tag);
+  return withoutOld;
+}
+
+function stripLegacyRepHashtags(tags: string[]) {
+  return tags.filter(
+    (tag) =>
+      tag !== "#atendido_por_representante" &&
+      tag !== HASHTAG_ATENCION_HUMANA,
+  );
+}
+
+function withHumanAttentionHashtag(tags: string[]) {
+  return Array.from(
+    new Set([...stripLegacyRepHashtags(tags), HASHTAG_ATENCION_HUMANA]),
+  );
+}
+
+function isDistributorTag(tag: string, distributors: Distributor[]) {
+  if (tag.startsWith("#derivado_")) return true;
+  return distributors.some((d) => distributorHashtag(d.name) === tag);
+}
+
+function isHumanAttentionTag(tag: string) {
+  return tag === HASHTAG_ATENCION_HUMANA || tag === "#atendido_por_representante";
 }
 
 export default function PipelinePage() {
@@ -113,12 +165,24 @@ export default function PipelinePage() {
   }
 
   function cardTags(card: Conversation) {
-    const tags = stripDistributorHashtags(card.tags ?? []);
+    let tags = stripLegacyRepHashtags(card.tags ?? []);
     const name = distName(card.distributorId);
-    if (card.status === "derivado_distribuidor" && name) {
-      return [...tags, distributorHashtag(name)];
+    if (name) {
+      const tag = distributorHashtag(name);
+      const legacy = `#derivado_${tag.slice(1)}`;
+      if (!tags.includes(tag) && !tags.includes(legacy)) {
+        tags = [...tags, tag];
+      }
     }
-    return tags;
+    if (
+      card.status === "atencion_representante" ||
+      card.status === "quiere_ser_distribuidor" ||
+      card.status === "quiere_ser_representante" ||
+      card.status === "quiere_ser_fason"
+    ) {
+      tags = withHumanAttentionHashtag(tags);
+    }
+    return Array.from(new Set(tags));
   }
 
   async function applyPatch(
@@ -144,6 +208,31 @@ export default function PipelinePage() {
     const current = conversations.find((c) => c.id === id);
     if (!current) return;
 
+    if (column.status === "atencion_representante") {
+      await handoffToHuman(current, "atencion_representante");
+      return;
+    }
+
+    if (column.status === "quiere_ser_distribuidor") {
+      await handoffToHuman(current, "quiere_ser_distribuidor");
+      return;
+    }
+
+    if (column.status === "quiere_ser_representante") {
+      await handoffToHuman(current, "quiere_ser_representante");
+      return;
+    }
+
+    if (column.status === "quiere_ser_fason") {
+      await handoffToHuman(current, "quiere_ser_fason");
+      return;
+    }
+
+    if (column.status === "sin_cobertura") {
+      await handoffToHuman(current, "sin_cobertura");
+      return;
+    }
+
     if (column.status === "derivado_distribuidor") {
       const distributorId =
         current.distributorId ??
@@ -151,8 +240,11 @@ export default function PipelinePage() {
         distributors[0]?.id ??
         null;
       const name = distName(distributorId);
-      const tags = stripDistributorHashtags(current.tags ?? []);
-      if (name) tags.push(distributorHashtag(name));
+      const tags = withDistributorHashtag(
+        current.tags ?? [],
+        name,
+        distributors,
+      );
 
       await applyPatch(id, {
         status: "derivado_distribuidor",
@@ -166,7 +258,6 @@ export default function PipelinePage() {
       await applyPatch(id, {
         status: "pedido_lead",
         isCustomer: false,
-        tags: stripDistributorHashtags(current.tags ?? []),
       });
       return;
     }
@@ -175,7 +266,6 @@ export default function PipelinePage() {
       await applyPatch(id, {
         status: "pedido_cliente",
         isCustomer: true,
-        tags: stripDistributorHashtags(current.tags ?? []),
       });
       return;
     }
@@ -183,25 +273,18 @@ export default function PipelinePage() {
     const clearDistributor =
       column.status === "nuevo" ||
       column.status === "ia_atendiendo" ||
-      column.status === "esperando_respuesta" ||
-      column.status === "atencion_representante" ||
-      column.status === "quiere_ser_distribuidor";
+      column.status === "esperando_respuesta";
 
+    // Limpiar distributorId no borra el hashtag: si alguna vez fue derivado, queda.
     await applyPatch(id, {
       status: column.status,
-      ...(clearDistributor
-        ? {
-            distributorId: null,
-            tags: stripDistributorHashtags(current.tags ?? []),
-          }
-        : {}),
+      ...(clearDistributor ? { distributorId: null } : {}),
     });
   }
 
   async function assignDistributor(card: Conversation, distributorId: string) {
     const name = distName(distributorId);
-    const tags = stripDistributorHashtags(card.tags ?? []);
-    if (name) tags.push(distributorHashtag(name));
+    const tags = withDistributorHashtag(card.tags ?? [], name, distributors);
 
     await applyPatch(card.id, {
       status: "derivado_distribuidor",
@@ -210,19 +293,47 @@ export default function PipelinePage() {
     });
   }
 
-  async function markAttendedByRep(card: Conversation) {
-    const tags = Array.from(
-      new Set([...(card.tags ?? []), HASHTAG_ATENDIDO_REPRESENTANTE]),
-    );
-    const nextStatus: ConversationStatus =
-      card.status === "atencion_representante"
-        ? "esperando_respuesta"
-        : card.status;
-
+  async function handoffToHuman(
+    card: Conversation,
+    status:
+      | "atencion_representante"
+      | "quiere_ser_distribuidor"
+      | "quiere_ser_representante"
+      | "quiere_ser_fason"
+      | "sin_cobertura" = "atencion_representante",
+  ) {
+    try {
+      const reason =
+        status === "quiere_ser_distribuidor"
+          ? "Quiere ser distribuidor — handoff comercial desde Pipeline"
+          : status === "quiere_ser_representante"
+            ? "Quiere ser representante — handoff comercial desde Pipeline"
+            : status === "quiere_ser_fason"
+              ? "Quiere ser fasón — handoff comercial desde Pipeline"
+              : status === "sin_cobertura"
+                ? "Sin cobertura — handoff desde Pipeline"
+                : "Atención humana desde Pipeline";
+      const updated = await dataApi.handoffConversation(
+        card.id,
+        reason,
+        status,
+      );
+      if (updated) {
+        setConversations((prev) =>
+          prev.map((c) => (c.id === card.id ? updated : c)),
+        );
+        return;
+      }
+    } catch (error) {
+      console.error("[pipeline] handoff failed", error);
+    }
     await applyPatch(card.id, {
-      tags,
-      status: nextStatus,
+      status,
       assignedTo: card.assignedTo ?? "admin@coolmeals.com",
+      tags:
+        status === "sin_cobertura"
+          ? stripLegacyRepHashtags(card.tags ?? [])
+          : withHumanAttentionHashtag(card.tags ?? []),
     });
   }
 
@@ -244,7 +355,7 @@ export default function PipelinePage() {
       <div className="pipeline-legend">
         <span>{conversations.length} cards en el pipeline</span>
         <span className="muted">
-          Hashtag ejemplo: #derivado_Cool_Logistica_Cuyo
+          Hashtag ejemplo: #Cool_Logistica_Cuyo (naranja)
         </span>
       </div>
 
@@ -257,6 +368,8 @@ export default function PipelinePage() {
             const isOver = dropTarget === column.key;
             const isDerived = column.status === "derivado_distribuidor";
             const isWantDist = column.status === "quiere_ser_distribuidor";
+            const isWantRep = column.status === "quiere_ser_representante";
+            const isWantFason = column.status === "quiere_ser_fason";
 
             return (
               <section
@@ -267,7 +380,9 @@ export default function PipelinePage() {
                   column.status === "atencion_representante"
                     ? "is-rep-column"
                     : "",
-                  isWantDist ? "is-want-dist-column" : "",
+                  isWantDist || isWantRep || isWantFason
+                    ? "is-want-dist-column"
+                    : "",
                   isDerived ? "is-dist-column" : "",
                   column.status === "pedido_lead" ? "is-order-lead-column" : "",
                   column.status === "pedido_cliente"
@@ -314,14 +429,13 @@ export default function PipelinePage() {
                   ) : (
                     cards.map((card) => {
                       const tags = cardTags(card);
-                      const hasRepTag = tags.includes(
-                        HASHTAG_ATENDIDO_REPRESENTANTE,
-                      );
+                      const isHumanAttention =
+                        card.status === "atencion_representante";
 
                       return (
                         <article
                           key={card.id}
-                          className={`pipeline-card${draggingId === card.id ? " is-dragging" : ""}${hasRepTag ? " has-rep-tag" : ""}`}
+                          className={`pipeline-card${draggingId === card.id ? " is-dragging" : ""}${isHumanAttention ? " has-rep-tag" : ""}`}
                           draggable
                           onDragStart={(event) => {
                             setDraggingId(card.id);
@@ -354,7 +468,7 @@ export default function PipelinePage() {
                               {tags.map((tag) => (
                                 <span
                                   key={tag}
-                                  className={`pipeline-hashtag${tag.startsWith("#derivado_") ? " is-dist-tag" : ""}`}
+                                  className={`pipeline-hashtag${isDistributorTag(tag, distributors) ? " is-dist-tag" : ""}${isHumanAttentionTag(tag) ? " is-human-tag" : ""}`}
                                 >
                                   {tag}
                                 </span>
@@ -400,19 +514,6 @@ export default function PipelinePage() {
                               {card.isCustomer
                                 ? "pedido cliente"
                                 : "pedido lead"}
-                            </button>
-                          ) : null}
-
-                          {!hasRepTag ? (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm pipeline-hashtag-btn"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void markAttendedByRep(card);
-                              }}
-                            >
-                              {HASHTAG_ATENDIDO_REPRESENTANTE}
                             </button>
                           ) : null}
 

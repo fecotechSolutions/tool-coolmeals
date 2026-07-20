@@ -1,0 +1,294 @@
+{
+  "edges": [
+    {
+      "label": "next",
+      "source": "start",
+      "target": "agent"
+    }
+  ],
+  "nodes": [
+    {
+      "data": {
+        "config": {},
+        "node_type": "start"
+      },
+      "id": "start",
+      "position": {
+        "x": 120,
+        "y": 80
+      },
+      "type": "flow-node"
+    },
+    {
+      "data": {
+        "config": {
+          "default_tool_configs": {},
+          "enabled_default_tools": [
+            "complete_task",
+            "handoff_to_human",
+            "enter_waiting",
+            "send_notification_to_user",
+            "get_whatsapp_context",
+            "get_execution_metadata",
+            "save_variable",
+            "get_variable",
+            "get_current_datetime"
+          ],
+          "flow_agent_app_integration_tools": [],
+          "flow_agent_function_tools": [
+            {
+              "description": "Crea o actualiza la conversación/lead en Supabase (pipeline UI).",
+              "function_id": "164dc11a-dc32-4b99-85c9-6d289e15f501",
+              "function_name": "coolmeals-bot-actions",
+              "function_slug": "coolmeals-bot-actions",
+              "input_schema": {
+                "properties": {
+                  "action": {
+                    "const": "upsert_conversation",
+                    "type": "string"
+                  },
+                  "aiSummary": {
+                    "type": "string"
+                  },
+                  "clientType": {
+                    "type": "string"
+                  },
+                  "distributorId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "estimatedVolume": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "lastMessage": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "province": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "type": "object"
+              },
+              "name": "upsert_conversation"
+            },
+            {
+              "description": "Decide derivación según tipo, volumen y cobertura. Si action=quiere_ser_distribuidor: handoff_human con status quiere_ser_distribuidor + handoff_to_human.",
+              "function_id": "164dc11a-dc32-4b99-85c9-6d289e15f501",
+              "function_name": "coolmeals-bot-actions",
+              "function_slug": "coolmeals-bot-actions",
+              "input_schema": {
+                "properties": {
+                  "action": {
+                    "const": "decide_route",
+                    "type": "string"
+                  },
+                  "clientType": {
+                    "type": "string"
+                  },
+                  "estimatedVolume": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "postalCode": {
+                    "type": "string"
+                  },
+                  "province": {
+                    "type": "string"
+                  },
+                  "wantsToBeDistributor": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "action",
+                  "clientType",
+                  "province"
+                ],
+                "type": "object"
+              },
+              "name": "decide_route"
+            },
+            {
+              "description": "SOLO atención Cool Meals (tras elegir 'pedir muestras'). Agenda Nombre+Tel+Domicilio → columna Muestras + sheet logística. Luego handoff_to_human. Si el lead se DERIVA a un dist., NO uses esta tool.",
+              "function_id": "164dc11a-dc32-4b99-85c9-6d289e15f501",
+              "function_name": "coolmeals-bot-actions",
+              "function_slug": "coolmeals-bot-actions",
+              "input_schema": {
+                "properties": {
+                  "action": {
+                    "const": "request_samples",
+                    "type": "string"
+                  },
+                  "address": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "fullName": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "postalCode": {
+                    "type": "string"
+                  },
+                  "province": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action",
+                  "fullName",
+                  "phone",
+                  "address"
+                ],
+                "type": "object"
+              },
+              "name": "request_samples"
+            },
+            {
+              "description": "Marca derivado a distribuidor, append al sheet, agenda finalize_at (~24h) y deja el bot en handoff. Después DEBES llamar handoff_to_human. NUNCA complete_task al derivar.",
+              "function_id": "164dc11a-dc32-4b99-85c9-6d289e15f501",
+              "function_name": "coolmeals-bot-actions",
+              "function_slug": "coolmeals-bot-actions",
+              "input_schema": {
+                "properties": {
+                  "action": {
+                    "const": "sync_derived",
+                    "type": "string"
+                  },
+                  "aiSummary": {
+                    "type": "string"
+                  },
+                  "businessType": {
+                    "type": "string"
+                  },
+                  "city": {
+                    "type": "string"
+                  },
+                  "clientType": {
+                    "type": "string"
+                  },
+                  "company": {
+                    "type": "string"
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "distributorId": {
+                    "type": "string"
+                  },
+                  "distributorName": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "province": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action"
+                ],
+                "type": "object"
+              },
+              "name": "sync_derived"
+            },
+            {
+              "description": "Marca handoff en la DB y agenda finalize_at. Después llamá handoff_to_human. Usá status=quiere_ser_distribuidor | quiere_ser_representante | quiere_ser_fason | sin_cobertura | muestras cuando corresponda (no siempre atencion_representante).",
+              "function_id": "164dc11a-dc32-4b99-85c9-6d289e15f501",
+              "function_name": "coolmeals-bot-actions",
+              "function_slug": "coolmeals-bot-actions",
+              "input_schema": {
+                "properties": {
+                  "action": {
+                    "const": "handoff",
+                    "type": "string"
+                  },
+                  "aiSummary": {
+                    "type": "string"
+                  },
+                  "conversationId": {
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "description": "Columna Pipeline. Default atencion_representante. Usá quiere_ser_distribuidor, quiere_ser_representante, quiere_ser_fason, sin_cobertura o muestras cuando corresponda.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action",
+                  "reason"
+                ],
+                "type": "object"
+              },
+              "name": "handoff_human"
+            }
+          ],
+          "flow_agent_knowledge_bases": [],
+          "flow_agent_mcp_servers": [],
+          "flow_agent_resources": [],
+          "flow_agent_webhooks": [],
+          "max_iterations": 40,
+          "message_delivery_mode": "auto_send_assistant_text",
+          "provider_model_id": "8c6d57df-3f07-4290-b8a5-38047608c4df",
+          "provider_model_name": "claude-haiku-4-5",
+          "sandbox_enabled": false,
+          "system_prompt": "Sos el asistente comercial de WhatsApp de Froodie / Cool Meals (alimentos ultracongelados: wraps, platos listos, postres).\n\nObjetivo: calificar leads rápido, clasificar tipo de cliente, derivar o hacer handoff. Hablá en español argentino, breve y claro.\n\nClasificá internamente al lead usando estos criterios (equivalente al form Meta Froodie):\n\n1. Tipo de negocio declarado (local gastronómico, distribuidora, mayorista, retail, etc.)\n2. Línea de productos de interés\n3. Si ya compra congelados o está evaluando\n4. Volumen estimado (bultos/cajas/pallet). Umbral 50 SOLO para retail y mayorista.\n5. Si tiene freezer / capacidad de frío\n6. Ciudad/zona → provincia (importante: Córdoba vs resto)\n7. Nombre del negocio + nombre de contacto + teléfono\n\nMapeo a clientType:\n- \"distribuidor\" SOLO si tiene (o declara) depósito + logística de congelados / preventa a negocios.\n  Si dice \"distribuidora\" pero es almacén autoservicio / minorista grande → \"minorista\" u \"otro\".\n- \"mayorista\" → compra por volumen para revender / abastecer.\n- \"retail\" → canal retail / supermercado / cadena (usa umbral 50 + zona).\n- \"minorista\" → local, rotisería, resto chico → SIEMPRE deriva (sin umbral).\n- \"representante\" → quiere vender a comisión / representar Cool Meals.\n- \"fason\" → producción a fasón / maquila / marca propia / \"hacerme la comida con mi marca\".\n- \"otro\" → no calza (no asumir umbral 50).\n\nREGLA DURA — fasón / representante / quiere ser distribuidor:\n- En el MISMO turno del primer mensaje con intención clara:\n  upsert_conversation (clientType correcto) → decide_route → mensaje de cierre → handoff_human + handoff_to_human.\n- PROHIBIDO pedir ubicación, volumen, freezer, nombre de negocio o más preguntas.\n- PROHIBIDO volver a saludar o reiniciar el formulario si el lead ya viene hablando del mismo tema.\n- Si el lead dice que ya lo estaban atendiendo / ya era fasón: recuperá clientType=fason y cerrá el handoff YA.\n\nRuteo (decide_route es la fuente de verdad):\n- distribuidor → columna Quiere ser distribuidor + handoff al agente comercial (sin umbral).\n- representante → columna Quiere ser representante + handoff (sin umbral, SIN menú muestras/pedido).\n- fason → columna Quiere ser fasón + handoff (sin umbral, SIN menú muestras/pedido).\n  Incluye marca propia / maquila / \"hacerme la comida con mi marca\".\n- retail o mayorista en Córdoba con volumen ≥ 50 → Cool Meals: menú muestras/pedido y después handoff.\n- retail o mayorista fuera de Córdoba (aunque ≥ 50) → derivar a distribuidor de zona.\n- minorista → siempre derivar si hay cobertura.\n- sin cobertura de dist. → sin_cobertura.\n\nDatos mínimos:\n- Para DERIVAR a dist.: nombre, teléfono, tipo de negocio, ubicación (ciudad/provincia).\n- Para representante / fasón / quiere ser distribuidor: con la INTENCIÓN clara alcanza.\n  NO pedís volumen ni menú. Provincia ayuda pero NO bloquees el handoff: si no la dijo, usá\n  \"desconocida\" o lo que haya, llamá decide_route YA y cerrá con contacto + despedida.\n\nMUESTRAS / PEDIDO — SOLO si agentInstruction de decide_route lo pide (Cool Meals retail/mayorista Córdoba ≥50):\n- Ofrecé SIEMPRE: 1) Pedir muestras  2) Agendar / armar pedido directo. Esperá.\n- MUESTRAS → Nombre y Apellido + Teléfono + Domicilio → request_samples → LOGÍSTICA contacta →\n  handoff_human status=muestras + handoff_to_human. NO digas que un asesor arma las muestras.\n- PEDIDO → handoff_human + handoff_to_human.\n- Si derive_to_distributor: NO request_samples (el dist. se encarga).\n- NUNCA ofrezcas este menú en quiere_ser_distribuidor / quiere_ser_representante / quiere_ser_fason.\n\nFlujo sugerido:\n1. En el PRIMER mensaje del usuario (antes o junto con tu respuesta), SIEMPRE llamá upsert_conversation\n   con phone (del contexto WhatsApp), name (perfil si hay), status ia_atendiendo, lastMessage,\n   y lo que ya sepas (provincia, clientType aproximado, aiSummary). Sin esto el lead NO aparece en el Pipeline.\n   Guardá el conversationId que devuelve la tool: lo necesitás para request_samples si aplica.\n2. Saludá. Si ya está clara la intención (fasón/marca propia, representante, quiere ser distribuidor):\n   NO armes un formulario largo — upsert + decide_route + handoff con copy de contacto + DESPEDIDA.\n3. Si falta calificar (minorista/retail/mayorista): pedí lo que falte (zona, volumen si aplica, etc.).\n4. En cada dato nuevo relevante, volvé a llamar upsert_conversation.\n5. Cuando tengas clientType (y provincia si hace falta para derivar), llamá decide_route.\n6. Según decide_route.action — OBLIGATORIO seguir agentInstruction si viene (tiene prioridad sobre este resumen):\n   - derive_to_distributor → avisá, sync_derived, handoff_to_human. NUNCA complete_task. Sin request_samples.\n   - no_coverage → handoff_human status=sin_cobertura + handoff_to_human.\n   - quiere_ser_distribuidor → handoff_human status=quiere_ser_distribuidor + handoff_to_human. Sin menú.\n   - quiere_ser_representante → handoff_human status=quiere_ser_representante + handoff_to_human. Sin menú.\n   - quiere_ser_fason → handoff_human status=quiere_ser_fason + handoff_to_human. Sin menú.\n   - own_attention → Cool Meals (menú): ofrecé muestras/pedido; según elección request_samples o handoff comercial.\n7. Si piden hablar con una persona por otro motivo: handoff_human + handoff_to_human.\n8. Copy de handoff (IMPORTANTE): el mismo número de WhatsApp NO es un transfer live.\n   Decí que un ASESOR COMERCIAL te va a CONTACTAR por teléfono o WhatsApp (otro canal; no este chat).\n   Cerrá con una DESPEDIDA breve (gracias + cierre amable).\n   PROHIBIDO: \"te paso con…\", \"ahora te atiende…\", \"te hablo con un representante por acá\".\n9. No inventes precios ni condiciones no confirmadas. Ante duda, handoff.\n",
+          "temperature": 0.2
+        },
+        "display_name": "Agente Leads",
+        "node_type": "agent"
+      },
+      "id": "agent",
+      "position": {
+        "x": 120,
+        "y": 280
+      },
+      "type": "flow-node"
+    }
+  ]
+}

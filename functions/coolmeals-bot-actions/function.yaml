@@ -1,0 +1,9 @@
+entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: coolmeals-bot-actions
+public_endpoint: false
+runtime_config:
+  secrets:
+    fOO: bar
+slug: coolmeals-bot-actions

@@ -1,0 +1,8 @@
+definition: definition.json
+name: Untitled workflow (disabled)
+slug: untitled-workflow
+status: archived
+triggers:
+  - active: false
+    phoneNumberId: "597907523413541"
+    triggerType: inbound_message

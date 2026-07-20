@@ -1,9 +1,12 @@
 import Link from "next/link";
+import { DEMO_MODE } from "@/data/repository";
 
 const NAV = [
   { href: "/", label: "Dashboard", id: "dashboard" },
   { href: "/pipeline", label: "Pipeline", id: "pipeline" },
   { href: "/distribuidores", label: "Distribuidores", id: "distribuidores" },
+  { href: "/comercial", label: "Config. comercial", id: "comercial" },
+  { href: "/muestras", label: "Muestras", id: "muestras" },
   { href: "/conocimiento", label: "Base de conocimiento", id: "conocimiento" },
   { href: "/prompts", label: "Prompt Manager", id: "prompts" },
 ] as const;
@@ -41,8 +44,11 @@ export function AppShell({
         </nav>
 
         <div className="sidebar-footer">
-          <span className="demo-pill">Modo demo</span>
+          <span className="demo-pill">{DEMO_MODE ? "Modo demo" : "API + Supabase"}</span>
           <p>
+            {DEMO_MODE
+              ? "Datos mock locales. Poné NEXT_PUBLIC_DEMO_MODE=false para usar la API."
+              : "Conectado a la API (Supabase)."}{" "}
             Estética alineada a{" "}
             <a
               href="https://www.coolmeals.com.ar/"
@@ -52,7 +58,7 @@ export function AppShell({
             >
               coolmeals.com.ar
             </a>
-            . Datos mock listos para API.
+            .
           </p>
         </div>
       </aside>

@@ -10,14 +10,16 @@ out/
 .turbo/
 *.tsbuildinfo
 
-# Env
+# Env — single source of truth at repo root
 .env
 .env.local
 .env.*.local
 !.env.example
 
-# Vercel
+# Vercel / Kapso local state
 .vercel
+.kapso/
+api/handler.js
 
 # OS / IDE
 .DS_Store

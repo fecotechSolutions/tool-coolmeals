@@ -1,7 +1,7 @@
 /**
  * Data access layer.
- * Today: in-memory mock (DEMO_MODE).
- * Later: swap implementations to call the Hono API without changing pages.
+ * - NEXT_PUBLIC_DEMO_MODE !== "false" → mocks in-memory (UI demo)
+ * - DEMO_MODE=false → calls Hono API → Supabase
  */
 
 import {
@@ -14,6 +14,7 @@ import {
   mockLeads,
   mockPrompt,
 } from "@/data/mock";
+import { apiRequest } from "@/lib/http";
 import type {
   CommercialDashboard,
   CommercialSettings,
@@ -24,6 +25,7 @@ import type {
   KnowledgeArticle,
   Lead,
   PromptConfig,
+  SampleRequest,
 } from "@/domain/types";
 
 export const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE !== "false";
@@ -48,7 +50,7 @@ const store: Store = {
 
 const delay = async () => {
   if (typeof window !== "undefined") {
-    await new Promise((r) => setTimeout(r, 120));
+    await new Promise((r) => setTimeout(r, 80));
   }
 };
 
@@ -56,19 +58,30 @@ function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export const dataApi = {
-  async getDashboard(): Promise<{
+const mockApi = {
+  async getDashboard(params?: { from?: string; to?: string }): Promise<{
     executive: ExecutiveDashboard;
     commercial: CommercialDashboard;
+    period?: { from: string; to: string };
   }> {
     await delay();
+    const now = new Date();
+    const to = params?.to ?? now.toISOString().slice(0, 10);
+    const from =
+      params?.from ??
+      new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+        .toISOString()
+        .slice(0, 10);
+    const fromMs = new Date(`${from}T00:00:00.000Z`).getTime();
+    const toMs = new Date(`${to}T23:59:59.999Z`).getTime();
+    const conversations = store.conversations.filter((c) => {
+      const t = new Date(c.createdAt).getTime();
+      return t >= fromMs && t <= toMs;
+    });
     return {
-      executive: buildExecutiveDashboard(store.leads, store.conversations),
-      commercial: buildCommercialDashboard(
-        store.leads,
-        store.conversations,
-        store.distributors,
-      ),
+      period: { from, to },
+      executive: buildExecutiveDashboard(conversations),
+      commercial: buildCommercialDashboard(conversations, store.distributors),
     };
   },
 
@@ -112,6 +125,38 @@ export const dataApi = {
     return structuredClone(store.conversations[idx]!);
   },
 
+  async handoffConversation(
+    id: string,
+    reason = "Atención humana desde Pipeline",
+    status:
+      | "atencion_representante"
+      | "quiere_ser_distribuidor"
+      | "quiere_ser_representante"
+      | "quiere_ser_fason"
+      | "sin_cobertura" = "atencion_representante",
+  ): Promise<Conversation | null> {
+    await delay();
+    const idx = store.conversations.findIndex((c) => c.id === id);
+    if (idx < 0) return null;
+    const current = store.conversations[idx]!;
+    store.conversations[idx] = {
+      ...current,
+      status,
+      tags: Array.from(
+        new Set([
+          ...(current.tags ?? []).filter(
+            (tag) => tag !== "#atendido_por_representante",
+          ),
+          ...(status === "sin_cobertura" ? [] : ["#atencion_humana"]),
+        ]),
+      ),
+      assignedTo: current.assignedTo ?? "admin@coolmeals.com",
+      notes: [current.notes, `Handoff: ${reason}`].filter(Boolean).join("\n"),
+      updatedAt: new Date().toISOString(),
+    };
+    return structuredClone(store.conversations[idx]!);
+  },
+
   async listLeads(): Promise<Lead[]> {
     await delay();
     return structuredClone(store.leads).sort(
@@ -119,7 +164,9 @@ export const dataApi = {
     );
   },
 
-  async upsertLead(input: Omit<Lead, "id" | "createdAt" | "updatedAt"> & { id?: string }) {
+  async upsertLead(
+    input: Omit<Lead, "id" | "createdAt" | "updatedAt"> & { id?: string },
+  ) {
     await delay();
     const now = new Date().toISOString();
     if (input.id) {
@@ -205,7 +252,11 @@ export const dataApi = {
     if (input.id) {
       const idx = store.knowledge.findIndex((k) => k.id === input.id);
       if (idx >= 0) {
-        store.knowledge[idx] = { ...store.knowledge[idx]!, ...input, updatedAt: now };
+        store.knowledge[idx] = {
+          ...store.knowledge[idx]!,
+          ...input,
+          updatedAt: now,
+        };
         return structuredClone(store.knowledge[idx]!);
       }
     }
@@ -238,6 +289,188 @@ export const dataApi = {
     };
     return structuredClone(store.prompt);
   },
+
+  async listSamples(): Promise<SampleRequest[]> {
+    await delay();
+    return [];
+  },
+
+  async updateSample(
+    id: string,
+    patch: { status?: SampleRequest["status"]; notes?: string },
+  ): Promise<SampleRequest | null> {
+    await delay();
+    void id;
+    void patch;
+    return null;
+  },
 };
+
+const liveApi = {
+  async getDashboard(params?: { from?: string; to?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.from) qs.set("from", params.from);
+    if (params?.to) qs.set("to", params.to);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return apiRequest<{
+      executive: ExecutiveDashboard;
+      commercial: CommercialDashboard;
+      period?: { from: string; to: string };
+    }>(`/dashboard${suffix}`);
+  },
+
+  async listConversations() {
+    return apiRequest<Conversation[]>("/conversations");
+  },
+
+  async getConversation(id: string) {
+    try {
+      return await apiRequest<Conversation>(`/conversations/${id}`);
+    } catch {
+      return null;
+    }
+  },
+
+  async updateConversation(
+    id: string,
+    patch: Parameters<typeof mockApi.updateConversation>[1],
+  ) {
+    return apiRequest<Conversation>(`/conversations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  },
+
+  async handoffConversation(
+    id: string,
+    reason = "Atención humana desde Pipeline",
+    status:
+      | "atencion_representante"
+      | "quiere_ser_distribuidor"
+      | "quiere_ser_representante"
+      | "quiere_ser_fason"
+      | "sin_cobertura" = "atencion_representante",
+  ) {
+    const res = await apiRequest<{
+      conversation: Conversation;
+      handoff: { sameNumber: boolean; kapso?: { ok: boolean; error?: string } };
+    }>("/bot/handoff", {
+      method: "POST",
+      body: JSON.stringify({ conversationId: id, reason, status }),
+    });
+    return res.conversation;
+  },
+
+  async listLeads() {
+    const res = await apiRequest<{
+      items: Lead[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>("/leads?limit=100");
+    return res.items;
+  },
+
+  async upsertLead(input: Parameters<typeof mockApi.upsertLead>[0]) {
+    if (input.id) {
+      return apiRequest<Lead>(`/leads/${input.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    }
+    return apiRequest<Lead>("/leads", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async listDistributors() {
+    return apiRequest<Distributor[]>("/distributors");
+  },
+
+  async upsertDistributor(
+    input: Parameters<typeof mockApi.upsertDistributor>[0],
+  ) {
+    if (input.id) {
+      return apiRequest<Distributor>(`/distributors/${input.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    }
+    return apiRequest<Distributor>("/distributors", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async deleteDistributor(id: string) {
+    await apiRequest<{ id: string }>(`/distributors/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getCommercial() {
+    return apiRequest<CommercialSettings>("/commercial");
+  },
+
+  async saveCommercial(next: CommercialSettings) {
+    return apiRequest<CommercialSettings>("/commercial", {
+      method: "PUT",
+      body: JSON.stringify(next),
+    });
+  },
+
+  async listKnowledge() {
+    return apiRequest<KnowledgeArticle[]>("/knowledge");
+  },
+
+  async upsertKnowledge(
+    input: Parameters<typeof mockApi.upsertKnowledge>[0],
+  ) {
+    if (input.id) {
+      return apiRequest<KnowledgeArticle>(`/knowledge/${input.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      });
+    }
+    return apiRequest<KnowledgeArticle>("/knowledge", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+
+  async deleteKnowledge(id: string) {
+    await apiRequest<{ id: string }>(`/knowledge/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  async getPrompt() {
+    return apiRequest<PromptConfig>("/prompts");
+  },
+
+  async savePrompt(patch: Parameters<typeof mockApi.savePrompt>[0]) {
+    return apiRequest<PromptConfig>("/prompts", {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    });
+  },
+
+  async listSamples() {
+    return apiRequest<SampleRequest[]>("/samples");
+  },
+
+  async updateSample(
+    id: string,
+    patch: { status?: SampleRequest["status"]; notes?: string },
+  ) {
+    return apiRequest<SampleRequest>(`/samples/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  },
+};
+
+export const dataApi = DEMO_MODE ? mockApi : liveApi;
 
 export type ConversationStatusUpdate = ConversationStatus;

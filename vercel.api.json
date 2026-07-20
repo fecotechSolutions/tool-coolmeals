@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "installCommand": "npm install && npm run build:api:handler",
+  "builds": [
+    {
+      "src": "api/handler.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "api/handler.js" }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/pipeline-timeouts",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

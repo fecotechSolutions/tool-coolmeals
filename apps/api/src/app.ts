@@ -5,8 +5,17 @@ import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { getEnv } from "./env";
 import { optionalInternalAuth } from "./middleware/auth";
+import { botRoutes } from "./routes/bot";
+import { commercialRoutes } from "./routes/commercial";
+import { conversationsRoutes } from "./routes/conversations";
+import { dashboardRoutes } from "./routes/dashboard";
+import { distributorsRoutes } from "./routes/distributors";
 import { healthRoutes } from "./routes/health";
+import { knowledgeRoutes } from "./routes/knowledge";
 import { leadsRoutes } from "./routes/leads";
+import { promptsRoutes } from "./routes/prompts";
+import { samplesRoutes } from "./routes/samples";
+import { cronRoutes } from "./routes/cron";
 
 export function createApp() {
   const env = getEnv();
@@ -18,17 +27,41 @@ export function createApp() {
     "*",
     cors({
       origin: env.CORS_ORIGINS,
-      allowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization", "x-internal-secret"],
+      allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+      allowHeaders: ["Content-Type", "Authorization", "x-internal-secret", "x-cron-secret"],
       maxAge: 86400,
     }),
   );
 
   app.route("/health", healthRoutes);
+  app.route("/cron", cronRoutes);
 
-  app.use("/leads/*", optionalInternalAuth);
-  app.use("/leads", optionalInternalAuth);
+  const protectedPaths = [
+    "/leads",
+    "/distributors",
+    "/conversations",
+    "/dashboard",
+    "/commercial",
+    "/knowledge",
+    "/prompts",
+    "/samples",
+    "/bot",
+  ] as const;
+
+  for (const path of protectedPaths) {
+    app.use(`${path}/*`, optionalInternalAuth);
+    app.use(path, optionalInternalAuth);
+  }
+
   app.route("/leads", leadsRoutes);
+  app.route("/distributors", distributorsRoutes);
+  app.route("/conversations", conversationsRoutes);
+  app.route("/dashboard", dashboardRoutes);
+  app.route("/commercial", commercialRoutes);
+  app.route("/knowledge", knowledgeRoutes);
+  app.route("/prompts", promptsRoutes);
+  app.route("/samples", samplesRoutes);
+  app.route("/bot", botRoutes);
 
   app.notFound((c) => c.json(fail("NOT_FOUND", "Route not found"), 404));
 

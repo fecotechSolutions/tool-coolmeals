@@ -1,125 +1,93 @@
 # Cool Meals Leads
 
-Herramienta interna para gestionar leads. Monorepo TypeScript con **frontend** y **backend** separados, **Supabase** como base de datos, listo para desplegar en **Vercel**.
-
-Roles preparados (`superadmin` / `admin`); autenticación se conecta en una etapa posterior.
+Herramienta interna para gestionar leads. Monorepo TypeScript con **frontend** y **backend** separados, **Supabase** como DB, deploy en **Vercel** (2 proyectos).
 
 ## Estructura
 
 ```
-apps/
-  web/          → Next.js (UI)
-  api/          → Hono (API REST)
-packages/
-  shared/       → tipos, Zod schemas, permisos por rol
-supabase/
-  migrations/   → schema SQL
+apps/web          → Next.js (UI)
+apps/api          → Hono (API REST)
+packages/shared   → tipos, Zod, roles
+supabase/         → migrations + seed
+api/              → entry serverless para Vercel (API)
 ```
 
-## Requisitos
+## Setup local
 
-- Node.js 20+
-- Proyecto en [Supabase](https://supabase.com)
-- Cuenta en [Vercel](https://vercel.com) (para deploy)
-
-## UI demo (MVP visual)
-
-El front ya tiene los 7 módulos con datos mock interactivos:
-
-1. Dashboard · 2. Conversaciones · 3. Leads · 4. Distribuidores  
-5. Configuración comercial · 6. Base de conocimiento · 7. Prompt Manager
+Requisitos: **Node 20+**.
 
 ```bash
-npm run dev:web
-```
-
-Abrí http://localhost:3000 — no hace falta API ni Supabase para la demo.
-
-La capa `apps/web/src/data/repository.ts` (`dataApi`) es el punto de canje a backend real.
-
-### 2. Variables de entorno
-
-Copiá `.env.example` a:
-
-- `apps/api/.env`
-- `apps/web/.env.local`
-
-Completá:
-
-| Variable | Dónde | Notas |
-|----------|--------|--------|
-| `SUPABASE_URL` | API | Project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | API | Solo servidor — nunca en el browser |
-| `CORS_ORIGINS` | API | `http://localhost:3000` en local |
-| `NEXT_PUBLIC_API_URL` | Web | `http://localhost:3001` en local |
-| `INTERNAL_API_SECRET` | API (+ opcional Web) | Opcional hasta tener Auth |
-
-### 3. Schema en Supabase
-
-En el SQL Editor de Supabase, ejecutá el contenido de:
-
-`supabase/migrations/20260713000000_initial_schema.sql`
-
-### 4. Correr
-
-```bash
-# terminal 1
-npm run dev:api
-
-# terminal 2
-npm run dev:web
+cp .env.example .env   # una sola vez; completá keys reales
+npm install
+npm run dev            # API (:3001) + web (:3000) juntos
 ```
 
 - Web: http://localhost:3000  
-- API health: http://localhost:3001/api/health  
+- API: http://localhost:3001/api/health  
 
-## API
+### Variables de entorno
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/leads` | Listar (`status`, `search`, `limit`, `offset`) |
-| GET | `/api/leads/:id` | Detalle |
-| POST | `/api/leads` | Crear |
-| PATCH | `/api/leads/:id` | Actualizar |
-| DELETE | `/api/leads/:id` | Borrar (pensado para `superadmin`) |
+Solo existen:
 
-Respuestas: `{ data: ... }` o `{ error: { code, message } }`.
+| Archivo | Rol |
+|---------|-----|
+| `.env.example` | plantilla (commiteada) |
+| `.env` | valores reales locales (gitignored) |
 
-## Roles (preparados)
+Web y API leen el **mismo** `.env` de la raíz. En Vercel, las mismas keys se configuran en el dashboard de cada proyecto (no hace falta duplicar archivos en el repo).
 
-| Rol | Intención |
-|-----|-----------|
-| `superadmin` | Usuarios, settings, delete leads, export |
-| `admin` | Operar leads (sin gestión de usuarios / deletes duros) |
+| Variable | Quién la usa |
+|----------|----------------|
+| `NEXT_PUBLIC_DEMO_MODE` | Web (`false` = datos reales vía API) |
+| `NEXT_PUBLIC_API_URL` | Web |
+| `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` | Web (cliente) |
+| `SUPABASE_URL` / `SERVICE_ROLE_KEY` | API (servidor) |
+| `CORS_ORIGINS` | API |
+| Kapso / Sheets | API (opcionales según features) |
 
-Definidos en `packages/shared/src/roles.ts` y columna `profiles.role`. El middleware `requireRole` está listo para enganchar JWT cuando actives Auth.
+### Schema Supabase
 
-## Deploy en Vercel
+En SQL Editor, en orden:
 
-Recomendado: **dos proyectos** en el mismo repo.
+1. `supabase/migrations/20260713000000_initial_schema.sql`
+2. `supabase/migrations/20260719000000_phase0_bot_foundation.sql`
+3. `supabase/migrations/20260720000000_derive_handoff_window.sql` (`derived_at` / `finalize_at`)
+4. Opcional: `supabase/seed.sql`
 
-1. **Web** — Root Directory: `apps/web`  
-   Env: `NEXT_PUBLIC_API_URL`, y si usás secret interno también `INTERNAL_API_SECRET`.
+## Documentación (bot WhatsApp + Pipeline)
 
-2. **API** — Root Directory: `apps/api`  
-   Env: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `CORS_ORIGINS` (URL de la web en Vercel).
+| Audiencia | Doc |
+|-----------|-----|
+| Operadores / comercial | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
+| Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
-Tras el deploy, actualizá `NEXT_PUBLIC_API_URL` de la web con la URL de la API.
+Estado actual (sandbox, jul 2026): ruteo comercial + handoff ~24h → Finalizado validado para  
+**quiere ser distribuidor**, **representante**, **fasón**, **sin cobertura**, **derivado a dist.**,  
+**Cool Meals (menú muestras/pedido)** y **muestras Cool Meals → logística**.
 
-## Qué falta (vos / siguiente etapa)
+## Scripts
 
-1. **Proyecto Supabase** + keys reales  
-2. **Correr la migración** SQL  
-3. **Auth** (Supabase Auth + login UI + políticas RLS por rol)  
-4. **Dos usuarios** reales (superadmin / admin)  
-5. **Deploy Vercel** (web + api)  
-6. Ajustar campos de leads si tu negocio necesita otros (ciudad, plan, etc.)
+| Comando | Qué hace |
+|---------|----------|
+| `npm run dev` | Shared build + API + web en paralelo |
+| `npm run build` | Build de todos los workspaces |
+| `npm run build:api:handler` | Bundle serverless para deploy API en Vercel |
 
-## Seguridad (app interna)
+`dev:api` / `dev:web` existen por si necesitás uno solo; el flujo normal es `npm run dev`.
 
-- El browser **no** usa la service role; solo la API.  
-- RLS activado; sin policies públicas (solo service role por ahora).  
-- Headers de seguridad + CORS restrictivo en la API.  
-- Validación Zod compartida en API.  
-- Secret interno opcional (`x-internal-secret`) hasta Auth.
+## Deploy Vercel (team fecotech)
+
+Dos proyectos del mismo repo:
+
+1. **tool-coolmeals-web** — `vercel.web.json` desde la raíz  
+   Env: `NEXT_PUBLIC_*` (+ `NEXT_PUBLIC_API_URL` = URL de la API)
+
+2. **tool-coolmeals-api** — `vercel.api.json` desde la raíz (`api/index.ts` → `api/handler.js`)  
+   Env: `SUPABASE_*`, `CORS_ORIGINS` (incluye la URL de la web)  
+   Antes de deploy CLI: `npm run build:api:handler`
+
+## Seguridad
+
+- Service role **solo** en la API / env de Vercel API.  
+- RLS en Supabase; el browser usa anon/publishable.  
+- CORS restrictivo + validación Zod.
