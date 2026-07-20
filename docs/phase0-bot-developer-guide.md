@@ -2,7 +2,10 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: julio 2026 (ruteo + Cool Meals menú muestras/pedido + handoffs 24h validados).
+Actualizado: 20 julio 2026 (ruteo + sheets ×4 + dashboard filtrable + guía operador).
+
+Guía para el **operador** (pruebas E2E de todos los flujos):  
+[`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
 
 ## Arquitectura (flujo feliz)
 
@@ -27,6 +30,7 @@ WhatsApp (Meta)
 | Cron | `apps/api/src/routes/cron.ts` → `/api/cron/pipeline-timeouts` |
 | Dominio compartido | `packages/shared/src/domain.ts` |
 | Pipeline UI | `apps/web/src/app/pipeline/page.tsx` |
+| Dashboard | `apps/web/src/app/page.tsx` + `apps/api/src/routes/dashboard.ts` |
 | Sheets Apps Script | `apps/api/scripts/google-sheets-append.gs` |
 
 **Nota:** el path en vivo del bot usa la **function Kapso → Supabase** (no siempre pasa por la API Hono). Las reglas de `decide_route` están **duplicadas** en la function y en `routing.ts`; si cambiás una, actualizá la otra.
@@ -109,9 +113,19 @@ Ver `.env.example`. Críticas para este módulo:
 | `ESPERANDO_TO_FINALIZE_HOURS` | 22h post-nudge → Finalizado |
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
-| `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras |
+| `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención comercial / sin cobertura |
+| `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | Sheet dist / rep / fasón |
+| `GOOGLE_SHEET_NO_COVERAGE_ID` | Sheet sin cobertura |
 
 Web: `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
+
+## Dashboard (API)
+
+`GET /api/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD` (default: mes corriente).
+
+- Fuente única: tabla **`conversations`** (no `leads`).
+- Respuesta: `executive` + `commercial` (counts, percentages, `byDistributor`, `byProvince`, `interestKpis`).
+- Sin `monthlyEvolution` / vs período anterior (el filtro de fechas alcanza).
 
 ## Comportamiento acordado (producto)
 
@@ -151,6 +165,8 @@ Statuses con ventana de handoff → Finalizado cuando `finalize_at` venció:
 - `derivado_distribuidor`
 - `atencion_representante`
 - `quiere_ser_distribuidor`
+- `quiere_ser_representante`
+- `quiere_ser_fason`
 - `sin_cobertura`
 - `muestras`
 - `esperando_respuesta`
@@ -250,6 +266,7 @@ Reset de un tester (ej. `543513053755`):
 7. Auth real (hoy `optionalInternalAuth` / roles stub).
 8. Tras cada `kapso build` + `update-graph`, **siempre** confirmar `function_id` en tools.
 9. No cortar executions `waiting`/`handoff` mid-prueba al desplegar (rompe el hilo del lead).
+10. Dashboard: KPIs opcionales (sin cobertura count, muestras, funnel por columna) si el negocio lo pide.
 
 ## Convención de cambios
 

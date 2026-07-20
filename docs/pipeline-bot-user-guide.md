@@ -2,7 +2,10 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: julio 2026 (sandbox Kapso: ruteos comerciales + muestras Cool Meals + representante/fasón validados).
+Actualizado: 20 julio 2026 (sandbox Kapso: ruteos + sheets + dashboard con filtro de fechas).
+
+> **Para probar todos los flujos mañana (paso a paso + planilla):**  
+> [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) — pensado para pasárselo al operador.
 
 ## Qué es esto
 
@@ -15,7 +18,7 @@ Un lead escribe al WhatsApp de Cool Meals / Froodie. Un bot (Kapso) lo atiende, 
 
 En los cierres con handoff el bot se pausa (~24 h) y después la card pasa a **Finalizado** sola.
 
-Todo se ve en el **Pipeline** (`/pipeline`) y, si hay muestras Cool Meals, en **`/muestras`** + sheet de logística.
+Todo se ve en el **Pipeline** (`/pipeline`) y, si hay muestras Cool Meals, en **`/muestras`** + sheet de logística. Las métricas viven en el **Dashboard** (`/`).
 
 Además, al cerrar interés comercial o sin cobertura, el bot escribe en Google Sheets:
 
@@ -26,6 +29,7 @@ Además, al cerrar interés comercial o sin cobertura, el bot escribe en Google 
 
 | Lugar | Para qué |
 |-------|----------|
+| **Dashboard** (`/`) | Métricas del período: filtro Hoy / 7d / mes / personalizado; mix por tipo; **por provincia**; derivados por dist. |
 | **Pipeline** (`/pipeline`) | Cards, columnas, hashtags, mover estados |
 | **Distribuidores** | Red comercial por provincia (**no** es un Google Sheet) |
 | **Config comercial** | Umbral de bultos (default 50) |
@@ -145,10 +149,15 @@ Aplica a: Derivado, Atención humana, Quiere ser distribuidor, Quiere ser repres
 
 ## Tips para probar (sandbox)
 
+La guía completa (mensajes, checklist, reset entre casos, planilla) está en  
+[`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
+
+Resumen rápido:
+
 | # | Caso | Mensaje | Esperado |
 |---|------|---------|----------|
-| 1 | Quiere ser distribuidor | `Hola, quiero ser distribuidor en Mendoza, tengo depósito y logística de congelados` | **Quiere ser distribuidor** + handoff |
-| 2 | Sin cobertura | `Hola, rotisería en Salta, quiero productos` | **Sin cobertura** + handoff |
+| 1 | Quiere ser distribuidor | `Hola, quiero ser distribuidor en Mendoza, tengo depósito y logística de congelados` | **Quiere ser distribuidor** + sheet Atención comercial + handoff |
+| 2 | Sin cobertura | `Hola, rotisería en Salta, quiero productos` | **Sin cobertura** + sheet + handoff |
 | 3 | Derivación | `Hola, minorista en Mendoza, compro poco` | **Derivado** `#Cool_Logistica_Cuyo` + handoff |
 | 4 | Cool Meals CBA ≥50 | `Hola, mayorista en Córdoba Capital, ~60 bultos/mes` | Menú **muestras / pedido** |
 | 5a | Muestras en zona con dist. | `Hola, rotisería en Mendoza, quiero muestras` | **Derivado** (sin fila Cool Meals en `/muestras`) |
@@ -159,6 +168,13 @@ Aplica a: Derivado, Atención humana, Quiere ser distribuidor, Quiere ser repres
 Extra — volumen alto fuera de Córdoba:
 
 - `Mayorista en Mendoza, ~80 bultos` → **Derivado** (no Cool Meals).
+
+## Dashboard (métricas)
+
+- Fuente: conversaciones del **Pipeline** (mismo dato que las cards).  
+- Filtro: Hoy · 7 días · Este mes · 30 días · Personalizado (Desde/Hasta).  
+- Incluye KPIs de operación, mix por tipo de cliente / interés, **por provincia** y derivados por distribuidor.  
+- No hay series temporales: el filtro de fechas alcanza.
 
 ## Qué no hace (aún)
 

@@ -52,18 +52,22 @@ En SQL Editor, en orden:
 1. `supabase/migrations/20260713000000_initial_schema.sql`
 2. `supabase/migrations/20260719000000_phase0_bot_foundation.sql`
 3. `supabase/migrations/20260720000000_derive_handoff_window.sql` (`derived_at` / `finalize_at`)
-4. Opcional: `supabase/seed.sql`
+4. `supabase/migrations/20260720140000_quiere_ser_representante_fason.sql`
+5. Opcional: `supabase/seed.sql`
 
 ## Documentación (bot WhatsApp + Pipeline)
 
 | Audiencia | Doc |
 |-----------|-----|
-| Operadores / comercial | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
+| **Operador — probar todos los flujos** | [`docs/operator-flow-test-guide.md`](docs/operator-flow-test-guide.md) |
+| Operadores / comercial (uso diario) | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
 | Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
 Estado actual (sandbox, jul 2026): ruteo comercial + handoff ~24h → Finalizado validado para  
 **quiere ser distribuidor**, **representante**, **fasón**, **sin cobertura**, **derivado a dist.**,  
-**Cool Meals (menú muestras/pedido)** y **muestras Cool Meals → logística**.
+**Cool Meals (menú muestras/pedido)** y **muestras Cool Meals → logística**.  
+Dashboard: filtro por fecha + métricas desde Pipeline (incl. **por provincia**).  
+Sheets: derivados, muestras, [atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ), [sin cobertura](https://docs.google.com/spreadsheets/d/10jeiXNXEUlHiOgJKqbwazQBWhOurSJWQBWyTnY6nENY).
 
 ## Scripts
 
