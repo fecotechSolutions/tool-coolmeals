@@ -1,7 +1,22 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createApp } from "../apps/api/src/app";
 
-const app = createApp();
+type App = ReturnType<typeof createApp>;
+
+let app: App | null = null;
+let bootError: string | null = null;
+
+function getApp(): App {
+  if (app) return app;
+  if (bootError) throw new Error(bootError);
+  try {
+    app = createApp();
+    return app;
+  } catch (err) {
+    bootError = err instanceof Error ? err.message : String(err);
+    throw new Error(bootError);
+  }
+}
 
 async function readBody(req: IncomingMessage): Promise<Buffer | undefined> {
   if (req.method === "GET" || req.method === "HEAD") return undefined;
@@ -19,6 +34,20 @@ export default async function handler(
   try {
     const host = req.headers.host ?? "localhost";
     const url = new URL(req.url ?? "/", `https://${host}`);
+
+    // Root: avoid confusing 404 / crash when probing the domain
+    if (url.pathname === "/" || url.pathname === "") {
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/json");
+      res.end(
+        JSON.stringify({
+          service: "coolmeals-leads-api",
+          health: "/api/health",
+        }),
+      );
+      return;
+    }
+
     const headers = new Headers();
     for (const [key, value] of Object.entries(req.headers)) {
       if (value === undefined) continue;
@@ -32,7 +61,7 @@ export default async function handler(
       body: body && body.length > 0 ? body : undefined,
     });
 
-    const response = await app.fetch(request);
+    const response = await getApp().fetch(request);
     res.statusCode = response.status;
     response.headers.forEach((value, key) => {
       if (key.toLowerCase() === "transfer-encoding") return;
@@ -41,11 +70,17 @@ export default async function handler(
     const buf = Buffer.from(await response.arrayBuffer());
     res.end(buf);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[api/handler]", message);
     res.statusCode = 500;
     res.setHeader("content-type", "application/json");
     res.end(
       JSON.stringify({
-        error: err instanceof Error ? err.message : String(err),
+        error: {
+          code: "BOOT_OR_RUNTIME_ERROR",
+          message,
+          hint: "Check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY on the Vercel API project, then redeploy.",
+        },
       }),
     );
   }
