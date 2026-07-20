@@ -86,8 +86,10 @@ Dos proyectos del mismo repo:
 1. **tool-coolmeals-web** — `vercel.web.json` desde la raíz  
    Env: `NEXT_PUBLIC_*` (+ `NEXT_PUBLIC_API_URL` = URL de la API)
 
-2. **tool-coolmeals-api** — `vercel.api.json` desde la raíz (`api/index.ts` → `api/handler.js`)  
+2. **tool-coolmeals-api** — `vercel.api.json` desde la **raíz del repo** (`api/index.ts` → `api/handler.js`)  
    Env: `SUPABASE_*`, `CORS_ORIGINS` (incluye la URL de la web)  
+   **Root Directory** en Vercel = `.` (vacío / repo root), **no** `apps/api`  
+   Build: `npm run build -w @coolmeals/shared && npm run build:api:handler`  
    Antes de deploy CLI: `npm run build:api:handler`
 
 ## Seguridad

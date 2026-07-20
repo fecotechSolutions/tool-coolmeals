@@ -10,9 +10,9 @@
     "dev": "concurrently -k -n shared,api,web -c gray,cyan,magenta \"npm run dev -w @coolmeals/shared\" \"npm run dev:api\" \"npm run dev:web\"",
     "dev:web": "npm run dev -w @coolmeals/web",
     "dev:api": "npm run dev -w @coolmeals/api",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @coolmeals/shared && npm run build -w @coolmeals/api && npm run build -w @coolmeals/web",
     "build:web": "npm run build -w @coolmeals/web",
-    "build:api": "npm run build -w @coolmeals/api",
+    "build:api": "npm run build -w @coolmeals/shared && npm run build -w @coolmeals/api",
     "build:api:handler": "npm run build -w @coolmeals/shared && node_modules/esbuild/bin/esbuild api/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/handler.js --packages=bundle --footer:js=\"module.exports = module.exports.default || module.exports;\"",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"

@@ -1,6 +1,7 @@
 {
   "version": 2,
-  "installCommand": "npm install && npm run build:api:handler",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build -w @coolmeals/shared && npm run build:api:handler",
   "builds": [
     {
       "src": "api/handler.js",
