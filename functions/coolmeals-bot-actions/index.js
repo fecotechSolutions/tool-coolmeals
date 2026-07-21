@@ -65,6 +65,22 @@ function normalize(value) {
     .toLowerCase();
 }
 
+// Postgres enum client_type — cualquier otro valor (ej. "por_calificar") rompe el insert.
+var VALID_CLIENT_TYPES = {
+  mayorista: true,
+  minorista: true,
+  retail: true,
+  representante: true,
+  distribuidor: true,
+  fason: true,
+  otro: true,
+};
+
+function sanitizeClientType(value) {
+  const n = normalize(value);
+  return VALID_CLIENT_TYPES[n] ? n : null;
+}
+
 async function sb(supabaseUrl, supabaseKey, path, init) {
   const res = await fetch(supabaseUrl.replace(/\/$/, "") + "/rest/v1/" + path, {
     ...init,
@@ -142,7 +158,8 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
       patch.status = input.status;
     }
   }
-  if (input.clientType) patch.client_type = input.clientType;
+  const patchClientType = sanitizeClientType(input.clientType);
+  if (patchClientType) patch.client_type = patchClientType;
   if (input.province) patch.province = input.province;
   if (input.distributorId !== undefined) patch.distributor_id = input.distributorId;
   if (input.aiSummary !== undefined) patch.ai_summary = input.aiSummary;
@@ -171,7 +188,7 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
       phone: phone,
       origin: input.origin || "whatsapp",
       status: input.status || "ia_atendiendo",
-      client_type: input.clientType || "minorista",
+      client_type: sanitizeClientType(input.clientType) || "otro",
       province: input.province || "Córdoba",
       distributor_id: input.distributorId || null,
       ai_summary: input.aiSummary || "",
@@ -769,7 +786,8 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     kapso_conversation_id: kapsoConversationId || conv.kapso_conversation_id || null,
   };
   if (input.distributorId) patch.distributor_id = input.distributorId;
-  if (input.clientType) patch.client_type = input.clientType;
+  const derivedClientType = sanitizeClientType(input.clientType);
+  if (derivedClientType) patch.client_type = derivedClientType;
   if (input.province) patch.province = input.province;
   if (input.aiSummary) patch.ai_summary = input.aiSummary;
 
