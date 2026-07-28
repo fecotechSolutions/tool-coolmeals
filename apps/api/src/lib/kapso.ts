@@ -6,7 +6,32 @@ type KapsoExecution = {
   id: string;
   status?: string;
   whatsapp_conversation_id?: string | null;
+  started_at?: string | null;
+  last_event_at?: string | null;
+  ended_at?: string | null;
 };
+
+export type ListedKapsoExecution = KapsoExecution;
+
+function unwrapExecutions(payload: unknown): KapsoExecution[] {
+  if (Array.isArray(payload)) return payload as KapsoExecution[];
+  if (!payload || typeof payload !== "object") return [];
+  const obj = payload as {
+    data?: KapsoExecution[] | { executions?: KapsoExecution[]; data?: KapsoExecution[] };
+    executions?: KapsoExecution[];
+  };
+  if (Array.isArray(obj.executions)) return obj.executions;
+  if (Array.isArray(obj.data)) return obj.data;
+  if (obj.data && typeof obj.data === "object") {
+    const nested = obj.data as {
+      executions?: KapsoExecution[];
+      data?: KapsoExecution[];
+    };
+    if (Array.isArray(nested.executions)) return nested.executions;
+    if (Array.isArray(nested.data)) return nested.data;
+  }
+  return [];
+}
 
 function kapsoConfig() {
   const env = getEnv();
@@ -100,6 +125,31 @@ export async function setKapsoExecutionEnded(executionId: string): Promise<{
   return setKapsoExecutionStatus(executionId, "ended");
 }
 
+export async function listKapsoExecutions(input: {
+  status: string;
+  limit?: number;
+  whatsappConversationId?: string | null;
+}): Promise<{ ok: true; executions: KapsoExecution[] } | { ok: false; error: string }> {
+  const config = kapsoConfig();
+  if (!config) {
+    return { ok: false, error: "Kapso API not configured" };
+  }
+
+  const listed = await kapsoRequest<unknown>(
+    `/platform/v1/workflows/${config.workflowId}/executions`,
+    {
+      query: {
+        status: input.status,
+        whatsapp_conversation_id: input.whatsappConversationId ?? undefined,
+        limit: String(input.limit ?? 20),
+      },
+    },
+  );
+
+  if (!listed.ok) return { ok: false, error: listed.error };
+  return { ok: true, executions: unwrapExecutions(listed.data) };
+}
+
 export async function findKapsoExecutionForHandoff(input: {
   executionId?: string | null;
   whatsappConversationId?: string | null;
@@ -107,30 +157,17 @@ export async function findKapsoExecutionForHandoff(input: {
 }): Promise<string | null> {
   if (input.executionId) return input.executionId;
 
-  const config = kapsoConfig();
-  if (!config || !input.whatsappConversationId) return null;
+  if (!input.whatsappConversationId) return null;
 
   const statuses = input.statuses ?? ["waiting", "running"];
   for (const status of statuses) {
-    const listed = await kapsoRequest<{
-      data?: KapsoExecution[];
-      executions?: KapsoExecution[];
-    }>(`/platform/v1/workflows/${config.workflowId}/executions`, {
-      query: {
-        status,
-        whatsapp_conversation_id: input.whatsappConversationId,
-        limit: "5",
-      },
+    const listed = await listKapsoExecutions({
+      status,
+      whatsappConversationId: input.whatsappConversationId,
+      limit: 5,
     });
-
     if (!listed.ok) continue;
-    const payload = listed.data as
-      | KapsoExecution[]
-      | { data?: KapsoExecution[]; executions?: KapsoExecution[] };
-    const rows = Array.isArray(payload)
-      ? payload
-      : (payload.data ?? payload.executions ?? []);
-    const hit = rows.find((row) => row.id);
+    const hit = listed.executions.find((row) => row.id);
     if (hit?.id) return hit.id;
   }
 

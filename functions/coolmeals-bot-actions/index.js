@@ -107,6 +107,23 @@ async function sb(supabaseUrl, supabaseKey, path, init) {
   return data;
 }
 
+/** Días desde created_at: mismo teléfono = misma card (sin métrica nueva). */
+const RECONTACT_LOCK_DAYS = 365;
+
+/** Todavía calificando: se pueden actualizar datos. */
+const MID_FLOW_STATUSES = {
+  nuevo: true,
+  ia_atendiendo: true,
+};
+
+function isWithinRecontactLock(createdAt) {
+  if (!createdAt) return false;
+  const createdMs = Date.parse(createdAt);
+  if (!Number.isFinite(createdMs)) return false;
+  const ageMs = Date.now() - createdMs;
+  return ageMs >= 0 && ageMs < RECONTACT_LOCK_DAYS * 24 * 60 * 60 * 1000;
+}
+
 async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx) {
   const phone = String(input.phone || phoneFromCtx || "").trim();
   if (!phone) throw new Error("phone required");
@@ -124,16 +141,63 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
   const existing = await sb(
     supabaseUrl,
     supabaseKey,
-    "conversations?phone=eq." + encodeURIComponent(phone) + "&order=updated_at.desc&limit=1",
+    "conversations?phone=eq." + encodeURIComponent(phone) + "&order=created_at.desc&limit=1",
     { method: "GET", prefer: "return=representation" },
   );
+
+  const prior = Array.isArray(existing) && existing[0] ? existing[0] : null;
+
+  // Mismo teléfono con card de hace < 1 año:
+  // - mid-flujo: seguir calificando (upsert completo)
+  // - ya calificado/cerrado: NO pisar datos ni crear lead nuevo (métricas)
+  if (prior && isWithinRecontactLock(prior.created_at)) {
+    const priorStatus = prior.status || "ia_atendiendo";
+    const stillQualifying = !!MID_FLOW_STATUSES[priorStatus];
+
+    if (!stillQualifying) {
+      const touch = {};
+      if (input.lastMessage !== undefined) touch.last_message = input.lastMessage;
+      else if (input.message && input.message.content) {
+        touch.last_message = input.message.content;
+      }
+      if (kapsoConversationId) touch.kapso_conversation_id = kapsoConversationId;
+      if (kapsoExecutionId) touch.kapso_execution_id = kapsoExecutionId;
+      const messages = Array.isArray(prior.messages) ? prior.messages.slice() : [];
+      if (input.message) messages.push(input.message);
+      touch.messages = messages;
+
+      const updated = await sb(
+        supabaseUrl,
+        supabaseKey,
+        "conversations?id=eq." + prior.id,
+        { method: "PATCH", body: JSON.stringify(touch) },
+      );
+      const row = Array.isArray(updated) ? updated[0] : updated;
+      return {
+        ok: true,
+        conversationId: row.id,
+        status: row.status,
+        phone: row.phone,
+        recontactLocked: true,
+        lockDays: RECONTACT_LOCK_DAYS,
+        agentInstruction:
+          "RECONTACTO (<1 año, ya calificado). NO vuelvas a tipificar ni llames decide_route / request_samples / sync_derived como lead nuevo. " +
+          "UN mensaje corto: ya estás en proceso / un asesor o el distribuidor te contacta según tu caso + despedida. " +
+          "Si status es finalizado/descartado: agradecé y ofrecé que un asesor retome si hace falta; NO armes menú ni samples. " +
+          "No crees métricas nuevas: es la misma card.",
+      };
+    }
+  }
+
+  // Card ≥ 1 año o no existe → INSERT (nueva métrica + recalificar).
+  // Mid-flujo < 1 año → PATCH completo.
 
   const patch = {
     phone: phone,
     origin: input.origin || "whatsapp",
   };
   if (input.name) patch.name = input.name;
-  // No pisar estados terminales / post-derivación con ia_atendiendo
+
   const protectedStatuses = {
     derivado_distribuidor: true,
     finalizado: true,
@@ -144,9 +208,10 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
     sin_cobertura: true,
     muestras: true,
     descartado: true,
+    esperando_respuesta: true,
   };
   const existingStatus =
-    Array.isArray(existing) && existing[0] ? existing[0].status : null;
+    prior && isWithinRecontactLock(prior.created_at) ? prior.status : null;
   if (input.status) {
     if (
       existingStatus &&
@@ -171,14 +236,19 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
   if (kapsoExecutionId) patch.kapso_execution_id = kapsoExecutionId;
 
   let row;
-  if (Array.isArray(existing) && existing[0]) {
-    const messages = Array.isArray(existing[0].messages) ? existing[0].messages.slice() : [];
+  const canPatchExisting =
+    prior &&
+    isWithinRecontactLock(prior.created_at) &&
+    MID_FLOW_STATUSES[prior.status || ""];
+
+  if (canPatchExisting) {
+    const messages = Array.isArray(prior.messages) ? prior.messages.slice() : [];
     if (input.message) messages.push(input.message);
     patch.messages = messages;
     const updated = await sb(
       supabaseUrl,
       supabaseKey,
-      "conversations?id=eq." + existing[0].id,
+      "conversations?id=eq." + prior.id,
       { method: "PATCH", body: JSON.stringify(patch) },
     );
     row = Array.isArray(updated) ? updated[0] : updated;
@@ -208,7 +278,14 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
     row = Array.isArray(created) ? created[0] : created;
   }
 
-  return { ok: true, conversationId: row.id, status: row.status, phone: row.phone };
+  return {
+    ok: true,
+    conversationId: row.id,
+    status: row.status,
+    phone: row.phone,
+    recontactLocked: false,
+    isNewConversation: !canPatchExisting,
+  };
 }
 
 async function decideRoute(input, supabaseUrl, supabaseKey) {

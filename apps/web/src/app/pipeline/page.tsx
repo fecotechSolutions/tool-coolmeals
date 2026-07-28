@@ -173,6 +173,30 @@ export default function PipelinePage() {
     return map;
   }, [conversations, columns]);
 
+  /** Mismo teléfono en 2+ cards → índice 1 (más antigua) … n (más nueva). */
+  const phoneDupIndex = useMemo(() => {
+    const byPhone = new Map<string, Conversation[]>();
+    for (const row of conversations) {
+      const key = row.phone.replace(/\D/g, "");
+      if (!key) continue;
+      const list = byPhone.get(key) ?? [];
+      list.push(row);
+      byPhone.set(key, list);
+    }
+    const index = new Map<string, number>();
+    for (const list of byPhone.values()) {
+      if (list.length < 2) continue;
+      const ordered = [...list].sort((a, b) => {
+        const ta = Date.parse(a.createdAt) || 0;
+        const tb = Date.parse(b.createdAt) || 0;
+        if (ta !== tb) return ta - tb;
+        return a.id.localeCompare(b.id);
+      });
+      ordered.forEach((c, i) => index.set(c.id, i + 1));
+    }
+    return index;
+  }, [conversations]);
+
   function distName(id: string | null) {
     if (!id) return null;
     return distributors.find((d) => d.id === id)?.name ?? null;
@@ -483,11 +507,12 @@ export default function PipelinePage() {
                       const tags = cardTags(card);
                       const isHumanAttention =
                         card.status === "atencion_representante";
+                      const dupN = phoneDupIndex.get(card.id);
 
                       return (
                         <article
                           key={card.id}
-                          className={`pipeline-card${draggingId === card.id ? " is-dragging" : ""}${isHumanAttention ? " has-rep-tag" : ""}`}
+                          className={`pipeline-card${draggingId === card.id ? " is-dragging" : ""}${isHumanAttention ? " has-rep-tag" : ""}${dupN ? " is-dup-phone" : ""}`}
                           draggable
                           onDragStart={(event) => {
                             setDraggingId(card.id);
@@ -501,9 +526,19 @@ export default function PipelinePage() {
                         >
                           <div className="pipeline-card-top">
                             <strong>{card.name}</strong>
-                            <span className="pipeline-origin">
-                              {ORIGIN_LABELS[card.origin]}
-                            </span>
+                            <div className="pipeline-card-top-right">
+                              {dupN ? (
+                                <span
+                                  className="pipeline-dup-badge"
+                                  title={`Mismo teléfono: ingreso #${dupN} (${dupN === 1 ? "primera" : "posterior"})`}
+                                >
+                                  {dupN}
+                                </span>
+                              ) : null}
+                              <span className="pipeline-origin">
+                                {ORIGIN_LABELS[card.origin]}
+                              </span>
+                            </div>
                           </div>
                           <p className="pipeline-phone">{card.phone}</p>
                           <div className="pipeline-meta">

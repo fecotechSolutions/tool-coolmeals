@@ -46,4 +46,5 @@ AUTO_CIERRE,—,A03,sin_cobertura finalize_at,—,—,—,Ventana vencida,Descar
 AUTO_CIERRE,—,A04,derivado / atencion / muestras / quiere_ser_* / pedidos,—,—,—,Handoff activo,NO auto; Resultado manual,—,según Resultado,—,"éxito / sin éxito / descartado"
 UI,—,U01,Menú lateral web,—,—,—,—,Visibles: Dashboard Pipeline Distribuidores Config comercial,—,—,—,"Ocultos por ahora: Muestras Conocimiento Prompt Manager (rutas viven)"
 UI,—,U02,URLs producción,—,—,—,—,—,—,—,—,"Web https://tool-coolmeals-web.vercel.app | API https://tool-coolmeals-api-ten.vercel.app | Team Vercel FEcotech | Deploy CLI (sin Git auto)"
-REFS,—,R01,Fuentes de verdad,—,—,—,—,—,—,—,—,"routing.ts + functions/coolmeals-bot-actions + workflow.ts SYSTEM_PROMPT | Docs: este CSV + planilla-flujo-ia-anexo-prompt.md"
+REFS,—,R02,Recontacto mismo teléfono 1 año,—,—,—,—,—,—,—,—,"<1 año ya calificado: no métrica nueva ni tipificar de nuevo. ≥1 año: nueva card + recalificar. Mid-flujo (ia_atendiendo): seguir calificando."
+

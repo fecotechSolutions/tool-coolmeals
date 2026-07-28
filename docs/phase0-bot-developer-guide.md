@@ -131,6 +131,7 @@ Ver `.env.example`. Críticas para este módulo:
 | `DERIVE_HANDOFF_HOURS` | Legacy (ya no auto-finaliza derivados/atención) |
 | `ABANDONED_TO_WAITING_HOURS` | 22h mid-flujo → Esperando respuesta |
 | `ESPERANDO_TO_FINALIZE_HOURS` | 22h: `sin_cobertura` → Descartado+ended; `esperando_respuesta` → Finalizado+ended |
+| `STUCK_RUNNING_MINUTES` | Execution Kapso en `running` sin avanzar → `ended` (+ mensaje de recuperación). Default 3 |
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
 | `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención comercial / sin cobertura |

@@ -1,6 +1,7 @@
 import { getEnv } from "../env";
 import {
   findKapsoExecutionForHandoff,
+  listKapsoExecutions,
   sendKapsoWhatsAppText,
   setKapsoExecutionEnded,
   setKapsoExecutionHandoff,
@@ -10,6 +11,9 @@ import type { DbConversation } from "./mappers";
 
 const DEFAULT_NUDGE =
   "Hola! ¿Tenés alguna consulta más? Si no recibimos respuesta, vamos a cerrar esta conversación. Quedamos atentos.";
+
+const STUCK_RECOVERY_MESSAGE =
+  "Disculpá — tuve un problema técnico y no pude responder. ¿Me repetís tu último mensaje?";
 
 /** Solo estos statuses auto-pasan a Finalizado cuando vence la ventana. */
 const HANDOFF_FINALIZE_STATUSES = [
@@ -21,6 +25,18 @@ const HANDOFF_FINALIZE_STATUSES = [
 const MID_FLOW_STATUSES = ["ia_atendiendo", "nuevo"] as const;
 
 export type PipelineTimeoutsResult = {
+  stuckRunning: {
+    scanned: number;
+    recovered: number;
+    items: Array<{
+      executionId: string;
+      whatsappConversationId: string | null;
+      ageMinutes: number;
+      kapsoEnded: boolean;
+      messageSent: boolean;
+      error?: string;
+    }>;
+  };
   escalated: {
     scanned: number;
     moved: number;
@@ -54,6 +70,8 @@ function cutoffIso(hours: number, from = new Date()): string {
 }
 
 /**
+ * 0) Executions Kapso stuck en `running` ≥ STUCK_RUNNING_MINUTES:
+ *    → ended (+ mensaje de recuperación si hay teléfono en DB)
  * 1) Mid-flujo inactivo ≥ ABANDONED_TO_WAITING_HOURS (22):
  *    → Esperando respuesta + mensaje WA + handoff + finalize_at (+22h)
  * 2) Ventana vencida:
@@ -62,9 +80,95 @@ function cutoffIso(hours: number, from = new Date()): string {
  *    (resto de columnas: quedan hasta cierre manual con resultado)
  */
 export async function runPipelineTimeouts(): Promise<PipelineTimeoutsResult> {
+  const stuckRunning = await recoverStuckRunningExecutions();
   const escalated = await escalateAbandonedToWaiting();
   const finalized = await finalizeHandoffWindows();
-  return { escalated, finalized };
+  return { stuckRunning, escalated, finalized };
+}
+
+/**
+ * Si el agent Kapso se queda en `running` (p.ej. tras un tool call sin
+ * send_notification / enter_waiting), los próximos WhatsApp se encolan en
+ * esa execution y el lead no recibe respuesta. Forzamos `ended` para que el
+ * siguiente mensaje abra una execution nueva.
+ */
+export async function recoverStuckRunningExecutions(): Promise<
+  PipelineTimeoutsResult["stuckRunning"]
+> {
+  const env = getEnv();
+  const minutes = env.STUCK_RUNNING_MINUTES;
+  const cutoffMs = Date.now() - minutes * 60 * 1000;
+  const items: PipelineTimeoutsResult["stuckRunning"]["items"] = [];
+
+  const listed = await listKapsoExecutions({ status: "running", limit: 30 });
+  if (!listed.ok) {
+    return {
+      scanned: 0,
+      recovered: 0,
+      items: [
+        {
+          executionId: "",
+          whatsappConversationId: null,
+          ageMinutes: 0,
+          kapsoEnded: false,
+          messageSent: false,
+          error: listed.error,
+        },
+      ],
+    };
+  }
+
+  const supabase = getSupabase();
+
+  for (const exec of listed.executions) {
+    const anchor = exec.last_event_at || exec.started_at;
+    if (!anchor) continue;
+    const anchorMs = Date.parse(anchor);
+    if (!Number.isFinite(anchorMs) || anchorMs > cutoffMs) continue;
+
+    const ageMinutes = Math.round((Date.now() - anchorMs) / 60000);
+    const ended = await setKapsoExecutionEnded(exec.id);
+    let messageSent = false;
+    let error = ended.error;
+
+    if (ended.ok && exec.whatsapp_conversation_id) {
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("id, phone, status")
+        .eq("kapso_conversation_id", exec.whatsapp_conversation_id)
+        .maybeSingle();
+
+      const phone = (conv as { phone?: string } | null)?.phone;
+      const status = (conv as { status?: string } | null)?.status;
+      if (
+        phone &&
+        status &&
+        (MID_FLOW_STATUSES as readonly string[]).includes(status)
+      ) {
+        const sent = await sendKapsoWhatsAppText({
+          toPhone: phone,
+          body: STUCK_RECOVERY_MESSAGE,
+        });
+        messageSent = sent.ok;
+        if (!sent.ok) error = [error, sent.error].filter(Boolean).join("; ");
+      }
+    }
+
+    items.push({
+      executionId: exec.id,
+      whatsappConversationId: exec.whatsapp_conversation_id ?? null,
+      ageMinutes,
+      kapsoEnded: ended.ok,
+      messageSent,
+      error,
+    });
+  }
+
+  return {
+    scanned: listed.executions.length,
+    recovered: items.filter((i) => i.kapsoEnded).length,
+    items,
+  };
 }
 
 export async function escalateAbandonedToWaiting(): Promise<

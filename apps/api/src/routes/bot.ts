@@ -68,16 +68,63 @@ botRoutes.post(
   async (c) => {
     const body = c.req.valid("json");
     const supabase = getSupabase();
+    const RECONTACT_LOCK_DAYS = 365;
+    const MID_FLOW = new Set(["nuevo", "ia_atendiendo"]);
 
     const { data: existing } = await supabase
       .from("conversations")
       .select("*")
       .eq("phone", body.phone)
-      .order("updated_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    const now = new Date().toISOString();
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const withinLock = (createdAt: string | null | undefined) => {
+      if (!createdAt) return false;
+      const ms = Date.parse(createdAt);
+      if (!Number.isFinite(ms)) return false;
+      const age = now.getTime() - ms;
+      return age >= 0 && age < RECONTACT_LOCK_DAYS * 24 * 60 * 60 * 1000;
+    };
+
+    // Ya calificado / cerrado dentro del año: no pisar datos ni crear lead nuevo.
+    if (
+      existing &&
+      withinLock(existing.created_at) &&
+      !MID_FLOW.has(String(existing.status))
+    ) {
+      const touch: Record<string, unknown> = {};
+      if (body.lastMessage !== undefined) touch.last_message = body.lastMessage;
+      else if (body.message?.content) touch.last_message = body.message.content;
+      if (body.kapsoConversationId !== undefined) {
+        touch.kapso_conversation_id = body.kapsoConversationId;
+      }
+      if (body.kapsoExecutionId !== undefined) {
+        touch.kapso_execution_id = body.kapsoExecutionId;
+      }
+      const messages = Array.isArray(existing.messages)
+        ? [...existing.messages]
+        : [];
+      if (body.message) messages.push(body.message);
+      touch.messages = messages;
+
+      const { data, error } = await supabase
+        .from("conversations")
+        .update(touch)
+        .eq("id", existing.id)
+        .select("*")
+        .single();
+      if (error) return c.json(fail("DB_ERROR", error.message), 500);
+      return c.json(
+        ok({
+          ...mapConversation(data as DbConversation),
+          recontactLocked: true,
+        }),
+      );
+    }
+
     const patch: Record<string, unknown> = {
       phone: body.phone,
       origin: body.origin,
@@ -102,8 +149,12 @@ botRoutes.post(
       patch.kapso_execution_id = body.kapsoExecutionId;
 
     let row: DbConversation;
+    const canPatch =
+      existing &&
+      withinLock(existing.created_at) &&
+      MID_FLOW.has(String(existing.status));
 
-    if (existing) {
+    if (canPatch) {
       const messages = Array.isArray(existing.messages)
         ? [...existing.messages]
         : [];
@@ -137,7 +188,7 @@ botRoutes.post(
         kapso_conversation_id: body.kapsoConversationId ?? null,
         kapso_execution_id: body.kapsoExecutionId ?? null,
         messages: body.message ? [body.message] : [],
-        created_at: now,
+        created_at: nowIso,
       };
 
       const { data, error } = await supabase

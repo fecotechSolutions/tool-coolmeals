@@ -42,6 +42,13 @@ const envSchema = z.object({
   CRON_SECRET: z.string().min(8).optional(),
 
   /**
+   * Minutos que una execution Kapso puede quedar en `running` sin avanzar.
+   * Pasado eso el cron la fuerza a `ended` para que el próximo WA arranque de nuevo.
+   * Default 3.
+   */
+  STUCK_RUNNING_MINUTES: z.coerce.number().positive().default(3),
+
+  /**
    * Google Sheets — set in `.env`. No production IDs hardcoded in source.
    */
   GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID: z.string().min(1).optional(),

@@ -57,6 +57,16 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 | Descartado | Sin perfil comercial viable | Terminal |
 | Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` / `Descartado` | Cierra → Finalizado o Descartado + Kapso ended |
 
+## Recontacto mismo teléfono (métricas)
+
+| Situación | Qué pasa |
+|-----------|----------|
+| Mismo WA, card **&lt; 1 año**, aún en Nuevo / IA atendiendo | Sigue calificando; misma card |
+| Mismo WA, card **&lt; 1 año**, ya calificada (cualquier otra columna, incl. Finalizado/Descartado) | **No** lead nuevo en métricas; no se pisan tipo/zona/volumen/columna; bot solo mensaje corto de “ya estás en proceso” |
+| Mismo WA, última card **≥ 1 año** | **Nueva** conversación (`created_at` nuevo) → cuenta como lead nuevo y se recalifica |
+
+Ventana: 365 días desde `created_at` de la card más reciente de ese teléfono.
+
 ## Umbral de 50 bultos / cajas (regla comercial)
 
 **Unidades:** "bulto" = "caja". Umbral = **≥ 50 cajas/mes**.  
