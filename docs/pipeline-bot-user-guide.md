@@ -2,39 +2,39 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: 24 julio 2026 (sandbox Kapso: calificación distribuidor con 4 requisitos + ruteos + sheets + dashboard).
+Actualizado: **28 julio 2026** (ruteo ≥50 cualquier provincia; Córdoba &lt;50 → operador; Descartado; planilla definitiva).
 
-> **Para probar todos los flujos mañana (paso a paso + planilla):**  
-> [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) — pensado para pasárselo al operador.
+> **Planilla de lógica + casos + prioridades:**  
+> [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) + anexo [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md).  
+> **Pruebas E2E paso a paso:** [`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
 
 ## Qué es esto
 
 Un lead escribe al WhatsApp de Cool Meals / Froodie. Un bot (Kapso) lo atiende, califica y, según el caso:
 
-- lo **deriva a un distribuidor** de la red,
-- lo atiende **Cool Meals** (menú muestras / pedido),
-- lo marca **sin cobertura**,
-- o lo marca interés comercial: **quiere ser distribuidor** / **representante** / **fasón** (handoff; un asesor contacta por otro canal).
+- **≥ 50 cajas** (cualquier provincia) → Cool Meals (menú **muestras / pedido**),
+- **Córdoba + &lt; 50** → operador / atención humana Cool Meals (sin menú),
+- **fuera de Córdoba + &lt; 50** → **distribuidor** de zona o **sin cobertura**,
+- interés: **quiere ser distribuidor** (4 SÍ → columna; luego ruteo por vol/zona), **representante** / **fasón** (handoff),
+- **consumidor final** → **Descartado**.
 
-En handoffs el bot se pausa. **Auto-cierre (~22 h):** **Sin cobertura** → **Descartado** + ended; **Esperando respuesta** → **Finalizado** + ended. El resto queda hasta el desplegable **Resultado**.
+En handoffs el bot se pausa. **Auto-cierre (~22 h):** **Sin cobertura** → **Descartado** + ended; **Esperando respuesta** → **Finalizado** + ended. El resto queda hasta el desplegable **Resultado** (`Finalizado con éxito` / `sin éxito` / `Descartado`).
 
-Todo se ve en el **Pipeline** (`/pipeline`) y, si hay muestras Cool Meals, en **`/muestras`** + sheet de logística. Las métricas viven en el **Dashboard** (`/`).
+Todo se ve en el **Pipeline** (`/pipeline`). Las métricas viven en el **Dashboard** (`/`).
 
-Además, al cerrar interés comercial o sin cobertura, el bot escribe en Google Sheets:
-
-- [Atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ) — dist / rep / fasón (columna tipo de cliente)
-- [Sin cobertura](https://docs.google.com/spreadsheets/d/10jeiXNXEUlHiOgJKqbwazQBWhOurSJWQBWyTnY6nENY) — para recontactar cuando haya zona
+Sheets: derivados, muestras, [atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ), [sin cobertura](https://docs.google.com/spreadsheets/d/10jeiXNXEUlHiOgJKqbwazQBWhOurSJWQBWyTnY6nENY).
 
 ## Dónde mirar
 
 | Lugar | Para qué |
 |-------|----------|
-| **Dashboard** (`/`) | Métricas del período: filtro Hoy / 7d / mes / personalizado; mix por tipo; **por provincia**; derivados por dist. |
-| **Pipeline** (`/pipeline`) | Cards, columnas, hashtags, mover estados |
-| **Distribuidores** | Red comercial por provincia (**no** es un Google Sheet) |
+| **Dashboard** (`/`) | Métricas del período; mix por tipo; **por provincia**; derivados por dist. |
+| **Pipeline** (`/pipeline`) | Cards, columnas, hashtags, Resultado |
+| **Distribuidores** | Red comercial por provincia |
 | **Config comercial** | Umbral de bultos (default 50) |
-| **Muestras** (`/muestras`) | Agenda logística Cool Meals: nombre, teléfono, empresa, provincia, DNI, correo, CP, dirección completa + sync sheet |
 | **Kapso → Executions** | `waiting` / `handoff` / `ended` |
+
+> Menú web oculto por ahora: Muestras, Base de conocimiento, Prompt Manager (las rutas siguen existiendo).
 
 Canvas sandbox:  
 https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
@@ -55,84 +55,63 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 | Pedido lead / Pedido cliente | Pedidos (manual / flujos posteriores) | No — cierre manual |
 | Finalizado | Cerrada (manual con resultado o auto ~22 h) | Terminal |
 | Descartado | Sin perfil comercial viable | Terminal |
-| Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` | Cierra ya → columna Finalizado |
+| Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` / `Descartado` | Cierra → Finalizado o Descartado + Kapso ended |
 
 ## Umbral de 50 bultos / cajas (regla comercial)
 
-**Unidades:** "bulto" y "caja" son lo mismo (1 bulto = 1 caja). Umbral = **≥ 50 bultos/cajas por mes**.
+**Unidades:** "bulto" = "caja". Umbral = **≥ 50 cajas/mes**.  
+**Embalaje:** wraps 24 u/caja · platos 12 · postres 24 · palet **110 cajas** (todos).
 
-| Producto | Unidades por caja |
-|----------|-------------------|
-| Wraps | 24 |
-| Platos listos | 12 |
+| Tipo | ¿Umbral 50? | Qué pasa |
+|------|-------------|----------|
+| **Representante** / **Fasón** (SER) | No (ignoran vol.) | Su columna + handoff; **nunca** menú |
+| **Quiere ser distribuidor** | Tras 4 SÍ, sí | 4 SÍ → columna **sin** handoff → luego mismo ruteo por vol/zona |
+| **Retail / Mayorista / Dist 4 SÍ / quien da vol.** | Sí | **≥50 cualquier provincia** → menú Cool Meals. **&lt;50 Córdoba** → operador. **&lt;50 fuera** → dist / sin cobertura |
+| **Minorista** (locales gastronómicos) | No se exige | Si da ≥50 → menú; si no → Córdoba operador / resto dist |
 
-Si el lead habla en unidades (ej. "1200 wraps"), el bot convierte a cajas (1200÷24 = 50) antes de aplicar el umbral.
+Cobertura = tabla **Distribuidores**. Sin dist. → **Sin cobertura** → auto **Descartado** ~22 h.
 
-| Tipo de cliente | ¿Aplica umbral 50? | Qué pasa |
-|-----------------|--------------------|----------|
-| **Distribuidor** (quiere serlo) | No | Primero 4 preguntas de requisitos. **4 sí** → **Quiere ser distribuidor** + handoff. Si falta alguna → explica requisitos + ofrece compra (no retail/mayorista auto). |
-| **Representante** | No | Columna **Quiere ser representante** + handoff (sin menú muestras/pedido) |
-| **Fasón** | No | Columna **Quiere ser fasón** + handoff (sin menú muestras/pedido) |
-| **Retail** / **Mayorista** | Sí | **Córdoba + ≥50** → Cool Meals (menú muestras/pedido). **Fuera de Córdoba** (aunque ≥50) → distribuidores |
-| **Minorista** | No | Siempre deriva si hay cobertura |
-| **Otro** | No asumir umbral | Deriva o sin cobertura según zona |
+## Atención Cool Meals (≥50 — cualquier provincia)
 
-Cobertura = tabla **Distribuidores**. Provincia sin dist. → **Sin cobertura**.
-
-## Atención Cool Meals (Córdoba ≥50) — muestras / pedido
-
-Cuando el lead califica para Cool Meals, el bot **ofrece siempre** (sin esperar a que lo pidan):
+Cuando el volumen es **≥ 50 cajas** (Córdoba u otra), el bot ofrece el menú:
 
 1. **Pedir muestras**  
-2. **Agendar pedido**
+2. **Agendar / armar pedido**
 
 ### Si elige muestras
 
-1. Pide Nombre y Apellido, Teléfono, Empresa, Provincia, DNI, Correo, Código postal y Dirección completa.  
-2. Agenda en **`/muestras`** + **sheet de logística** (así logística ve qué enviar).  
-3. Avisa que el **equipo de logística** se contacta para el envío (no “un asesor te arma las muestras”).  
-4. Handoff; card en columna **Muestras**.  
-
-En esta versión **no** hay seguimiento enviado/entregado/cancelado en la UI.
+1. Datos de envío completos (nombre, tel, empresa, provincia, DNI, correo, CP, dirección).  
+2. Sheet de logística + DB.  
+3. Mensaje: se coordinan las muestras y un **representante** hace el seguimiento.  
+4. Handoff; columna **Muestras**.
 
 ### Si elige pedido
 
-- Card en **Atención humana** + handoff. El asesor comercial contacta (no es un transfer live por ese mismo chat).
+- Columna **Atención humana** + handoff (asesor contacta por otro canal).
 
 ## Interés comercial: representante / fasón / distribuidor
 
-### Representante / fasón
+### Representante / fasón (SER)
 
-Con la **intención clara** (sin formulario largo):
+Intención clara de **ser** rep/fasón (no “hablar con un representante”):
 
-1. Bot confirma el interés.  
-2. Avisa que un **asesor comercial te va a contactar** por teléfono/WhatsApp (**no** por ese número del bot).  
-3. Se despide.  
-4. Handoff; card en la columna correspondiente:
-   - **Quiere ser representante**
-   - **Quiere ser fasón** (incluye marca propia / maquila / “hacerme la comida con mi marca”)
-5. Fila en el sheet [Atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ) con **tipo_cliente**.
+1. Confirma interés → asesor te contacta → handoff a su columna + sheet Atención comercial.  
+2. **Nunca** menú muestras aunque den volumen alto.
 
-### Quiere ser distribuidor (calificación previa)
+> Pedir hablar con un humano / representante → **Atención humana**, no “Quiere ser representante”.
 
-Si el lead quiere sumarse como distribuidor, el bot **pregunta antes** (no cierra ni hace handoff todavía):
+### Quiere ser distribuidor
 
-1. ¿Trabajás actualmente con productos congelados?  
-2. ¿Tenés depósito / cámara de congelados?  
-3. ¿Contás con logística para productos congelados?  
-4. ¿Contás con una estructura de distribución?
-
-- **4 sí** → columna **Quiere ser distribuidor** + sheet Atención comercial + handoff (asesor contacta por otro canal + despedida).  
-- **Falta alguna** → explica que son requisitos para ser distribuidor Cool Meals y ofrece seguir si quiere **hacer una compra**. No lo manda automático a retail/mayorista ni a la columna de distribuidor.
+4 requisitos. **4 SÍ** → columna vía upsert **sin** handoff → zona/volumen → mismo ruteo (≥50 menú / CBA operador / dist).  
+**Falta alguna** → tipificar compra o Descartado.
 
 ### Sin cobertura
 
-Además del Pipeline, se anota en el sheet [Sin cobertura](https://docs.google.com/spreadsheets/d/10jeiXNXEUlHiOgJKqbwazQBWhOurSJWQBWyTnY6nENY) para recontactar cuando haya zona.
+Sheet Sin cobertura. Auto ~22 h → **Descartado**.
 
-### Si el lead se deriva a un distribuidor (ej. Mendoza)
+### Derivado a dist (fuera CBA + &lt;50)
 
-- Cool Meals **no** agenda la muestra ni escribe el sheet de logística.  
-- El **distribuidor** se hace cargo → solo **Derivado** + handoff.
+Cool Meals **no** agenda muestras; el dist se hace cargo.
 
 ## Hashtags en la card
 
@@ -183,19 +162,18 @@ Resumen rápido:
 
 | # | Caso | Mensaje | Esperado |
 |---|------|---------|----------|
-| 1 | Quiere ser distribuidor | `Hola, quiero ser distribuidor…` → 4 preguntas → 4 sí | **Quiere ser distribuidor** + sheet Atención comercial + handoff |
-| 1b | Dist. sin requisitos | Misma intención + respuestas negativas a requisitos | Explica requisitos + ofrece compra; sin columna dist. |
-| 2 | Sin cobertura | `Hola, rotisería en Salta, quiero productos` | **Sin cobertura** + sheet + handoff |
-| 3 | Derivación | `Hola, minorista en Mendoza, compro poco` | **Derivado** `#Cool_Logistica_Cuyo` + handoff |
-| 4 | Cool Meals CBA ≥50 | `Hola, mayorista en Córdoba Capital, ~60 bultos/mes` | Menú **muestras / pedido** |
-| 5a | Muestras en zona con dist. | `Hola, rotisería en Mendoza, quiero muestras` | **Derivado** (sin fila Cool Meals en `/muestras`) |
-| 5b | Muestras Cool Meals | Tras el menú de (4), elegir muestras → 3 datos | **Muestras** + `/muestras` + sheet + mensaje logística + handoff |
-| 6 | Representante | `Hola, quiero ser representante comercial de Cool Meals en Buenos Aires` | **Quiere ser representante** + asesor contacta (no ese nº) + despedida + handoff |
-| 7 | Fasón / marca propia | `quiero tener mi marca… hacerme la comida pero ponerle mi marca` | **Quiere ser fasón** + mismo cierre (sin formulario) |
+| 1 | Dist 4 SÍ + vol/zona | 4 sí → zona + volumen | Columna dist + luego menú / operador / derivado según vol |
+| 1b | Dist sin requisitos | Algún NO | Sin columna dist; tipificar compra o Descartado |
+| 2 | Sin cobertura | Rotisería Salta | **Sin cobertura** → auto **Descartado** ~22 h |
+| 3 | Minorista Mendoza | Rotisería Mendoza poco | **Derivado** |
+| 4 | ≥50 Córdoba | Mayorista CBA ~60 | Menú muestras/pedido |
+| 5 | ≥50 Mendoza | Mayorista Mendoza ~80 | Menú Cool Meals (volumen gana) |
+| 6 | &lt;50 Córdoba | Mayorista CBA ~20 | **Atención humana** sin menú |
+| 7 | Representante SER | Quiero ser representante… | Columna rep |
+| 8 | Hablar con humano | Quiero hablar con un representante | **Atención humana** (no columna rep) |
+| 9 | Consumidor | 1 wrap a domicilio | **Descartado** |
 
-Extra — volumen alto fuera de Córdoba:
-
-- `Mayorista en Mendoza, ~80 bultos` → **Derivado** (no Cool Meals).
+Planilla completa: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).
 
 ## Dashboard (métricas)
 

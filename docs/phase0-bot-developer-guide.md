@@ -2,10 +2,10 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: 24 julio 2026 (calificación 4 requisitos para quiere ser distribuidor + dashboard filtrable).
+Actualizado: **28 julio 2026**.
 
-Guía para el **operador** (pruebas E2E de todos los flujos):  
-[`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
+Planilla: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) · Anexo: [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md).  
+Operador: [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) · Uso: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
 ## Arquitectura (flujo feliz)
 
@@ -116,7 +116,8 @@ En SQL Editor, en orden:
 2. `supabase/migrations/20260719000000_phase0_bot_foundation.sql`
 3. `supabase/migrations/20260720000000_derive_handoff_window.sql` ← `derived_at`, `finalize_at`
 4. `supabase/migrations/20260720140000_quiere_ser_representante_fason.sql` ← columnas Pipeline
-5. Opcional: `supabase/seed.sql`
+5. `supabase/migrations/20260724120000_sample_request_extra_fields.sql` (campos extra muestras)
+6. Opcional: `supabase/seed.sql`
 
 Sin (3), el código hace **fallback** a `updated_at` para timeouts; conviene aplicarla igual.
 
@@ -150,86 +151,38 @@ Web: `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
 
 ### Agent (`workflows/coolmeals-leads/workflow.ts`)
 
-1. Primer mensaje → `upsert_conversation` (guardar `conversationId`).
-2. Calificación (taxonomy Meta / Froodie).
-   - **Fasón / representante:** intención clara → `decide_route` + handoff en el mismo turno (sin formulario).
-   - **Quiere ser distribuidor:** **antes** de `decide_route`, preguntar las 4:
-     1. ¿Trabajás actualmente con productos congelados?
-     2. ¿Tenés depósito / cámara de congelados?
-     3. ¿Contás con logística para productos congelados?
-     4. ¿Contás con una estructura de distribución?
-     - **4 SÍ** → `clientType=distribuidor` → `decide_route` → handoff.
-     - **Falta alguna** → explicar requisitos + ofrecer compra; **no** `clientType=distribuidor`, **no** retail/mayorista automático.
-3. Según `decide_route.action` (seguir `agentInstruction` si viene):
+1. Primer mensaje → `upsert_conversation` + Beacons + tipificación.
+2. Fasón / representante (SER) → `decide_route` + handoff (sin menú).
+3. Quiere ser distribuidor → 4 preguntas; **4 SÍ** → `upsert` columna **sin** handoff → zona/volumen → `decide_route`.
+4. Según `decide_route` (seguir `agentInstruction` / `coolMealsMenu`):
 
 | action | Comportamiento |
 |--------|----------------|
-| `derive_to_distributor` | `sync_derived` → `handoff_to_human`. Si pidieron muestras: **no** `request_samples` (el dist. se encarga). |
-| `no_coverage` | `handoff_human` `status=sin_cobertura` → `handoff_to_human` |
-| `quiere_ser_distribuidor` | Solo tras calificación 4 SÍ. Luego `handoff_human` `status=quiere_ser_distribuidor` → `handoff_to_human` (sin menú muestras/pedido) |
-| `own_attention` | **Menú obligatorio** antes del handoff: 1) muestras 2) pedido. |
+| `own_attention` + menú | ≥50 cualquier provincia → muestras o pedido |
+| `own_attention` sin menú | Córdoba &lt;50 → handoff `atencion_representante` |
+| `derive_to_distributor` | `sync_derived` + `handoff_to_human` (sin `request_samples`) |
+| `no_coverage` | `sin_cobertura` → auto **Descartado** ~22h |
+| `quiere_ser_representante` / `fason` | handoff a su columna |
 
-**`own_attention` (Cool Meals, p.ej. retail/mayorista Córdoba ≥50):**
+**Muestras (≥50):** datos envío → `request_samples` → mensaje representante seguimiento → `handoff_human` `muestras` + `handoff_to_human`.
 
-- **Muestras:** Nombre y Apellido + Teléfono + Empresa + Provincia + DNI + Correo + Código postal + Dirección completa → `request_samples` (DB + sheet + status Pipeline `muestras`) → mensaje de que **logística** contacta para el envío → `handoff_human` `status=muestras` → `handoff_to_human`. No decir que un asesor “arma las muestras”.
-- **Pedido:** `handoff_human` (default `atencion_representante`) → `handoff_to_human`.
+### Timeouts
 
-4. `handoff_human` acepta `status`: `atencion_representante` \| `quiere_ser_distribuidor` \| `quiere_ser_representante` \| `quiere_ser_fason` \| `sin_cobertura` \| `muestras` \| `esperando_respuesta`. Agenda `human_handoff_at`. Solo `sin_cobertura` / `esperando_respuesta` agendan `finalize_at` (auto-Finalizado).
+- `sin_cobertura` vencido → **Descartado** + ended  
+- `esperando_respuesta` vencido → **Finalizado** + ended  
+- resto: Resultado manual (`éxito` / `sin éxito` / `Descartado`)
 
-Sin seguimiento de despacho de muestras en UI (solo agenda logística).
+## Ruteo comercial
 
-### Pipeline UI
+Orden en `decide_route`:
 
-- Hashtag dist. naranja; persiste una vez derivado.
-- Drag / handoff a **Atención humana**, **Quiere ser distribuidor**, **Sin cobertura** o **Muestras** → `POST /api/bot/handoff` con ese `status`.
-- Mover a **Muestras** desde Pipeline: además del status, crea `sample_requests` + append al sheet de logística (fecha, nombre, teléfono, **tipo_cliente**, empresa, provincia, dni, correo, CP, dirección; campos vacíos si no hay).
-- `/muestras`: lista de agendas (nombre, tel, empresa, provincia, dni, correo, CP, dirección completa, sync sheet). Sin estados enviado/entregado en esta versión.
-- Ya no existe el botón `#atendido_por_representante`.
+1. `representante` / `fason`  
+2. volumen ≥ `minBundlesDefault` (50) → `own_attention` + `coolMealsMenu`  
+3. Córdoba → operador sin menú  
+4. sin dist → `no_coverage`  
+5. con dist → `derive_to_distributor`
 
-### Timeouts (`runPipelineTimeouts`)
-
-Statuses que auto-pasan a Finalizado cuando `finalize_at` venció (~22 h):
-
-- `sin_cobertura`
-- `esperando_respuesta`
-
-El resto (derivado, atención humana, quiere ser dist/rep/fasón, muestras, pedidos) **no** auto-finaliza: el operador cierra con el desplegable **Resultado**. Columnas **Finalizado** y **Descartado** sí se muestran en el Pipeline.
-
-Abandono mid-flujo:
-
-1. `nuevo` / `ia_atendiendo` inactivo ≥ 22h → WA nudge + handoff + `esperando_respuesta` + `finalize_at` (+22h).
-2. Ventana vencida → `finalizado` + Kapso `ended`.
-
-Cron Vercel (`vercel.api.json`): hourly `GET/POST /api/cron/pipeline-timeouts`.  
-Local: `npm run cron:finalize-derived -w @coolmeals/api`.
-
-## Ruteo comercial (MVP)
-
-Fuente de cobertura: tabla **distributors** (UI), no sheet.  
-Implementación: `apps/api/src/lib/routing.ts` **y** `decideRoute` en `functions/coolmeals-bot-actions/index.js`.
-
-Umbral 50 bultos/cajas (`minBundlesDefault` / `commercial_settings`):
-
-- **bulto = caja** (sinónimos). El número en `estimatedVolume` es en bultos/cajas.
-- Contenido: wraps = 24 u/caja; platos listos = 12 u/caja. Si el lead habla en unidades, el agent convierte a cajas antes de `decide_route`.
-
-| Tipo | ¿Aplica umbral? | Lógica |
-| --- | --- | --- |
-| Distribuidor | No | Solo tras 4 SÍ (congelados, depósito/cámara, logística, estructura) → `quiere_ser_distribuidor` + handoff. Si falta alguno: explicar requisitos + ofrecer compra; no retail/mayorista auto. |
-| Representante | No | `quiere_ser_representante` → columna Quiere ser representante + handoff |
-| Fasón | No | `quiere_ser_fason` → columna Quiere ser fasón + handoff |
-| Retail / Mayorista | Sí | Córdoba + ≥50 → `own_attention` (menú muestras/pedido); fuera de Córdoba (aunque ≥50) → red de dist. |
-| Minorista | No | Siempre deriva si hay cobertura |
-| Otro | No asumir | Deriva / sin_cobertura según cobertura |
-
-Orden de evaluación (en `decide_route`; el agent **no** debe llamar con `clientType=distribuidor` sin las 4 SÍ):
-
-1. `distribuidor` o `wantsToBeDistributor` → `quiere_ser_distribuidor`
-2. `representante` → `quiere_ser_representante`
-3. `fason` → `quiere_ser_fason`
-4. `retail` o `mayorista` en Córdoba con volumen ≥ umbral → `own_attention`
-5. sin dist. en provincia → `no_coverage` / `sin_cobertura`
-6. resto con cobertura → `derive_to_distributor`
+Umbral en **cajas** (bulto = caja). Embalaje: wraps 24 / platos 12 / postres 24 / palet 110.
 
 ## Sheets
 

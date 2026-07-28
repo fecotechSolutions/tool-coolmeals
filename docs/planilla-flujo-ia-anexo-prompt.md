@@ -1,162 +1,105 @@
-# Anexo: cómo mezclar planilla + prompt + Pipeline
+# Anexo: planilla + prompt + Pipeline
 
-Documento compañero de `planilla-flujo-ia-definitiva.csv`.  
-Sirve para armar el `SYSTEM_PROMPT` sin contradicciones y para que Octavio/ops vean el mapeo completo.
+Compañero de [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
+Actualizado: **28 julio 2026**.
 
 ---
 
-## 1. Decisiones cerradas (donde la planilla vieja era ambigua)
+## 1. Decisiones cerradas (`decideRoute`)
 
-| Tema | Decisión definitiva |
+Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-actions/index.js` (mismas reglas).
+
+| Tema | Decisión |
 |---|---|
-| Link Beacons | `https://beacons.ai/froodie` — mandarlo en el **primer mensaje** y reenviarlo si piden catálogo/sabores/detalle de producto |
-| Córdoba retail/mayorista **&lt; 50** | **Distribuidor de zona** (o sin cobertura). **No** mandar siempre a Octavio |
-| Córdoba retail/mayorista **≥ 50** | Cool Meals: menú **muestras o pedido** |
-| Fuera de Córdoba (cualquier volumen) | Red de distribuidores |
-| Minorista / gastronómico | Siempre dist. (sin pedir volumen) |
-| Muestras pedidas “de entrada” | Primero calificar; muestras solo si `own_attention` |
-| Consumidor final | `descartado` / Cerrado |
-| Quiere ser dist. / representante / fasón | Se mantienen reglas actuales (4 SÍ, handoff rápido, etc.) |
+| Beacons | `https://beacons.ai/froodie` en el **primer mensaje** y si piden catálogo/sabores. **Sin precios** |
+| Orden motor | 1) rep/fasón → 2) **≥50 cualquier provincia** → menú → 3) **Córdoba &lt;50** → operador sin menú → 4) fuera CBA &lt;50 → dist / sin_cobertura |
+| Minorista / gastronómico | Siempre `minorista`. No bloquear por volumen; si da ≥50 → menú |
+| Muestras | Solo si `own_attention` **con** `coolMealsMenu` (≥50). Luego `request_samples` + handoff `muestras` |
+| Consumidor final | `descartado` (IA `ended`, **sin** `handoff_to_human`) |
+| “Hablar con un representante” | `atencion_representante` — **no** `quiere_ser_representante` |
+| Quiere ser distribuidor | 4 SÍ → columna con `upsert` **sin handoff** → luego `decide_route` por vol/zona |
+| Auto-cierre | `sin_cobertura` ~22h → **Descartado**; `esperando_respuesta` ~22h → **Finalizado** |
 
 ---
 
-## 2. Mapa Condición → Pipeline / tools
+## 2. Condición → Pipeline / tools
 
-| Estado en planilla | `conversation.status` | Tools típicas |
+| Situación | `conversation.status` | Tools |
 |---|---|---|
-| IA atendiendo / clasificando | `ia_atendiendo` | `upsert_conversation` |
-| Pendiente derivación / derivado dist. | `derivado_distribuidor` | `decide_route` → `sync_derived` → `handoff_to_human` |
-| Derivado a Octavio (comercial) | `atencion_representante` | `handoff_human` + `handoff_to_human` |
-| Hands off en muestras | `muestras` | `request_samples` → `handoff_human` (sin `handoff_to_human`) |
-| Sin cobertura | `sin_cobertura` | `handoff_human` + `handoff_to_human` |
-| Quiere ser distribuidor | `quiere_ser_distribuidor` | `handoff_human` + `handoff_to_human` |
-| Quiere ser representante | `quiere_ser_representante` | idem |
-| Quiere ser fasón | `quiere_ser_fason` | idem |
-| Cerrado / basura | `descartado` | `handoff_human` solo (IA ended) |
-| Esperando | `esperando_respuesta` | política auto-finalize ~22h |
-
-`decide_route` sigue siendo la **fuente de verdad** del ruteo. La planilla describe el comportamiento esperado; el motor en API/Kapso no se contradice.
+| Calificando | `ia_atendiendo` | `upsert_conversation` |
+| ≥50 menú / operador CBA | `atencion_representante` (luego `muestras` si eligió) | `decide_route` → menú o handoff |
+| Derivado | `derivado_distribuidor` | `sync_derived` + `handoff_to_human` |
+| Sin cobertura | `sin_cobertura` | `handoff_human` + `handoff_to_human` → auto **Descartado** |
+| Muestras Cool Meals | `muestras` | `request_samples` + `handoff_human` + `handoff_to_human` |
+| Quiere ser dist (4 SÍ) | `quiere_ser_distribuidor` | solo `upsert` (sin handoff) |
+| Quiere ser rep / fasón | `quiere_ser_*` | `handoff_human` + `handoff_to_human` |
+| Basura | `descartado` | solo `handoff_human` |
+| Abandono | `esperando_respuesta` → `finalizado` | cron |
 
 ---
 
-## 3. Estructura del prompt (orden de bloques)
-
-Pegar / mergear en este orden dentro de `SYSTEM_PROMPT` + `CLASSIFICATION_HINTS`:
-
-```
-A. IDENTIDAD + OBJETIVO
-B. REGLA TÉCNICA (send_notification_to_user / tools silenciosas / enter_waiting)
-C. TONO + PROHIBIDOS DE COPY
-D. APERTURA PROACTIVA + BEACONS          ← NUEVO (etapa actual)
-E. BEACONS COMO CATÁLOGO (cuándo reenviar) ← NUEVO
-F. CALIFICACIÓN (qué pedir por tipo)
-G. REGLAS DURAS (minorista, 50, Córdoba, basura, 4 SÍ dist.)
-H. RUTEO (decide_route + agentInstruction)
-I. MUESTRAS / PEDIDO / SIN COBERTURA / DESCARTADO
-J. HANDOFF OCTAVIO (insiste persona / no sé / promesa=contacto)
-K. FLUJO SUGERIDO TURNO A TURNO
-```
-
-### Bloque D — texto listo para pegar
-
-```
-APERTURA PROACTIVA (obligatorio en el primer contacto útil):
-1. upsert_conversation en silencio.
-2. UN mensaje humano que incluya:
-   - Saludo breve Froodie / Cool Meals
-   - Link https://beacons.ai/froodie (catálogo e info para darse de alta / conocer productos)
-   - 1 pregunta de calificación: tipo de negocio + interés (wraps / platos listos / postres)
-3. enter_waiting.
-No esperes a que pidan el catálogo: mandalo vos.
-```
-
-### Bloque E — texto listo para pegar
-
-```
-BEACONS (catálogo):
-- Si piden menú, sabores, tipos de producto, “qué venden”, pasos para alta/pedido,
-  o detalle que no tenés confirmado de producto: reenviá https://beacons.ai/froodie
-  y seguí calificando. No inventes SKUs, precios ni condiciones.
-- Podés reenviar el link en cualquier etapa del chat.
-```
-
-### Ajuste al pedir volumen (Bloque F/G)
-
-```
-Al pedir bultos/cajas (solo retail/mayorista), avisá en la misma pregunta:
-"Cool Meals atiende desde 50 cajas/bultos; si es menos te conectamos con el
-distribuidor de tu zona."
-```
-
-### Cliente basura (Bloque G)
-
-```
-Si es consumidor final (1 unidad, delivery a casa, consumo personal):
-mensaje amable de que trabajan con comercios/gastronomía/mayoristas →
-handoff_human status=descartado. No derives a dist. ni ofrezcas muestras.
-```
-
----
-
-## 4. Flujo turno a turno (mezcla operativa)
+## 3. Flujo (mermaid)
 
 ```mermaid
 flowchart TD
   A[Primer mensaje] --> B[upsert + Beacons + tipo/interés]
   B --> C{Tipo?}
-  C -->|Consumidor| Z[descartado]
-  C -->|Fasón / Rep| H[handoff Octavio]
+  C -->|Consumidor final| Z[descartado]
+  C -->|Fasón / Rep SER| H[Cierre + handoff columna]
   C -->|Quiere ser dist| Q[4 preguntas]
-  Q -->|4 SÍ| H
-  Q -->|No + no compra| Z
-  Q -->|Quiere comprar| D
-  C -->|Minorista| D[Zona + datos mínimos]
+  Q -->|4 SÍ| QD[upsert columna SIN handoff] --> E
+  Q -->|Falta + no compra| Z
+  Q -->|Falta + quiere comprar| E
+  C -->|Minorista| D[Zona + datos; sin exigir vol]
   C -->|Retail / Mayorista| E[Zona + volumen + aviso 50]
   D --> R[decide_route]
   E --> R
-  R -->|derive| Dist[Nombrar dist + sync_derived]
-  R -->|no_coverage| SC[sin_cobertura]
-  R -->|own_attention| M{Muestras o pedido?}
-  M -->|Muestras| MS[Datos envío + request_samples]
-  M -->|Pedido| H
+  R -->|≥50 cualquier provincia| M{Muestras o pedido?}
+  R -->|<50 Córdoba| H2[Operador SIN menú]
+  R -->|<50 fuera + dist| Dist[Nombrar dist + sync_derived]
+  R -->|<50 fuera sin dist| SC[sin_cobertura → auto Descartado]
+  M -->|Muestras| MS[Datos + request_samples + handoff]
+  M -->|Pedido| H2
 ```
 
 ---
 
-## 5. Copy humano de referencia (no es script rígido)
+## 4. Copy de referencia
 
-**Apertura**
-> ¡Hola! Gracias por escribir a Froodie / Cool Meals. Acá tenés el catálogo e info: https://beacons.ai/froodie  
+**Apertura**  
+> ¡Hola! Gracias por escribir a Froodie / Cool Meals. Catálogo e info: https://beacons.ai/froodie  
 > ¿Qué tipo de negocio tenés y te interesan wraps, platos listos o postres congelados?
 
-**Producto / menú**
-> Toda la info de productos está acá: https://beacons.ai/froodie  
-> Mientras, ¿en qué provincia estás?
+**Volumen**  
+> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende desde 50; si es menos te conectamos con el distribuidor de tu zona (o un asesor si estás en Córdoba).
 
-**Volumen**
-> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende desde 50; si es menos te conectamos con el distribuidor de tu zona.
-
-**Derivación**
-> Te va a contactar [Nombre Dist] de tu zona con la info y condiciones. ¡Que andes bien!
-
-**Basura / cierre**
-> Trabajamos con comercios, gastronomía y mayoristas; no hacemos venta al consumidor final. Gracias por escribirnos.
+**Basura**  
+> ¡Gracias por escribirnos! Hoy trabajamos con comercios, gastronomía y distribuidoras, así que no podemos ayudarte con compra personal ni envíos a domicilio. Cuando armes un negocio o una compra comercial, escribinos de nuevo. ¡Que andes muy bien!
 
 ---
 
-## 6. Checklist de implementación (cuando digan “dale”)
+## 5. Embalaje (dato confirmado)
 
-- [ ] Actualizar `SYSTEM_PROMPT` / `CLASSIFICATION_HINTS` en `workflows/coolmeals-leads/workflow.ts` con bloques D+E+basura+aviso 50
-- [ ] `kapso build` + `update-graph` (mantener `function_id` en tools)
-- [ ] Verificar que `decide_route` no cambió (Córdoba &lt;50 → dist; ≥50 → own_attention)
-- [ ] Probar en sandbox: apertura con Beacons; pregunta de menú; consumidor → descartado; Córdoba 60 → menú muestras
-- [ ] Importar CSV a Google Sheets para ops (Archivo → Importar → Reemplazar / nueva hoja)
+| Producto | Unidades / caja | Palet |
+|---|---|---|
+| Wraps | 24 | 110 cajas |
+| Platos listos | 12 | 110 cajas |
+| Postres | 24 | 110 cajas |
 
 ---
 
-## 7. Cómo importar la planilla en Google Sheets
+## 6. UI web (julio 2026)
 
-1. Abrí un Sheet nuevo (o el de reglas comerciales).
-2. **Archivo → Importar → Subir** → `docs/planilla-flujo-ia-definitiva.csv`
-3. Separador: coma.  
-4. Ordenar / filtrar por columna **Prioridad** (1 = más urgente).
+Menú visible: Dashboard, Pipeline, Distribuidores, Config. comercial.  
+Ocultos (código vivo): `/muestras`, `/conocimiento`, `/prompts`.
+
+Producción: [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (team **FEcotech**). Deploy por CLI (sin Git auto-deploy).
+
+---
+
+## 7. Importar la planilla
+
+1. Google Sheets → **Archivo → Importar → Subir** → `docs/planilla-flujo-ia-definitiva.csv`
+2. Separador: coma  
+3. Filtrar por columna **Seccion**: `ORDEN_EVALUACION` | `CASO_PRUEBA` | `AUTO_CIERRE` | `UI` | `EMBALAJE`
+4. Ordenar por **Prioridad** (menor = más urgente / antes en el motor)
