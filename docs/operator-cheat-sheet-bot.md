@@ -1,6 +1,8 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: 28 jul 2026.
+Una hoja para mostrar / imprimir. Actualizado: **28 jul 2026**.
+
+> Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md)
 
 ---
 
@@ -22,80 +24,100 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 | **Córdoba** y **&lt; 50** (o sin volumen) | Asesor Cool Meals (sin menú) | **Atención humana** |
 | **Otra provincia** y **&lt; 50** | Distribuidor de zona | **Derivado** (+ hashtag naranja) |
 | Sin distribuidor en la zona | Aviso sin cobertura | **Sin cobertura** → auto **Descartado** ~22 h |
-| Quiere **ser** rep / fasón | Cierre rápido | Columna correspondiente |
-| Quiere **ser** distribuidor | 4 preguntas; si 4 SÍ → columna y **sigue** el ruteo por volumen/zona | **Quiere ser distribuidor** y después el cierre comercial |
+| Quiere **ser** rep / fasón | Cierre rápido + **handoff** | Columna correspondiente |
+| Quiere **ser** distribuidor | Ver §1b | Columna + luego cierre por vol/zona |
 | Consumidor final (casa / 1 unidad) | Cierre amable | **Descartado** |
 
-**Tu trabajo después del handoff:** el bot se pausa. Cerrás con el desplegable **Resultado** (`éxito` / `sin éxito` / `Descartado`), salvo Sin cobertura / Esperando respuesta que cierran solos.
+### 1b. Quiere ser distribuidor (importante)
+
+1. El bot hace las **4 preguntas** (congelados, depósito, logística, estructura).  
+2. **4 SÍ** → la card va a **Quiere ser distribuidor**, pero el bot **NO se pausa** (no hay handoff todavía).  
+3. Sigue: zona + volumen → ruteo → **ahí sí** handoff según el caso (≥50 menú, Córdoba &lt;50 asesor, fuera dist/sin cobertura).  
+4. Si falta alguna de las 4 → no queda en esa columna; tipifica compra o Descartado.
+
+**En una frase:** los 4 SÍ solo marcan la columna; el handoff viene después, con el ruteo comercial.
 
 ---
 
-## 2. Mismo teléfono = mismo lead (métricas)
+## 2. Tres momentos: handoff · Kapso · cierre ops
 
-| Caso | ¿Lead nuevo en el Dashboard? | ¿El bot tipifica de nuevo? |
-|------|------------------------------|----------------------------|
-| Mismo WA, **menos de 1 año**, todavía calificando (Nuevo / IA atendiendo) | No (misma card) | Sí, sigue armando la card |
-| Mismo WA, **menos de 1 año**, **ya calificado** (cualquier otra columna, incluso Finalizado) | **No** | **No** — mensaje corto de “ya estás en proceso” |
-| Mismo WA, última card hace **1 año o más** | **Sí** (card nueva) | **Sí**, de cero |
+### A) Cuándo la card hace **handoff** (bot se pausa)
 
-Así el Dashboard **no se infla** si el mismo número escribe varias veces en el año.
+| Flujo | ¿Handoff? | Momento |
+|-------|-----------|---------|
+| Quiere ser **representante** | Sí | Al confirmar *ser* rep |
+| Quiere ser **fasón** | Sí | Al confirmar fasón |
+| Quiere ser **distribuidor** (solo 4 SÍ) | **No** | Solo marca columna |
+| Dist 4 SÍ → luego ≥50 / CBA &lt;50 / fuera | Sí | Al cerrar ese ruteo |
+| **Atención humana** | Sí | Córdoba &lt;50, pedido del menú, “hablar con alguien”, 2ª vez precio/dato desconocido |
+| **Derivado** | Sí | Tras derivar al dist |
+| **Sin cobertura** | Sí | Al avisar sin zona |
+| **Muestras** | Sí | Tras agendar muestras |
+| **Descartado** (consumidor) | No `handoff_to_human` | IA a **ended** directo |
+| Nuevo / IA atendiendo | No | Bot sigue |
+
+### B) Cuándo se **cierra en Kapso** (execution → `ended`)
+
+| Situación | ¿Kapso `ended`? |
+|-----------|-----------------|
+| Operador elige **Resultado** | Sí |
+| Auto Sin cobertura ~22 h | Sí (+ Descartado) |
+| Auto Esperando respuesta ~22 h | Sí (+ Finalizado) |
+| Bot Descartado (consumidor) | Sí |
+| Solo handoff (Atención, Derivado, Muestras, Quiere ser rep/fasón…) | **No** — queda en `handoff` hasta Resultado (o auto si aplica) |
+| Execution trabada en `running` ≥3 min | Sí (watchdog) |
+
+### C) Cuándo se **cierra para ustedes** (Pipeline limpio)
+
+| Situación | Columna final | Quién |
+|-----------|---------------|-------|
+| Resultado éxito / sin éxito | **Finalizado** | Operador |
+| Resultado Descartado | **Descartado** | Operador |
+| Auto Sin cobertura | **Descartado** | Sistema ~22 h |
+| Auto Esperando respuesta | **Finalizado** | Sistema ~22 h |
+| Bot consumidor | **Descartado** | Bot |
+| Card en Atención / Derivado / Muestras / Quiere ser… | Sigue **abierta** | Ustedes con Resultado |
+
+**Resumen:** handoff = bot pausado · Kapso `ended` = hilo técnico muerto · cierre ops = Finalizado o Descartado.
 
 ---
 
-## 3. Dos cards del mismo teléfono (rojo + 1 / 2)
+## 3. Mismo teléfono = mismo lead (métricas)
 
-A veces puede haber **dos cards** del mismo número (ej. una vieja y otra tras el año, o un caso raro).
+| Caso | ¿Lead nuevo en Dashboard? | ¿Tipifica de nuevo? |
+|------|---------------------------|---------------------|
+| &lt; 1 año, Nuevo / IA atendiendo | No (misma card) | Sí |
+| &lt; 1 año, **ya calificado** | **No** | **No** — “ya estás en proceso” |
+| Última card **≥ 1 año** | **Sí** | **Sí**, de cero |
+
+---
+
+## 4. Dos cards del mismo teléfono (rojo + 1 / 2)
 
 | Señal | Significado |
 |-------|------------|
-| Card **roja** | Hay otra card con el **mismo teléfono** |
-| Badge **1** | La que **ingresó primero** |
-| Badge **2** | La **segunda** (más nueva) |
+| Card **roja** | Hay otra con el **mismo teléfono** |
+| Badge **1** | Ingresó **primero** |
+| Badge **2** | La **segunda** |
 
-### Qué tenés que hacer vos
-
-1. Abrí ambas (pueden estar en columnas distintas).  
-2. Revisá cuál es la vigente (casi siempre la **2**, o la que esté en proceso).  
-3. **Cerrá las dos** con **Resultado** cuando el caso comercial esté resuelto:
-   - la que sí cerró el negocio → `Finalizado con éxito` (o sin éxito / Descartado según corresponda);
-   - la otra / duplicada → `Descartado` o `Finalizado sin éxito`, para que no quede colgada.
-4. No hace falta “fusionar” cards a mano: el sistema ya cuenta métricas por **fecha de alta** de cada card.
-
-**Regla de oro:** si ves rojo + número, **no dejes una card abierta “por las dudas”**. Cerrá ambas.
+**Qué hacer:** cerrá **las dos** con Resultado (la vigente según el caso; la otra Descartado o sin éxito). El rojo es solo aviso visual.
 
 ---
 
-## 4. Cómo se guardan las métricas (para quedarte tranquilo)
+## 5. Métricas (para quedarte tranquilo)
 
-```
-Dashboard cuenta CARDS (conversaciones), no “mensajes de WhatsApp”.
-Cada card tiene una fecha de alta (created_at).
-
-• Un teléfono que escribe 10 veces el mismo mes
-  → sigue siendo 1 lead (misma card), si está dentro del año.
-
-• Dos cards del mismo teléfono (rojo 1 y 2)
-  → el Dashboard puede mostrar 2 si ambas nacieron en el período filtrado.
-  → Por eso cerrás las dos: el Pipeline queda limpio;
-    el histórico de la card 1 no “borra” la 2 ni al revés.
-```
-
-| Pregunta del operador | Respuesta corta |
-|----------------------|-----------------|
-| ¿Si el lead vuelve a escribir, se duplica la métrica? | No, dentro del año y ya calificado. |
-| ¿Y después de un año? | Sí: card nueva = lead nuevo en métricas. |
-| ¿El rojo afecta al bot? | No. Solo te avisa a vos en el Pipeline. |
-| ¿Tengo que tocar Kapso? | No para el día a día. Solo Resultado en Pipeline. |
+Dashboard cuenta **cards** (`created_at`), no cada mensaje de WhatsApp.  
+Mismo número muchas veces en el año → **1 lead**. Dos cards rojas en el período → pueden contar **2** (por eso cerrás ambas).
 
 ---
 
-## 5. Mini checklist diario
+## 6. Checklist diario
 
-- [ ] Pipeline: mirar columnas de handoff (Atención, Derivado, Muestras, Quiere ser…).  
-- [ ] Si hay card **roja**: cerrar **1 y 2** con Resultado.  
-- [ ] Sin cobertura / Esperando: no hace falta cerrar a mano (auto ~22 h).  
-- [ ] Dashboard: filtrar por fecha; los números salen de esas cards.
+- [ ] Revisar columnas de handoff  
+- [ ] Cards **rojas**: cerrar 1 y 2  
+- [ ] Sin cobertura / Esperando: auto ~22 h  
+- [ ] Dashboard con filtro de fecha  
 
 ---
 
-*Documento compañero:* `docs/pipeline-bot-user-guide.md` · planilla técnica: `docs/planilla-flujo-ia-definitiva.csv`
+*Planilla técnica:* [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv)

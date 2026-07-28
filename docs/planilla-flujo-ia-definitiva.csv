@@ -46,5 +46,9 @@ AUTO_CIERRE,—,A03,sin_cobertura finalize_at,—,—,—,Ventana vencida,Descar
 AUTO_CIERRE,—,A04,derivado / atencion / muestras / quiere_ser_* / pedidos,—,—,—,Handoff activo,NO auto; Resultado manual,—,según Resultado,—,"éxito / sin éxito / descartado"
 UI,—,U01,Menú lateral web,—,—,—,—,Visibles: Dashboard Pipeline Distribuidores Config comercial,—,—,—,"Ocultos por ahora: Muestras Conocimiento Prompt Manager (rutas viven)"
 UI,—,U02,URLs producción,—,—,—,—,—,—,—,—,"Web https://tool-coolmeals-web.vercel.app | API https://tool-coolmeals-api-ten.vercel.app | Team Vercel FEcotech | Deploy CLI (sin Git auto)"
-REFS,—,R02,Recontacto mismo teléfono 1 año,—,—,—,—,—,—,—,—,"<1 año ya calificado: no métrica nueva ni tipificar de nuevo. ≥1 año: nueva card + recalificar. Mid-flujo (ia_atendiendo): seguir calificando."
+CASO_PRUEBA,4,C22,Recontacto <1 año ya calificado,—,—,—,Mismo WA tras handoff,Mensaje corto ya en proceso,upsert recontactLocked,misma card,—,No métrica nueva
+UI,—,U03,Cards mismo teléfono Pipeline,—,—,—,—,Rojas + badge 1 (primera) / 2 (segunda),—,—,—,Cerrar ambas con Resultado
+HANDOFF,—,H01,Tabla handoff vs Kapso ended vs cierre ops,—,—,—,—,—,—,—,—,"Ver operator-cheat-sheet-bot.md §2"
+REFS,—,R01,Fuentes de verdad,—,—,—,—,—,—,—,—,"routing.ts + coolmeals-bot-actions + workflow.ts | Docs: planilla + cheat-sheet + pipeline-bot-user-guide"
+REFS,—,R02,Recontacto mismo teléfono 1 año,—,—,—,—,—,—,—,—,"<1 año ya calificado: no métrica nueva ni tipificar. ≥1 año: nueva card + recalificar. Mid-flujo: seguir calificando."
 

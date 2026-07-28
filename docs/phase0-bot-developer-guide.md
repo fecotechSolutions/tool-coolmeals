@@ -2,10 +2,10 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: **28 julio 2026**.
+Actualizado: **28 julio 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
 
 Planilla: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) · Anexo: [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md).  
-Operador: [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) · Uso: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
+Operador E2E: [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) · Uso: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
 ## Arquitectura (flujo feliz)
 
@@ -227,15 +227,16 @@ Reset de un tester (ej. `543513053755`):
 
 | # | Caso | Resultado |
 |---|------|-----------|
-| 1 | Quiere ser distribuidor (4 requisitos SÍ) | Preguntas → columna + handoff OK |
-| 1b | Quiere ser dist. sin requisitos | Explica requisitos + ofrece compra; sin columna dist. |
-| 2 | Sin cobertura (Salta) | Columna + handoff 24h OK |
-| 3 | Minorista Mendoza | Derivado `#Cool_Logistica_Cuyo` + handoff OK |
-| 4 | Mayorista Córdoba ≥50 | Menú muestras/pedido OK |
-| 5a | Muestras en Mendoza (derive) | Derivado + handoff, sin sheet Cool Meals |
-| 5b | Muestras Cool Meals (CBA ≥50) | Menú → 3 datos → columna Muestras + `/muestras` + sheet + mensaje logística + handoff OK |
-| 6 | Representante | Columna **Quiere ser representante** + copy “asesor contacta (no este nº)” + despedida + handoff OK |
-| 7 | Fasón / marca propia | Cierre en 1 turno → **Quiere ser fasón** + mismo copy + handoff OK |
+| 1 | Quiere ser distribuidor (4 SÍ) | Columna **sin** handoff → sigue zona/volumen → handoff al rutear |
+| 1b | Quiere ser dist. sin requisitos | Sin columna dist.; tipificar compra o Descartado |
+| 2 | Sin cobertura | Columna + handoff → auto Descartado ~22 h |
+| 3 | Minorista Mendoza &lt;50 | Derivado + handoff |
+| 4 | ≥50 cualquier provincia | Menú muestras/pedido |
+| 5 | Córdoba &lt;50 | Atención humana sin menú |
+| 6 | Representante SER | Columna + handoff |
+| 7 | Fasón | Columna + handoff |
+| 8 | Recontacto &lt;1 año ya calificado | Sin lead nuevo; mensaje corto |
+| 9 | Cards mismo teléfono | Pipeline rojo + badge 1/2 |
 
 ## Gaps conocidos / siguiente polish
 

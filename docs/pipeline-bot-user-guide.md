@@ -2,11 +2,11 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: **28 julio 2026** (ruteo ≥50 cualquier provincia; Córdoba &lt;50 → operador; Descartado; planilla definitiva).
+Actualizado: **28 julio 2026** (ruteo volumen-first; recontacto 1 año; cards dup; handoff vs Kapso ended vs cierre ops).
 
-> **Planilla de lógica + casos + prioridades:**  
-> [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) + anexo [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md).  
-> **Pruebas E2E paso a paso:** [`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
+> **One-pager para operadores:** [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md)  
+> **Planilla de lógica + casos:** [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) + [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md)  
+> **Pruebas E2E:** [`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
 
 ## Qué es esto
 
@@ -67,6 +67,36 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 
 Ventana: 365 días desde `created_at` de la card más reciente de ese teléfono.
 
+## Cards duplicadas (mismo teléfono) — rojo + 1 / 2
+
+Si hay **2+ cards** con el mismo número (normalizado):
+
+- Ambas se ven **rojas** en el Pipeline.  
+- Badge **1** = la que ingresó primero (`created_at` más vieja); **2** = la siguiente.  
+- **Cerrá las dos** con Resultado cuando el caso esté resuelto (la vigente según corresponda; la otra Descartado / sin éxito).  
+- El rojo **no** cambia el bot: solo avisa al operador.
+
+## Handoff vs cierre Kapso vs cierre ops
+
+### Handoff (bot se pausa)
+
+| Flujo | ¿Handoff? |
+|-------|-----------|
+| Quiere ser representante / fasón | Sí, al confirmar |
+| Quiere ser distribuidor (solo 4 SÍ) | **No** — solo columna |
+| Dist → ruteo posterior (≥50 / CBA / fuera) | Sí, al cerrar ese camino |
+| Atención humana / Derivado / Sin cobertura / Muestras / pedido | Sí |
+| Descartado consumidor | Ended directo (sin handoff humano) |
+
+### Kapso `ended`
+
+Resultado del operador; auto Sin cobertura / Esperando ~22 h; Descartado basura; watchdog si `running` ≥3 min.  
+Un handoff **solo** deja la execution en `handoff` hasta ese cierre.
+
+### Cierre para el equipo (Pipeline)
+
+Card en **Finalizado** o **Descartado** (Resultado o auto). Mientras esté en Atención / Derivado / Muestras / Quiere ser… sigue **abierta** para ops.
+
 ## Umbral de 50 bultos / cajas (regla comercial)
 
 **Unidades:** "bulto" = "caja". Umbral = **≥ 50 cajas/mes**.  
@@ -112,8 +142,12 @@ Intención clara de **ser** rep/fasón (no “hablar con un representante”):
 
 ### Quiere ser distribuidor
 
-4 requisitos. **4 SÍ** → columna vía upsert **sin** handoff → zona/volumen → mismo ruteo (≥50 menú / CBA operador / dist).  
-**Falta alguna** → tipificar compra o Descartado.
+1. **4 preguntas** (congelados, depósito/cámara, logística, estructura).  
+2. **4 SÍ** → columna **Quiere ser distribuidor** vía upsert — **sin handoff** (el bot sigue).  
+3. Zona + volumen → mismo ruteo que cualquier lead (≥50 menú / Córdoba &lt;50 operador / fuera dist o sin cobertura) → **ahí sí** handoff.  
+4. **Falta alguna** → no queda en esa columna; tipificar compra o Descartado.
+
+> Los 4 SÍ solo marcan interés en la columna. El handoff no es en ese momento.
 
 ### Sin cobertura
 

@@ -59,16 +59,15 @@ En SQL Editor, en orden:
 
 | Audiencia | Doc |
 |-----------|-----|
+| **Operador — one-pager** | [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) |
 | **Planilla lógica + casos + prioridades** | [`docs/planilla-flujo-ia-definitiva.csv`](docs/planilla-flujo-ia-definitiva.csv) |
 | Anexo prompt / diagrama | [`docs/planilla-flujo-ia-anexo-prompt.md`](docs/planilla-flujo-ia-anexo-prompt.md) |
 | **Operador — probar flujos** | [`docs/operator-flow-test-guide.md`](docs/operator-flow-test-guide.md) |
 | Uso diario Pipeline | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
 | Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
-**Ruteo vigente (jul 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist / sin cobertura (→ Descartado ~22h).  
+**Ruteo vigente (jul 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist / sin cobertura (→ Descartado ~22h). Recontacto mismo WA &lt;1 año (ya calificado) no infla métricas.  
 Prod: [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (Vercel team **FEcotech**; deploy CLI).
-
-Estado sandbox: Beacons, ruteo volumen-first, dist 4 SÍ sin handoff inmediato, rep/fasón, Descartado, sheets.
 
 ## Scripts
 

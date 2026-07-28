@@ -19,6 +19,9 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | “Hablar con un representante” | `atencion_representante` — **no** `quiere_ser_representante` |
 | Quiere ser distribuidor | 4 SÍ → columna con `upsert` **sin handoff** → luego `decide_route` por vol/zona |
 | Auto-cierre | `sin_cobertura` ~22h → **Descartado**; `esperando_respuesta` ~22h → **Finalizado** |
+| Recontacto mismo WA &lt;1 año (ya calificado) | No tipificar de nuevo; no lead nuevo en métricas |
+| Recontacto ≥1 año | Nueva card + recalificar |
+| Pipeline dup phone | UI: cards rojas + badge 1/2 (solo visual) |
 
 ---
 

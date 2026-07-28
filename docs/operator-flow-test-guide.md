@@ -99,18 +99,14 @@ Hola, quiero ser distribuidor en Mendoza, tengo depósito y logística de congel
    - ¿Contás con logística para productos congelados?
    - ¿Contás con una estructura de distribución?
 2. Si respondés **sí a las 4**:
-   - Dice que un **asesor comercial te va a contactar** (por otro canal / no este número).
-   - Se **despide**.
    - **Pipeline** → columna **Quiere ser distribuidor**.
-   - **Sheet Atención comercial** → fila nueva con `tipo_cliente` = distribuidor.
-   - Kapso → `handoff`.
+   - El bot **sigue** (zona + volumen). **Todavía no** hay handoff Kapso.
+   - Después del ruteo (≥50 / Córdoba &lt;50 / fuera) → ahí sí handoff según el caso.
 3. Si **falta alguna** de las 4:
-   - Explica que esos son requisitos para ser distribuidor Cool Meals.
-   - Ofrece seguir si querés **hacer una compra** / contar qué necesitás.
-   - **No** va a la columna Quiere ser distribuidor.
-   - **No** te clasifica automático como retail/mayorista.
+   - No va a la columna Quiere ser distribuidor.
+   - Tipifica camino de compra o Descartado si rechaza.
 
-**No debe:** cerrar handoff de distribuidor sin las 4 respuestas; ni ir directo a “Derivado” solo por decir “quiero ser distribuidor”.
+**No debe:** hacer handoff solo por los 4 SÍ; ni ir a “Derivado” solo por decir “quiero ser distribuidor” sin zona/volumen.
 
 ---
 
