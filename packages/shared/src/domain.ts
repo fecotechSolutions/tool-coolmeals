@@ -127,6 +127,10 @@ export const ConversationOutcome = {
   QUIERE_SER_REPRESENTANTE: "quiere_ser_representante",
   QUIERE_SER_FASON: "quiere_ser_fason",
   INFO_ENTREGADA: "info_entregada",
+  /** Cierre manual: venta / conversión exitosa. */
+  FINALIZADO_EXITO: "finalizado_exito",
+  /** Cierre manual: sin venta / sin conversión. */
+  FINALIZADO_SIN_EXITO: "finalizado_sin_exito",
 } as const;
 export type ConversationOutcome =
   (typeof ConversationOutcome)[keyof typeof ConversationOutcome];
@@ -142,7 +146,17 @@ export const conversationOutcomeSchema = z.enum([
   "quiere_ser_representante",
   "quiere_ser_fason",
   "info_entregada",
+  "finalizado_exito",
+  "finalizado_sin_exito",
 ]);
+
+/** Resultados de cierre manual desde Pipeline (métricas de conversión). */
+export const FINALIZE_RESULT_OUTCOMES = [
+  "finalizado_exito",
+  "finalizado_sin_exito",
+  "descartado",
+] as const satisfies readonly ConversationOutcome[];
+export type FinalizeResultOutcome = (typeof FINALIZE_RESULT_OUTCOMES)[number];
 
 /** Hashtag visible cuando la card está en Atención humana (handoff). */
 export const HASHTAG_ATENCION_HUMANA = "#atencion_humana";
@@ -424,17 +438,21 @@ export const updatePromptConfigSchema = z.object({
   rules: z.string().optional(),
 });
 
-/** Datos exactos para logística de muestras (respuesta Octavio). */
+/** Datos para logística de muestras. */
 export const sampleRequestSchema = z.object({
   id: z.string().uuid(),
   conversationId: z.string().uuid().nullable(),
   leadId: z.string().uuid().nullable(),
   fullName: z.string().min(1),
   phone: z.string().min(1),
-  address: z.string().min(1),
-  city: z.string().default(""),
+  company: z.string().default(""),
   province: z.string().default(""),
+  dni: z.string().default(""),
+  email: z.string().default(""),
   postalCode: z.string().default(""),
+  /** Dirección completa de envío. */
+  address: z.string().default(""),
+  city: z.string().default(""),
   status: z.enum(["pendiente", "enviado", "entregado", "cancelado"]),
   sheetSyncedAt: z.string().nullable(),
   notes: z.string().default(""),
@@ -448,10 +466,14 @@ export const createSampleRequestSchema = z.object({
   leadId: z.string().uuid().nullable().optional(),
   fullName: z.string().trim().min(1).max(200),
   phone: z.string().trim().min(5).max(40),
+  company: z.string().trim().min(1).max(200),
+  province: z.string().trim().min(1).max(80),
+  dni: z.string().trim().min(1).max(40),
+  email: z.string().trim().email().max(200),
+  postalCode: z.string().trim().min(1).max(20),
+  /** Dirección completa. */
   address: z.string().trim().min(1).max(500),
   city: z.string().trim().default(""),
-  province: z.string().trim().default(""),
-  postalCode: z.string().trim().default(""),
   notes: z.string().trim().default(""),
 });
 export type CreateSampleRequestInput = z.infer<typeof createSampleRequestSchema>;
@@ -531,12 +553,27 @@ export const botHandoffSchema = z.object({
       "sin_cobertura",
       "muestras",
       "esperando_respuesta",
+      "descartado",
     ])
     .optional(),
   outcome: conversationOutcomeSchema.optional(),
 });
 export type BotHandoffInput = z.infer<typeof botHandoffSchema>;
 
+/** Cierre manual con resultado comercial (éxito / sin éxito / descartado). */
+export const botFinalizeSchema = z.object({
+  conversationId: z.string().uuid(),
+  result: z.enum(["finalizado_exito", "finalizado_sin_exito", "descartado"]),
+  reason: z.string().trim().max(1000).optional(),
+  kapsoExecutionId: z.string().optional(),
+});
+export type BotFinalizeInput = z.infer<typeof botFinalizeSchema>;
+
+/**
+ * Columnas del Pipeline.
+ * Incluye Finalizado / Descartado para ver cierres; el desplegable Resultado
+ * mueve a finalizado (éxito/sin éxito) o descartado.
+ */
 export const PIPELINE_STATUSES = [
   "nuevo",
   "ia_atendiendo",
@@ -600,6 +637,21 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
   pedido_cliente: "Pedidos (clientes)",
   finalizado: "Finalizado",
   descartado: "Descartado",
+};
+
+export const CONVERSATION_OUTCOME_LABELS: Record<ConversationOutcome, string> = {
+  derivado_distribuidor: "Derivado a distribuidor",
+  handoff_humano: "Handoff humano",
+  muestras: "Muestras",
+  pedido: "Pedido",
+  sin_cobertura: "Sin cobertura",
+  descartado: "Descartado",
+  quiere_ser_distribuidor: "Quiere ser distribuidor",
+  quiere_ser_representante: "Quiere ser representante",
+  quiere_ser_fason: "Quiere ser fasón",
+  info_entregada: "Info entregada",
+  finalizado_exito: "Finalizado con éxito",
+  finalizado_sin_exito: "Finalizado sin éxito",
 };
 
 export const KNOWLEDGE_CATEGORY_LABELS: Record<KnowledgeCategory, string> = {

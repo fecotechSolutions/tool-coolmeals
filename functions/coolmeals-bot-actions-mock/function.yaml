@@ -1,0 +1,6 @@
+entrypoint: index.js
+function_type: cloudflare_worker
+invoke_response_mode: passthrough
+name: coolmeals-bot-actions-mock
+public_endpoint: false
+slug: coolmeals-bot-actions-mock

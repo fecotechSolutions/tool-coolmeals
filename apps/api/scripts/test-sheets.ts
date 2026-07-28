@@ -41,6 +41,12 @@ async function main() {
     sampleLogisticsSheetRow({
       fullName: "TEST Cool Meals",
       phone: "+5493510000000",
+      clientType: "mayorista",
+      company: "Empresa Test",
+      province: "Córdoba",
+      dni: "30111222",
+      email: "test@coolmeals.test",
+      postalCode: "5000",
       address: "Gral. Manuel Savio 6010, Córdoba",
     }),
     { source: "test-sheets.ts" },

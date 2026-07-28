@@ -190,6 +190,16 @@ export default function DashboardPage() {
                   value: executive.conversationsClosed,
                 },
                 {
+                  label: "Finalizados con éxito",
+                  value: executive.closedWithSuccess ?? 0,
+                  hint: "Cierre manual · conversión / venta",
+                },
+                {
+                  label: "Finalizados sin éxito",
+                  value: executive.closedWithoutSuccess ?? 0,
+                  hint: "Cierre manual · sin conversión",
+                },
+                {
                   label: "% sin respuesta del cliente",
                   value: `${executive.pctNoClientReply}%`,
                   hint: `${executive.noClientReplyCount} de ${executive.conversationsTotal}`,

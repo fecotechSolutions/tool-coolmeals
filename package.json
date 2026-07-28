@@ -14,6 +14,7 @@
     "build:web": "npm run build -w @coolmeals/web",
     "build:api": "npm run build -w @coolmeals/shared && npm run build -w @coolmeals/api",
     "build:api:handler": "npm run build -w @coolmeals/shared && node_modules/esbuild/bin/esbuild api/index.ts --bundle --platform=node --target=node20 --format=cjs --outfile=api/handler.js --packages=bundle --footer:js=\"module.exports = module.exports.default || module.exports;\"",
+    "test:agent": "node tests/agent/run.mjs",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },

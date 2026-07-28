@@ -64,8 +64,10 @@ En SQL Editor, en orden:
 | Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
 Estado actual (sandbox, jul 2026): ruteo comercial + handoff ~24h → Finalizado validado para  
-**quiere ser distribuidor**, **representante**, **fasón**, **sin cobertura**, **derivado a dist.**,  
+**quiere ser distribuidor** (tras 4 requisitos: congelados, depósito/cámara, logística, estructura),  
+**representante**, **fasón**, **sin cobertura**, **derivado a dist.**,  
 **Cool Meals (menú muestras/pedido)** y **muestras Cool Meals → logística**.  
+Si no cumple los 4 requisitos de distribuidor: el bot explica y ofrece camino de compra (no retail/mayorista auto).  
 Dashboard: filtro por fecha + métricas desde Pipeline (incl. **por provincia**).  
 Sheets: derivados, muestras, [atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ), [sin cobertura](https://docs.google.com/spreadsheets/d/10jeiXNXEUlHiOgJKqbwazQBWhOurSJWQBWyTnY6nENY).
 

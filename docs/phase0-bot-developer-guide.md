@@ -2,7 +2,7 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: 20 julio 2026 (ruteo + sheets ×4 + dashboard filtrable + guía operador).
+Actualizado: 24 julio 2026 (calificación 4 requisitos para quiere ser distribuidor + dashboard filtrable).
 
 Guía para el **operador** (pruebas E2E de todos los flujos):  
 [`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
@@ -45,6 +45,25 @@ WhatsApp (Meta)
 | Function id | `164dc11a-dc32-4b99-85c9-6d289e15f501` |
 | Phone number id (sandbox) | `597907523413541` (hardcoded en `workflow.ts`) |
 | Modelo agent | `claude-haiku-4-5` (`provider_model_id` + name en nodo `raw`) |
+| Function mock (tests) | `coolmeals-bot-actions-mock` / `00bf0b57-5efb-4b90-b008-5aeafc8c4c23` |
+| Workflow test | `Cool Meals — Leads WhatsApp [TEST]` / `306b341b-6bce-4507-8fd5-6a037efe6b10` |
+
+### Entrega de mensajes: `tool_only`
+
+El nodo agent usa `message_delivery_mode: "tool_only"`. El texto suelto del modelo queda
+interno y al lead solo le llega lo que sale por `send_notification_to_user` (+ `enter_waiting`
+después de cada pregunta). Con `auto_send_assistant_text` el bot filtraba narración de pasos
+("Ahora voy a registrar tu derivación…") en la mayoría de las conversaciones.
+
+### Tests del agente
+
+```bash
+npm run test:agent
+```
+
+Corren conversaciones reales contra el workflow **[TEST]** (clon del prompt de producción con
+las tools apuntando a la function mock) y verifican con asserts lo que el lead vería.
+Detalle en [`tests/agent/README.md`](../tests/agent/README.md). Consumen créditos de Kapso.
 
 ### Deploy seguro del workflow (importante)
 
@@ -108,9 +127,9 @@ Ver `.env.example`. Críticas para este módulo:
 | Variable | Uso |
 |----------|-----|
 | `KAPSO_*` | Handoff/ended, send text (nudge), list executions |
-| `DERIVE_HANDOFF_HOURS` | 24h post-handoff → Finalizado (derivado, atención humana, quiere ser dist., sin cobertura, **muestras**) |
+| `DERIVE_HANDOFF_HOURS` | Legacy (ya no auto-finaliza derivados/atención) |
 | `ABANDONED_TO_WAITING_HOURS` | 22h mid-flujo → Esperando respuesta |
-| `ESPERANDO_TO_FINALIZE_HOURS` | 22h post-nudge → Finalizado |
+| `ESPERANDO_TO_FINALIZE_HOURS` | 22h: `sin_cobertura` → Descartado+ended; `esperando_respuesta` → Finalizado+ended |
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
 | `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención comercial / sin cobertura |
@@ -132,22 +151,30 @@ Web: `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
 ### Agent (`workflows/coolmeals-leads/workflow.ts`)
 
 1. Primer mensaje → `upsert_conversation` (guardar `conversationId`).
-2. Calificación (taxonomy Meta / Froodie) → `decide_route`.
+2. Calificación (taxonomy Meta / Froodie).
+   - **Fasón / representante:** intención clara → `decide_route` + handoff en el mismo turno (sin formulario).
+   - **Quiere ser distribuidor:** **antes** de `decide_route`, preguntar las 4:
+     1. ¿Trabajás actualmente con productos congelados?
+     2. ¿Tenés depósito / cámara de congelados?
+     3. ¿Contás con logística para productos congelados?
+     4. ¿Contás con una estructura de distribución?
+     - **4 SÍ** → `clientType=distribuidor` → `decide_route` → handoff.
+     - **Falta alguna** → explicar requisitos + ofrecer compra; **no** `clientType=distribuidor`, **no** retail/mayorista automático.
 3. Según `decide_route.action` (seguir `agentInstruction` si viene):
 
 | action | Comportamiento |
 |--------|----------------|
 | `derive_to_distributor` | `sync_derived` → `handoff_to_human`. Si pidieron muestras: **no** `request_samples` (el dist. se encarga). |
 | `no_coverage` | `handoff_human` `status=sin_cobertura` → `handoff_to_human` |
-| `quiere_ser_distribuidor` | `handoff_human` `status=quiere_ser_distribuidor` → `handoff_to_human` (sin menú muestras/pedido) |
+| `quiere_ser_distribuidor` | Solo tras calificación 4 SÍ. Luego `handoff_human` `status=quiere_ser_distribuidor` → `handoff_to_human` (sin menú muestras/pedido) |
 | `own_attention` | **Menú obligatorio** antes del handoff: 1) muestras 2) pedido. |
 
 **`own_attention` (Cool Meals, p.ej. retail/mayorista Córdoba ≥50):**
 
-- **Muestras:** Nombre y Apellido + Teléfono + Domicilio → `request_samples` (DB + sheet + status Pipeline `muestras`) → mensaje de que **logística** contacta para el envío → `handoff_human` `status=muestras` → `handoff_to_human`. No decir que un asesor “arma las muestras”.
+- **Muestras:** Nombre y Apellido + Teléfono + Empresa + Provincia + DNI + Correo + Código postal + Dirección completa → `request_samples` (DB + sheet + status Pipeline `muestras`) → mensaje de que **logística** contacta para el envío → `handoff_human` `status=muestras` → `handoff_to_human`. No decir que un asesor “arma las muestras”.
 - **Pedido:** `handoff_human` (default `atencion_representante`) → `handoff_to_human`.
 
-4. `handoff_human` acepta `status`: `atencion_representante` \| `quiere_ser_distribuidor` \| `quiere_ser_representante` \| `quiere_ser_fason` \| `sin_cobertura` \| `muestras` \| `esperando_respuesta`. Agenda `human_handoff_at` + `finalize_at` (~24h).
+4. `handoff_human` acepta `status`: `atencion_representante` \| `quiere_ser_distribuidor` \| `quiere_ser_representante` \| `quiere_ser_fason` \| `sin_cobertura` \| `muestras` \| `esperando_respuesta`. Agenda `human_handoff_at`. Solo `sin_cobertura` / `esperando_respuesta` agendan `finalize_at` (auto-Finalizado).
 
 Sin seguimiento de despacho de muestras en UI (solo agenda logística).
 
@@ -155,21 +182,18 @@ Sin seguimiento de despacho de muestras en UI (solo agenda logística).
 
 - Hashtag dist. naranja; persiste una vez derivado.
 - Drag / handoff a **Atención humana**, **Quiere ser distribuidor**, **Sin cobertura** o **Muestras** → `POST /api/bot/handoff` con ese `status`.
-- `/muestras`: lista de agendas (nombre, teléfono, domicilio, sync sheet). Sin estados enviado/entregado en esta versión.
+- Mover a **Muestras** desde Pipeline: además del status, crea `sample_requests` + append al sheet de logística (fecha, nombre, teléfono, **tipo_cliente**, empresa, provincia, dni, correo, CP, dirección; campos vacíos si no hay).
+- `/muestras`: lista de agendas (nombre, tel, empresa, provincia, dni, correo, CP, dirección completa, sync sheet). Sin estados enviado/entregado en esta versión.
 - Ya no existe el botón `#atendido_por_representante`.
 
 ### Timeouts (`runPipelineTimeouts`)
 
-Statuses con ventana de handoff → Finalizado cuando `finalize_at` venció:
+Statuses que auto-pasan a Finalizado cuando `finalize_at` venció (~22 h):
 
-- `derivado_distribuidor`
-- `atencion_representante`
-- `quiere_ser_distribuidor`
-- `quiere_ser_representante`
-- `quiere_ser_fason`
 - `sin_cobertura`
-- `muestras`
 - `esperando_respuesta`
+
+El resto (derivado, atención humana, quiere ser dist/rep/fasón, muestras, pedidos) **no** auto-finaliza: el operador cierra con el desplegable **Resultado**. Columnas **Finalizado** y **Descartado** sí se muestran en el Pipeline.
 
 Abandono mid-flujo:
 
@@ -184,18 +208,21 @@ Local: `npm run cron:finalize-derived -w @coolmeals/api`.
 Fuente de cobertura: tabla **distributors** (UI), no sheet.  
 Implementación: `apps/api/src/lib/routing.ts` **y** `decideRoute` en `functions/coolmeals-bot-actions/index.js`.
 
-Umbral 50 bultos (`minBundlesDefault` / `commercial_settings`):
+Umbral 50 bultos/cajas (`minBundlesDefault` / `commercial_settings`):
+
+- **bulto = caja** (sinónimos). El número en `estimatedVolume` es en bultos/cajas.
+- Contenido: wraps = 24 u/caja; platos listos = 12 u/caja. Si el lead habla en unidades, el agent convierte a cajas antes de `decide_route`.
 
 | Tipo | ¿Aplica umbral? | Lógica |
 | --- | --- | --- |
-| Distribuidor | No | `quiere_ser_distribuidor` + handoff comercial |
+| Distribuidor | No | Solo tras 4 SÍ (congelados, depósito/cámara, logística, estructura) → `quiere_ser_distribuidor` + handoff. Si falta alguno: explicar requisitos + ofrecer compra; no retail/mayorista auto. |
 | Representante | No | `quiere_ser_representante` → columna Quiere ser representante + handoff |
 | Fasón | No | `quiere_ser_fason` → columna Quiere ser fasón + handoff |
 | Retail / Mayorista | Sí | Córdoba + ≥50 → `own_attention` (menú muestras/pedido); fuera de Córdoba (aunque ≥50) → red de dist. |
 | Minorista | No | Siempre deriva si hay cobertura |
 | Otro | No asumir | Deriva / sin_cobertura según cobertura |
 
-Orden de evaluación:
+Orden de evaluación (en `decide_route`; el agent **no** debe llamar con `clientType=distribuidor` sin las 4 SÍ):
 
 1. `distribuidor` o `wantsToBeDistributor` → `quiere_ser_distribuidor`
 2. `representante` → `quiere_ser_representante`
@@ -216,7 +243,7 @@ Orden de evaluación:
 | Sheet | Env | Columnas |
 |-------|-----|----------|
 | Derivados | `GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID` | fecha, nombre, tel, empresa, tipo negocio, client_type, provincia, ciudad, CP, dist, seguimiento |
-| Muestras | `GOOGLE_SHEET_SAMPLE_LOGISTICS_ID` | fecha, nombre, tel, domicilio |
+| Muestras | `GOOGLE_SHEET_SAMPLE_LOGISTICS_ID` | fecha, nombre, tel, **tipo_cliente**, empresa, provincia, dni, correo, CP, dirección completa |
 | Atención comercial | `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | fecha, nombre, tel, empresa, **tipo_cliente**, provincia, ciudad, motivo, seguimiento |
 | Sin cobertura | `GOOGLE_SHEET_NO_COVERAGE_ID` | fecha, nombre, tel, empresa, provincia, ciudad, client_type, motivo, seguimiento |
 - Test: `npm run test:sheets -w @coolmeals/api`
@@ -246,7 +273,8 @@ Reset de un tester (ej. `543513053755`):
 
 | # | Caso | Resultado |
 |---|------|-----------|
-| 1 | Quiere ser distribuidor (Mendoza) | Columna + handoff OK |
+| 1 | Quiere ser distribuidor (4 requisitos SÍ) | Preguntas → columna + handoff OK |
+| 1b | Quiere ser dist. sin requisitos | Explica requisitos + ofrece compra; sin columna dist. |
 | 2 | Sin cobertura (Salta) | Columna + handoff 24h OK |
 | 3 | Minorista Mendoza | Derivado `#Cool_Logistica_Cuyo` + handoff OK |
 | 4 | Mayorista Córdoba ≥50 | Menú muestras/pedido OK |

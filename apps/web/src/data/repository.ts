@@ -133,7 +133,8 @@ const mockApi = {
       | "quiere_ser_distribuidor"
       | "quiere_ser_representante"
       | "quiere_ser_fason"
-      | "sin_cobertura" = "atencion_representante",
+      | "sin_cobertura"
+      | "muestras" = "atencion_representante",
   ): Promise<Conversation | null> {
     await delay();
     const idx = store.conversations.findIndex((c) => c.id === id);
@@ -147,11 +148,40 @@ const mockApi = {
           ...(current.tags ?? []).filter(
             (tag) => tag !== "#atendido_por_representante",
           ),
-          ...(status === "sin_cobertura" ? [] : ["#atencion_humana"]),
+          ...(status === "sin_cobertura" || status === "muestras"
+            ? []
+            : ["#atencion_humana"]),
         ]),
       ),
       assignedTo: current.assignedTo ?? "admin@coolmeals.com",
       notes: [current.notes, `Handoff: ${reason}`].filter(Boolean).join("\n"),
+      updatedAt: new Date().toISOString(),
+    };
+    return structuredClone(store.conversations[idx]!);
+  },
+
+  async finalizeConversation(
+    id: string,
+    result: "finalizado_exito" | "finalizado_sin_exito" | "descartado",
+    reason?: string,
+  ): Promise<Conversation | null> {
+    await delay();
+    const idx = store.conversations.findIndex((c) => c.id === id);
+    if (idx < 0) return null;
+    const current = store.conversations[idx]!;
+    const isDescartado = result === "descartado";
+    const label = isDescartado
+      ? "Descartado"
+      : result === "finalizado_exito"
+        ? "Finalizado con éxito"
+        : "Finalizado sin éxito";
+    store.conversations[idx] = {
+      ...current,
+      status: isDescartado ? "descartado" : "finalizado",
+      outcome: result,
+      notes: [current.notes, `Pipeline: ${label}${reason ? ` — ${reason}` : ""}`]
+        .filter(Boolean)
+        .join("\n"),
       updatedAt: new Date().toISOString(),
     };
     return structuredClone(store.conversations[idx]!);
@@ -349,7 +379,8 @@ const liveApi = {
       | "quiere_ser_distribuidor"
       | "quiere_ser_representante"
       | "quiere_ser_fason"
-      | "sin_cobertura" = "atencion_representante",
+      | "sin_cobertura"
+      | "muestras" = "atencion_representante",
   ) {
     const res = await apiRequest<{
       conversation: Conversation;
@@ -357,6 +388,29 @@ const liveApi = {
     }>("/bot/handoff", {
       method: "POST",
       body: JSON.stringify({ conversationId: id, reason, status }),
+    });
+    return res.conversation;
+  },
+
+  async finalizeConversation(
+    id: string,
+    result: "finalizado_exito" | "finalizado_sin_exito" | "descartado",
+    reason?: string,
+  ) {
+    const res = await apiRequest<{
+      conversation: Conversation;
+      finalize: {
+        fromStatus: string;
+        outcome: string;
+        kapsoEnded: boolean;
+      };
+    }>("/bot/finalize", {
+      method: "POST",
+      body: JSON.stringify({
+        conversationId: id,
+        result,
+        ...(reason ? { reason } : {}),
+      }),
     });
     return res.conversation;
   },

@@ -1,5 +1,6 @@
 import {
   HASHTAG_ATENCION_HUMANA,
+  botFinalizeSchema,
   botHandoffSchema,
   botUpsertConversationSchema,
   createSampleRequestSchema,
@@ -12,10 +13,14 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import {
   findKapsoExecutionForHandoff,
+  setKapsoExecutionEnded,
   setKapsoExecutionHandoff,
 } from "../lib/kapso";
 import { decideRoute } from "../lib/routing";
-import { deriveFinalizeAt } from "../lib/finalize-derived";
+import {
+  esperandoFinalizeAt,
+  finalizeConversationWithResult,
+} from "../lib/finalize-derived";
 import {
   appendSheetRow,
   commercialAttentionSheetRow,
@@ -205,38 +210,69 @@ botRoutes.post(
 
     const existingRow = existing as DbConversation;
 
-    const executionId = await findKapsoExecutionForHandoff({
-      executionId: body.kapsoExecutionId ?? existingRow.kapso_execution_id,
-      whatsappConversationId: existingRow.kapso_conversation_id,
-    });
-
-    let kapsoHandoff: { ok: boolean; executionId: string | null; error?: string } =
-      {
-        ok: false,
-        executionId,
-        error: executionId
-          ? undefined
-          : "Sin execution Kapso activa para pausar el bot",
-      };
-
-    if (executionId) {
-      const result = await setKapsoExecutionHandoff(executionId);
-      kapsoHandoff = {
-        ok: result.ok,
-        executionId,
-        error: result.error,
-      };
-    }
-
     const status =
       body.status === "quiere_ser_distribuidor" ||
       body.status === "quiere_ser_representante" ||
       body.status === "quiere_ser_fason" ||
       body.status === "sin_cobertura" ||
       body.status === "muestras" ||
-      body.status === "esperando_respuesta"
+      body.status === "esperando_respuesta" ||
+      body.status === "descartado"
         ? body.status
         : "atencion_representante";
+
+    const closesBot = status === "descartado";
+
+    // Descartado: cerrar IA (ended). Muestras y resto: pausar (handoff) para seguimiento humano.
+    // Incluir handoff en la búsqueda por si la card ya venía de otra columna pausada.
+    const executionId = await findKapsoExecutionForHandoff({
+      executionId: body.kapsoExecutionId ?? existingRow.kapso_execution_id,
+      whatsappConversationId: existingRow.kapso_conversation_id,
+      statuses: closesBot
+        ? ["waiting", "running", "handoff"]
+        : ["waiting", "running"],
+    });
+
+    let kapsoHandoff: {
+      ok: boolean;
+      executionId: string | null;
+      ended?: boolean;
+      error?: string;
+    } = {
+      ok: false,
+      executionId,
+      error: executionId
+        ? undefined
+        : closesBot
+          ? "Sin execution Kapso activa para cerrar el bot"
+          : "Sin execution Kapso activa para pausar el bot",
+    };
+
+    if (executionId) {
+      if (closesBot) {
+        const result = await setKapsoExecutionEnded(executionId);
+        let ended = result.ok;
+        let error = result.error;
+        if (!result.ok && /ended|cannot transition/i.test(result.error ?? "")) {
+          ended = true;
+          error = undefined;
+        }
+        kapsoHandoff = {
+          ok: ended,
+          executionId,
+          ended: true,
+          error,
+        };
+      } else {
+        const result = await setKapsoExecutionHandoff(executionId);
+        kapsoHandoff = {
+          ok: result.ok,
+          executionId,
+          error: result.error,
+        };
+      }
+    }
+
     const outcome =
       body.outcome ??
       (status === "quiere_ser_distribuidor"
@@ -249,21 +285,35 @@ botRoutes.post(
               ? "sin_cobertura"
               : status === "muestras"
                 ? "muestras"
-                : "handoff_humano");
+                : status === "descartado"
+                  ? "descartado"
+                  : "handoff_humano");
 
     const tags = Array.from(
       new Set([
         ...(Array.isArray(existingRow.tags) ? existingRow.tags : []).filter(
           (tag) => tag !== "#atendido_por_representante",
         ),
-        ...(status === "sin_cobertura" || status === "muestras"
+        ...(status === "sin_cobertura" || status === "descartado"
           ? []
           : [HASHTAG_ATENCION_HUMANA]),
       ]),
     );
 
     const now = new Date();
-    const finalizeAt = deriveFinalizeAt(now).toISOString();
+    // Sin cobertura → auto Descartado (~22h). Esperando respuesta → auto Finalizado (~22h).
+    const schedulesAutoFinalize =
+      status === "sin_cobertura" || status === "esperando_respuesta";
+    const finalizeAt = schedulesAutoFinalize
+      ? esperandoFinalizeAt(now).toISOString()
+      : null;
+
+    const notePrefix =
+      status === "muestras"
+        ? "Handoff muestras (seguimiento representante)"
+        : status === "descartado"
+          ? "Descartado + IA cerrada (ended)"
+          : "Handoff";
 
     const { data, error } = await supabase
       .from("conversations")
@@ -273,7 +323,7 @@ botRoutes.post(
         human_handoff_at: now.toISOString(),
         finalize_at: finalizeAt,
         ai_summary: body.aiSummary ?? existingRow.ai_summary,
-        notes: [existingRow.notes, `Handoff: ${body.reason}`]
+        notes: [existingRow.notes, `${notePrefix}: ${body.reason}`]
           .filter(Boolean)
           .join("\n"),
         tags,
@@ -306,6 +356,7 @@ botRoutes.post(
           .single();
         if (retry.error) return c.json(fail("DB_ERROR", retry.error.message), 500);
         const sheetRetry = await syncHandoffSheets(
+          supabase,
           retry.data as DbConversation,
           status,
           body.reason,
@@ -328,6 +379,7 @@ botRoutes.post(
     }
 
     const sheet = await syncHandoffSheets(
+      supabase,
       data as DbConversation,
       status,
       body.reason,
@@ -342,10 +394,53 @@ botRoutes.post(
           finalizeAt,
           sheet,
           instruction:
-            "Operador responde en el mismo WhatsApp; el bot no procesa inbound mientras la execution esté en handoff. Tras la ventana (24h) pasa a Finalizado.",
+            status === "muestras"
+              ? "Muestras: sheet logística + handoff (representante hace seguimiento)."
+              : status === "descartado"
+                ? "Descartado: IA cerrada (Kapso ended). No aparece en columnas activas."
+              : schedulesAutoFinalize
+                ? status === "sin_cobertura"
+                  ? "Bot en handoff. Tras ~22h pasa a Descartado y la IA queda cerrada (ended)."
+                  : "Operador responde en el mismo WhatsApp; el bot no procesa inbound mientras la execution esté en handoff. Tras la ventana (~22h) pasa a Finalizado."
+                : "Operador responde en el mismo WhatsApp; el bot no procesa inbound mientras la execution esté en handoff. Esta columna no auto-finaliza: cerrá con el desplegable de Resultado cuando corresponda.",
         },
       }),
     );
+  },
+);
+
+botRoutes.post(
+  "/finalize",
+  requireRole("superadmin", "admin"),
+  zValidator("json", botFinalizeSchema),
+  async (c) => {
+    const body = c.req.valid("json");
+    try {
+      const result = await finalizeConversationWithResult({
+        conversationId: body.conversationId,
+        result: body.result,
+        reason: body.reason,
+        kapsoExecutionId: body.kapsoExecutionId,
+      });
+      return c.json(
+        ok({
+          conversation: mapConversation(result.row),
+          finalize: {
+            fromStatus: result.fromStatus,
+            outcome: result.outcome,
+            kapsoExecutionId: result.kapsoExecutionId,
+            kapsoEnded: result.kapsoEnded,
+            ...(result.kapsoError ? { kapsoError: result.kapsoError } : {}),
+          },
+        }),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message === "Conversation not found") {
+        return c.json(fail("NOT_FOUND", message), 404);
+      }
+      return c.json(fail("DB_ERROR", message), 500);
+    }
   },
 );
 
@@ -376,10 +471,13 @@ botRoutes.post(
         lead_id: body.leadId ?? null,
         full_name: body.fullName,
         phone: body.phone,
+        company: body.company,
+        province: body.province,
+        dni: body.dni,
+        email: body.email,
         address: body.address,
         city: body.city ?? "",
-        province: body.province ?? "",
-        postal_code: body.postalCode ?? "",
+        postal_code: body.postalCode,
         notes: body.notes ?? "",
         status: "pendiente",
       })
@@ -398,6 +496,16 @@ botRoutes.post(
         .eq("id", conversationId);
     }
 
+    let clientType = "";
+    if (conversationId) {
+      const { data: conv } = await supabase
+        .from("conversations")
+        .select("client_type")
+        .eq("id", conversationId)
+        .maybeSingle();
+      clientType = (conv as { client_type?: string } | null)?.client_type ?? "";
+    }
+
     const sheet = await appendSheetRow(
       "sample_logistics",
       "sample_request",
@@ -405,6 +513,12 @@ botRoutes.post(
       sampleLogisticsSheetRow({
         fullName: body.fullName,
         phone: body.phone,
+        clientType,
+        company: body.company,
+        province: body.province,
+        dni: body.dni,
+        email: body.email,
+        postalCode: body.postalCode,
         address: body.address,
       }),
       { sampleRequestId: data.id },
@@ -425,9 +539,12 @@ botRoutes.post(
           leadId: data.lead_id,
           fullName: data.full_name,
           phone: data.phone,
+          company: data.company ?? "",
+          province: data.province,
+          dni: data.dni ?? "",
+          email: data.email ?? "",
           address: data.address,
           city: data.city,
-          province: data.province,
           postalCode: data.postal_code,
           status: data.status,
           sheetSyncedAt: sheet.success ? new Date().toISOString() : null,
@@ -473,7 +590,6 @@ botRoutes.post(
     }
 
     const now = new Date();
-    const finalizeAt = deriveFinalizeAt(now).toISOString();
 
     await supabase
       .from("conversations")
@@ -481,7 +597,8 @@ botRoutes.post(
         status: "derivado_distribuidor",
         outcome: "derivado_distribuidor",
         derived_at: now.toISOString(),
-        finalize_at: finalizeAt,
+        // Derivados no auto-finalizan: quedan hasta cierre manual.
+        finalize_at: null,
       })
       .eq("id", conv.id);
 
@@ -502,12 +619,13 @@ botRoutes.post(
       },
     );
 
-    return c.json(ok({ sheet, finalizeAt }));
+    return c.json(ok({ sheet, finalizeAt: null }));
   },
 );
 
-/** Tercer feedback: sheets de interés comercial (dist/rep/fasón) y sin cobertura. */
+/** Sheets al handoff: interés comercial, sin cobertura, o muestras (Pipeline). */
 async function syncHandoffSheets(
+  supabase: ReturnType<typeof getSupabase>,
   conv: DbConversation,
   status: string,
   reason: string,
@@ -552,6 +670,75 @@ async function syncHandoffSheets(
       }),
       { conversationId: conv.id, status },
     );
+  }
+
+  if (status === "muestras") {
+    const { data: sample, error: sampleError } = await supabase
+      .from("sample_requests")
+      .insert({
+        conversation_id: conv.id,
+        full_name: conv.name || "",
+        phone: conv.phone || "",
+        company: "",
+        province: conv.province || "",
+        dni: "",
+        email: "",
+        address: "",
+        city: "",
+        postal_code: "",
+        notes: reason || "Pipeline → Muestras",
+        status: "pendiente",
+      })
+      .select("*")
+      .single();
+
+    if (sampleError) {
+      // Igual intentamos el sheet con los datos de la conversación
+      return appendSheetRow(
+        "sample_logistics",
+        "conversation",
+        conv.id,
+        sampleLogisticsSheetRow({
+          fullName: conv.name || "",
+          phone: conv.phone || "",
+          clientType: conv.client_type || "",
+          company: "",
+          province: conv.province || "",
+          dni: "",
+          email: "",
+          postalCode: "",
+          address: "",
+        }),
+        { conversationId: conv.id, status, sampleError: sampleError.message },
+      );
+    }
+
+    const sheet = await appendSheetRow(
+      "sample_logistics",
+      "sample_request",
+      sample.id,
+      sampleLogisticsSheetRow({
+        fullName: sample.full_name || conv.name || "",
+        phone: sample.phone || conv.phone || "",
+        clientType: conv.client_type || "",
+        company: sample.company || "",
+        province: sample.province || conv.province || "",
+        dni: sample.dni || "",
+        email: sample.email || "",
+        postalCode: sample.postal_code || "",
+        address: sample.address || "",
+      }),
+      { sampleRequestId: sample.id, conversationId: conv.id, status },
+    );
+
+    if (sheet.success) {
+      await supabase
+        .from("sample_requests")
+        .update({ sheet_synced_at: new Date().toISOString() })
+        .eq("id", sample.id);
+    }
+
+    return sheet;
   }
 
   return { attempted: false, success: true, spreadsheetId: null as string | null };

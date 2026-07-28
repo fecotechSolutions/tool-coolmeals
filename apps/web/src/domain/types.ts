@@ -155,6 +155,8 @@ export type Conversation = {
   assignedTo: string | null;
   /** Identifica pedidos: false → pedido_lead; true → pedido_cliente. */
   isCustomer: boolean;
+  /** Resultado comercial (ej. finalizado_exito / finalizado_sin_exito). */
+  outcome?: string | null;
   messages: ConversationMessage[];
   createdAt: string;
   updatedAt: string;
@@ -228,17 +230,21 @@ export type PromptConfig = {
   updatedAt: string;
 };
 
-/** Logística de muestras — 3 datos mínimos: nombre, teléfono, domicilio. */
+/** Logística de muestras. */
 export type SampleRequest = {
   id: string;
   conversationId: string | null;
   leadId: string | null;
   fullName: string;
   phone: string;
+  company: string;
+  province: string;
+  dni: string;
+  email: string;
+  postalCode: string;
+  /** Dirección completa de envío. */
   address: string;
   city: string;
-  province: string;
-  postalCode: string;
   status: "pendiente" | "enviado" | "entregado" | "cancelado";
   sheetSyncedAt: string | null;
   notes: string;
@@ -251,6 +257,10 @@ export type ExecutiveDashboard = {
   leadsMonth: number;
   conversationsOpen: number;
   conversationsClosed: number;
+  /** Cierres manuales con venta / conversión. */
+  closedWithSuccess: number;
+  /** Cierres manuales sin venta. */
+  closedWithoutSuccess: number;
   pctNoClientReply: number;
   noClientReplyCount: number;
   conversationsTotal: number;
@@ -345,9 +355,7 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
 };
 
 /**
- * Estados fijos del pipeline.
- * Los distribuidores de red se agregan como columnas dinámicas (derivados).
- * Orden: … → quiere ser dist / rep / fasón → [dists] → muestras → pedidos lead/cliente → …
+ * Columnas del Pipeline (incluye Finalizado / Descartado).
  */
 export const PIPELINE_STATUSES = [
   "nuevo",
@@ -365,6 +373,14 @@ export const PIPELINE_STATUSES = [
   "finalizado",
   "descartado",
 ] as const satisfies readonly ConversationStatus[];
+
+export const FINALIZE_RESULT_LABELS = {
+  finalizado_exito: "Finalizado con éxito",
+  finalizado_sin_exito: "Finalizado sin éxito",
+  descartado: "Descartado",
+} as const;
+
+export type FinalizeResult = keyof typeof FINALIZE_RESULT_LABELS;
 
 export const KNOWLEDGE_CATEGORY_LABELS: Record<KnowledgeCategory, string> = {
   faq: "Preguntas frecuentes",

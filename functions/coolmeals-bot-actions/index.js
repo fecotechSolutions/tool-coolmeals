@@ -33,7 +33,7 @@ async function handler(request, env) {
       return json(await decideRoute(input, supabaseUrl, supabaseKey));
     }
     if (action === "request_samples") {
-      return json(await requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env));
+      return json(await requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env, ctx));
     }
     if (action === "handoff") {
       return json(await handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env));
@@ -246,22 +246,6 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
   );
   const distributors = Array.isArray(dists) ? dists : [];
 
-  if (wantsToBeDistributor) {
-    return {
-      ok: true,
-      action: "quiere_ser_distribuidor",
-      conversationStatus: "quiere_ser_distribuidor",
-      outcome: "quiere_ser_distribuidor",
-      distributorId: null,
-      distributorName: null,
-      reason:
-        "Quiere ser distribuidor — columna Quiere ser distribuidor + handoff comercial (sin umbral 50).",
-      syncDerivedSheet: false,
-      agentInstruction:
-        "Avisá que un ASESOR COMERCIAL te va a CONTACTAR por teléfono o WhatsApp (otro canal; NO por este número). Despedite amablemente (ej. '¡Gracias! Cualquier cosa quedamos atentos. ¡Que andes bien!'). PROHIBIDO 'te paso con…' / 'ahora te atiende…'. Luego handoff_human status=quiere_ser_distribuidor + handoff_to_human. Card en Quiere ser distribuidor.",
-    };
-  }
-
   if (clientType === "representante") {
     return {
       ok: true,
@@ -271,11 +255,11 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       distributorId: null,
       distributorName: null,
       reason:
-        "Quiere ser representante — columna Quiere ser representante + handoff comercial (sin umbral 50, sin menú muestras).",
+        "Quiere ser representante — columna + handoff comercial (sin menú muestras).",
       syncDerivedSheet: false,
       coolMealsMenu: false,
       agentInstruction:
-        "REPRESENTANTE — columna Quiere ser representante. Con la intención clara: NO pidas más datos. En UN mensaje: (1) confirmá el interés; (2) un ASESOR COMERCIAL te CONTACTA a la brevedad por teléfono/WhatsApp — NO por este número; (3) DESPEDITE. Luego handoff_human status=quiere_ser_representante + handoff_to_human.",
+        "REPRESENTANTE — mensaje: asesor te contacta (NO este número) + despedida. Silencio: handoff_human status=quiere_ser_representante + handoff_to_human. Sin menú muestras aunque diga volumen alto.",
     };
   }
 
@@ -288,11 +272,11 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       distributorId: null,
       distributorName: null,
       reason:
-        "Quiere ser fasón — columna Quiere ser fasón + handoff comercial (sin umbral 50, sin menú muestras).",
+        "Quiere ser fasón — columna + handoff comercial (sin menú muestras).",
       syncDerivedSheet: false,
       coolMealsMenu: false,
       agentInstruction:
-        "FASÓN / marca propia — CIERRE INMEDIATO. PROHIBIDO preguntar más. UN solo mensaje: sí hacemos fasón/marca propia; un ASESOR COMERCIAL te CONTACTA por teléfono/WhatsApp (NO este número); despedida. Luego handoff_human status=quiere_ser_fason + handoff_to_human. Card Quiere ser fasón.",
+        "FASÓN — mensaje: sí hacemos fasón/marca propia; asesor te contacta + despedida. Silencio: handoff_human status=quiere_ser_fason + handoff_to_human. Sin menú muestras aunque diga volumen alto.",
     };
   }
 
@@ -330,13 +314,39 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
   }
 
   const isCordoba = normalize(province) === "cordoba";
-  const usesVolumeThreshold =
-    clientType === "mayorista" || clientType === "retail";
   const highVolume =
     estimatedVolume !== null && estimatedVolume >= minBundles;
+  const distNote = wantsToBeDistributor
+    ? " (lead dist.; columna Quiere ser distribuidor vía upsert, sin handoff)"
+    : "";
 
-  // Retail / mayorista: Cool Meals solo Córdoba + ≥ umbral
-  if (usesVolumeThreshold && isCordoba && highVolume) {
+  // Prioridad: ≥50 → menú muestras/pedido (cualquier provincia / tipo)
+  if (highVolume) {
+    return {
+      ok: true,
+      action: "own_attention",
+      conversationStatus: "atencion_representante",
+      outcome: "handoff_humano",
+      distributorId: null,
+      distributorName: null,
+      reason:
+        "Volumen ≥ " +
+        minBundles +
+        " (" +
+        clientType +
+        ", " +
+        province +
+        ") — menú muestras/pedido." +
+        distNote,
+      syncDerivedSheet: false,
+      coolMealsMenu: true,
+      agentInstruction:
+        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras + handoff_to_human. Si pedido: asesor te contacta; handoff_human + handoff_to_human.",
+    };
+  }
+
+  // <50 (o sin volumen): Córdoba → operador
+  if (isCordoba) {
     return {
       ok: true,
       action: "own_attention",
@@ -346,13 +356,14 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       distributorName: null,
       reason:
         clientType +
-        " en Córdoba con volumen ≥ " +
+        " en Córdoba con volumen < " +
         minBundles +
-        " bultos — atención Cool Meals.",
+        " (o sin volumen) — operador Cool Meals." +
+        distNote,
       syncDerivedSheet: false,
-      coolMealsMenu: true,
+      coolMealsMenu: false,
       agentInstruction:
-        "Cool Meals. NO hagas handoff todavía. Ofrecé SIEMPRE: 1) Pedir muestras 2) Agendar pedido, y esperá. Si muestras: Nombre y Apellido + Teléfono + Domicilio → request_samples → avisá que LOGÍSTICA te va a CONTACTAR para el envío (no digas que un asesor arma las muestras ni 'te paso con alguien' por este chat) → handoff_human status=muestras + handoff_to_human. Si pedido: avisá que un asesor comercial te va a CONTACTAR; handoff_human + handoff_to_human. Nunca digas que te van a hablar por este mismo número.",
+        "Cool Meals operador/representante. SIN menú muestras. Mensaje: un asesor/representante te contacta + despedida. Silencio: handoff_human status=atencion_representante + handoff_to_human.",
     };
   }
 
@@ -364,19 +375,12 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       outcome: "sin_cobertura",
       distributorId: null,
       distributorName: null,
-      reason: "Sin cobertura en " + province,
+      reason: "Sin cobertura en " + province + distNote,
       syncDerivedSheet: false,
       agentInstruction:
-        "Avisá que aún no hay cobertura. Llamá handoff_human con status=sin_cobertura (NO atencion_representante) y reason claro; después handoff_to_human. La card queda en Sin cobertura; en ~24h pasa a Finalizado.",
+        "Avisá que aún no hay cobertura; te avisamos cuando lleguemos. handoff_human status=sin_cobertura + handoff_to_human. Queda ~22h en handoff y después pasa a Descartado (IA ended).",
     };
   }
-
-  const volumeNote =
-    usesVolumeThreshold && highVolume && !isCordoba
-      ? " (volumen ≥ " +
-        minBundles +
-        " fuera de Córdoba → red de distribuidores)"
-      : "";
 
   return {
     ok: true,
@@ -386,10 +390,12 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
     distributorId: distributor.id,
     distributorName: distributor.name,
     reason:
-      "Derivado a " + distributor.name + " (" + province + ")" + volumeNote,
+      "Derivado a " + distributor.name + " (" + province + ")" + distNote,
     syncDerivedSheet: true,
     agentInstruction:
-      "Derivá al distribuidor (sync_derived + handoff_to_human). Si pidieron muestras: NO uses request_samples ni sheet Cool Meals — el distribuidor se hace cargo. Avisalo al lead.",
+      "DERIVAR: 1) Si faltan nombre completo, teléfono (confirmá WhatsApp) o nombre del negocio → pedilos, NO sync_derived aún. 2) Mensaje: 'Te va a contactar " +
+      distributor.name +
+      "…' + despedida. 3) Silencio: sync_derived + handoff_to_human. Si pidieron muestras con <50: NO request_samples.",
   };
 }
 
@@ -425,12 +431,28 @@ async function appendSheet(env, kind, spreadsheetId, values) {
   return { attempted: true, success: true };
 }
 
-async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env) {
+async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env, ctx) {
   const fullName = String(input.fullName || "").trim();
   const phone = String(input.phone || phoneFromCtx || "").trim();
+  const company = String(input.company || "").trim();
+  const province = String(input.province || "").trim();
+  const dni = String(input.dni || "").trim();
+  const email = String(input.email || "").trim();
+  const postalCode = String(input.postalCode || "").trim();
   const address = String(input.address || "").trim();
-  if (!fullName || !phone || !address) {
-    throw new Error("fullName, phone and address required for samples");
+  if (
+    !fullName ||
+    !phone ||
+    !company ||
+    !province ||
+    !dni ||
+    !email ||
+    !postalCode ||
+    !address
+  ) {
+    throw new Error(
+      "fullName, phone, company, province, dni, email, postalCode and address required for samples",
+    );
   }
 
   let conversationId = input.conversationId || null;
@@ -453,10 +475,13 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
       lead_id: input.leadId || null,
       full_name: fullName,
       phone: phone,
+      company: company,
+      province: province,
+      dni: dni,
+      email: email,
       address: address,
       city: input.city || "",
-      province: input.province || "",
-      postal_code: input.postalCode || "",
+      postal_code: postalCode,
       notes: input.notes || "",
       status: "pendiente",
     }),
@@ -465,7 +490,8 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
 
   // Cool Meals se hace cargo: card en columna Muestras (logística ve sheet + Pipeline).
   if (conversationId) {
-    const notesExtra = "Muestra agendada — logística contacta para envío.";
+    const notesExtra =
+      "Muestra agendada — representante hace seguimiento; sheet logística.";
     const existingConv = await sb(
       supabaseUrl,
       supabaseKey,
@@ -488,10 +514,27 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
 
   const sheetId = env.GOOGLE_SHEET_SAMPLE_LOGISTICS_ID;
   const today = new Date().toISOString().slice(0, 10);
+  let clientType = input.clientType || "";
+  if (!clientType && conversationId) {
+    const convRows = await sb(
+      supabaseUrl,
+      supabaseKey,
+      "conversations?id=eq." + conversationId + "&select=client_type&limit=1",
+      { method: "GET" },
+    );
+    clientType =
+      Array.isArray(convRows) && convRows[0] ? convRows[0].client_type || "" : "";
+  }
   const sheet = await appendSheet(env, "sample_logistics", sheetId, [
     today,
     fullName,
     phone,
+    clientType,
+    company,
+    province,
+    dni,
+    email,
+    postalCode,
     address,
   ]);
 
@@ -508,7 +551,7 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
     conversationId: conversationId,
     sheet: sheet,
     instruction:
-      "Muestra agendada (Pipeline Muestras + sheet). Avisá que logística contacta para el envío. Después handoff_human con status=muestras + handoff_to_human. NO digas que un asesor comercial arma las muestras.",
+      "Muestra agendada (Pipeline Muestras + sheet logística). Mensaje al lead: se acuerdan/envían las muestras y un REPRESENTANTE se va a comunicar para el seguimiento. Luego handoff_human status=muestras + handoff_to_human (IA queda en handoff/cerrada). NO digas solo 'logística'; priorizá representante/seguimiento.",
   };
 }
 
@@ -545,9 +588,6 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
   const existing = Array.isArray(rows) && rows[0];
   if (!existing) throw new Error("Conversation not found");
 
-  const notes = [existing.notes, "Handoff: " + (input.reason || "atención humana")]
-    .filter(Boolean)
-    .join("\n");
   const allowedStatus = {
     atencion_representante: true,
     quiere_ser_distribuidor: true,
@@ -556,6 +596,7 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     sin_cobertura: true,
     muestras: true,
     esperando_respuesta: true,
+    descartado: true,
   };
   const status =
     input.status && allowedStatus[input.status]
@@ -573,28 +614,48 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
             ? "sin_cobertura"
             : status === "muestras"
               ? "muestras"
-              : "handoff_humano");
+              : status === "descartado"
+                ? "descartado"
+                : "handoff_humano");
+
+  const notes = [
+    existing.notes,
+    status === "descartado"
+      ? "Descartado + IA cerrada (ended): " + (input.reason || "sin perfil comercial")
+      : status === "muestras"
+        ? "Handoff muestras (seguimiento representante): " + (input.reason || "muestras")
+        : "Handoff: " + (input.reason || "atención humana"),
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const tagsBase = (
     Array.isArray(existing.tags) ? existing.tags : []
   ).filter(function (t) {
     return t !== "#atendido_por_representante";
   });
-  // Muestras / sin cobertura: handoff sin forzar hashtag de atención humana
+  // Sin cobertura / descartado: sin forzar hashtag. Muestras sí marca atención humana (handoff).
   const tags = Array.from(
     new Set(
-      status === "sin_cobertura" || status === "muestras"
+      status === "sin_cobertura" || status === "descartado"
         ? tagsBase
         : tagsBase.concat(["#atencion_humana"]),
     ),
   );
 
   const now = new Date();
-  const hours = Number(env && env.DERIVE_HANDOFF_HOURS);
-  const handoffHours = Number.isFinite(hours) && hours > 0 ? hours : 24;
-  const finalizeAt = new Date(
-    now.getTime() + handoffHours * 60 * 60 * 1000,
-  ).toISOString();
+  const esperandoHoursRaw = Number(env && env.ESPERANDO_TO_FINALIZE_HOURS);
+  const autoFinalizeHours =
+    Number.isFinite(esperandoHoursRaw) && esperandoHoursRaw > 0
+      ? esperandoHoursRaw
+      : 22;
+  // Solo sin cobertura / esperando respuesta programan auto-cierre (~22h).
+  // sin_cobertura → Descartado; esperando_respuesta → Finalizado (lo hace el cron API).
+  const schedulesAutoFinalize =
+    status === "sin_cobertura" || status === "esperando_respuesta";
+  const finalizeAt = schedulesAutoFinalize
+    ? new Date(now.getTime() + autoFinalizeHours * 60 * 60 * 1000).toISOString()
+    : null;
 
   const patchBody = {
     status: status,
@@ -640,6 +701,13 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     };
   }
 
+  // Descartado: cerrar IA (ended). Muestras y resto: el agent usa handoff_to_human.
+  let kapsoClose = { ok: false, skipped: true, mode: null };
+  if (status === "descartado" && kapsoExecutionId) {
+    kapsoClose = await kapsoSetExecutionStatus(env, kapsoExecutionId, "ended");
+    kapsoClose.mode = "ended";
+  }
+
   return {
     ok: true,
     conversationId: row.id,
@@ -647,7 +715,13 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     sameNumber: true,
     finalizeAt: finalizeAt,
     sheet: sheet,
-    instruction: "Usá handoff_to_human en el agent. Octavio responde en el mismo WhatsApp.",
+    kapsoClose: kapsoClose,
+    instruction:
+      status === "muestras"
+        ? "Muestras: sheet/Pipeline listos. Usá handoff_to_human. Avisá que un representante hace el seguimiento."
+        : status === "descartado"
+          ? "Descartado: IA en ended. NO uses handoff_to_human. Solo mensaje humano breve de cierre (sin decir 'descartado')."
+          : "Usá handoff_to_human en el agent. Octavio responde en el mismo WhatsApp.",
   };
 }
 
@@ -775,13 +849,13 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
 
   const now = new Date();
   const hours = deriveHandoffHours(env);
-  const finalizeAt = new Date(now.getTime() + hours * 60 * 60 * 1000).toISOString();
 
   const patch = {
     status: "derivado_distribuidor",
     outcome: "derivado_distribuidor",
     derived_at: now.toISOString(),
-    finalize_at: finalizeAt,
+    // Derivados no auto-finalizan: quedan hasta cierre manual.
+    finalize_at: null,
     kapso_execution_id: kapsoExecutionId || conv.kapso_execution_id || null,
     kapso_conversation_id: kapsoConversationId || conv.kapso_conversation_id || null,
   };
@@ -848,11 +922,11 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     conversationId: conv.id,
     distributorName: distributorName,
     sheet: sheet,
-    finalizeAt: finalizeAt,
+    finalizeAt: null,
     handoffHours: hours,
     kapsoHandoff: handoff,
     instruction:
       "Después de sync_derived: llamá handoff_to_human. NUNCA complete_task al derivar. " +
-      "El bot queda en handoff hasta finalize_at; luego un job pasa a ended y Finalizado.",
+      "El bot queda en handoff. Esta columna NO auto-finaliza: el operador cierra con Resultado cuando corresponda.",
   };
 }

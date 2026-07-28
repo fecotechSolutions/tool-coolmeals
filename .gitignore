@@ -39,3 +39,6 @@ coverage/
 
 # Supabase
 supabase/.temp/
+
+# Transcripciones de los tests del agente
+tests/agent/.runs/

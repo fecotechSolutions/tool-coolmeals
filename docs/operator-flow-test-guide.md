@@ -3,7 +3,7 @@
 Documento para el **operador comercial** (o quien valide el bot).  
 Objetivo: probar **cada flujo** de punta a punta y saber **dónde mirar** si algo no cuadra.
 
-Actualizado: 20 julio 2026 (sandbox Kapso).
+Actualizado: 24 julio 2026 (sandbox Kapso — calificación distribuidores con 4 requisitos).
 
 ---
 
@@ -43,13 +43,13 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 
 ### Reglas comerciales (para no dudar al probar)
 
-| Tipo de lead | Umbral 50 bultos | Resultado típico |
-|--------------|------------------|------------------|
-| Quiere ser **distribuidor** | No aplica | Columna Quiere ser distribuidor + sheet Atención comercial |
+| Tipo de lead | Umbral 50 bultos/cajas | Resultado típico |
+|--------------|------------------------|------------------|
+| Quiere ser **distribuidor** | No aplica | Primero 4 requisitos (congelados, depósito/cámara, logística, estructura). Solo con **4 sí** → columna + sheet Atención comercial. Si falta alguna → explica requisitos y ofrece compra. |
 | Quiere ser **representante** | No aplica | Columna Quiere ser representante + sheet Atención comercial |
 | **Fasón** / marca propia | No aplica | Columna Quiere ser fasón + sheet Atención comercial |
 | **Minorista** | No aplica | Deriva a dist. si hay zona |
-| **Retail / mayorista** | Sí | **Córdoba + ≥50** → Cool Meals (menú muestras/pedido). **Fuera de Córdoba** aunque ≥50 → dist. |
+| **Retail / mayorista** | Sí (≥50 bultos/cajas; wraps=24 u/caja, platos=12 u/caja) | **Córdoba + ≥50** → Cool Meals (menú muestras/pedido). **Fuera de Córdoba** aunque ≥50 → dist. |
 | Provincia **sin** dist. | — | Sin cobertura + sheet Sin cobertura |
 
 ---
@@ -63,7 +63,7 @@ Para **cada** caso, marcá estas 3–4 cosas:
 3. **Sheet** (si aplica): apareció una **fila nueva** con datos coherentes.  
 4. **Kapso** (si tenés acceso): execution en `handoff` (y más tarde `ended` cuando pasan ~24 h).
 
-Después del handoff el bot **se pausa**. No hace falta seguir chateando: el caso ya cerró en sistema. A ~24 h la card debería pasar a **Finalizado** sola (cron).
+Después del handoff el bot **se pausa**. En la mayoría de columnas la card **no** pasa sola a Finalizado: el operador cierra con **Resultado**. Auto-Finalizado solo aplica a **Sin cobertura** (~24 h) y **Esperando respuesta** (~22 h).
 
 ---
 
@@ -85,7 +85,8 @@ Hacé los casos **en este orden**. Cada uno es independiente; tachá al completa
 
 | Orden | Caso | Sección |
 |-------|------|---------|
-| 1 | Quiere ser distribuidor | §6.1 |
+| 1 | Quiere ser distribuidor (4 sí) | §6.1 |
+| 1b | Quiere ser dist. sin requisitos | §6.1b |
 | 2 | Sin cobertura | §6.2 |
 | 3 | Minorista → derivado a dist. | §6.3 |
 | 4 | Cool Meals Córdoba ≥50 (menú) | §6.4 |
@@ -111,14 +112,49 @@ Hola, quiero ser distribuidor en Mendoza, tengo depósito y logística de congel
 
 **Qué tiene que pasar**
 
-1. El bot reconoce el interés (puede pedir 1–2 datos cortos, no un formulario eterno).  
-2. Dice que un **asesor comercial te va a contactar** (por otro canal / no “te atiendo yo por este número”).  
-3. Se **despide**.  
-4. **Pipeline** → columna **Quiere ser distribuidor**.  
-5. **Sheet Atención comercial** → fila nueva con `tipo_cliente` = distribuidor (o similar).  
-6. Kapso → `handoff`.
+1. El bot reconoce el interés y **antes de cerrar** pregunta (pueden ir juntas):
+   - ¿Trabajás actualmente con productos congelados?
+   - ¿Tenés depósito / cámara de congelados?
+   - ¿Contás con logística para productos congelados?
+   - ¿Contás con una estructura de distribución?
+2. Si respondés **sí a las 4**:
+   - Dice que un **asesor comercial te va a contactar** (por otro canal / no este número).
+   - Se **despide**.
+   - **Pipeline** → columna **Quiere ser distribuidor**.
+   - **Sheet Atención comercial** → fila nueva con `tipo_cliente` = distribuidor.
+   - Kapso → `handoff`.
+3. Si **falta alguna** de las 4:
+   - Explica que esos son requisitos para ser distribuidor Cool Meals.
+   - Ofrece seguir si querés **hacer una compra** / contar qué necesitás.
+   - **No** va a la columna Quiere ser distribuidor.
+   - **No** te clasifica automático como retail/mayorista.
 
-**No debe:** ir a “Derivado a distribuidor” ni a “Atención humana” genérica.
+**No debe:** cerrar handoff de distribuidor sin las 4 respuestas; ni ir directo a “Derivado” solo por decir “quiero ser distribuidor”.
+
+---
+
+### 6.1b — Quiere ser distribuidor pero no cumple requisitos
+
+**Mensaje inicial:**
+
+```text
+Hola, quiero ser distribuidor de Cool Meals en Córdoba
+```
+
+Cuando el bot pregunte los 4 requisitos, respondé algo como:
+
+```text
+No trabajo congelados todavía, no tengo cámara ni logística propia
+```
+
+**Qué tiene que pasar**
+
+1. Explica con buen tono que esos son **requisitos** para sumarse como distribuidor Cool Meals.  
+2. Ofrece seguir si querés **hacer una compra** / conocer productos.  
+3. Si **acepta** compra → flujo comercial normal (tipo / zona / volumen).  
+4. Si **no** quiere compra ni calza otro tipo de cliente → **Descartado** (IA `ended`; no queda en columnas activas).  
+5. **No** columna Quiere ser distribuidor ni fila Atención comercial por ese camino.  
+6. **No** te clasifica solo como retail/mayorista por haber fallado la calificación.
 
 ---
 
@@ -171,6 +207,8 @@ Hola, soy minorista en Mendoza, compro poco volumen, quiero productos
 Hola, soy mayorista en Córdoba Capital, compro alrededor de 60 bultos por mes
 ```
 
+También vale decir **cajas** (mismo significado). Ej. wraps: 60 cajas ≈ 1440 unidades (24 u/caja).
+
 **Qué tiene que pasar**
 
 1. Califica para **atención directa Cool Meals**.  
@@ -206,16 +244,21 @@ Hola, tengo una rotisería en Mendoza y quiero muestras de wraps
 
 Partí del menú de **6.4** y elegí **pedir muestras**.
 
-**Datos a dar cuando el bot los pida (los 3):**
+**Datos a dar cuando el bot los pida (todos):**
 
 1. Nombre y apellido  
 2. Teléfono  
-3. Domicilio completo (calle, número, CP / ciudad)
+3. Empresa  
+4. Provincia  
+5. DNI  
+6. Correo  
+7. Código postal  
+8. Dirección completa (calle, número, piso/depto si hay)
 
 Ejemplo:
 
 ```text
-Fernanda Romay, +543513053755, Dean Funes 2425, Córdoba, CP 5000, horario 8 a 18
+Fernanda Romay, +543513053755, Cool Meals Test SA, Córdoba, 30111222, fernanda@test.com, 5000, Dean Funes 2425, Córdoba
 ```
 
 **Qué tiene que pasar**
@@ -327,8 +370,9 @@ Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 | Lead en **Atención humana** / **pedido** | Asesor Cool Meals contacta |
 | Lead en **Quiere ser dist. / rep. / fasón** | Revisá sheet **Atención comercial** y contactá por otro canal |
 | Lead en **Sin cobertura** | Sheet **Sin cobertura** → lista de recontacto cuando haya zona |
-| Lead en **Muestras** | Logística mira `/muestras` + sheet muestras |
-| Card en **Finalizado** | Caso cerrado; no reabrir por el mismo hilo del bot (por ahora) |
+| Lead en **Muestras** | Logística mira `/muestras` + sheet muestras. Si el operador arrastra la card a Muestras desde otra columna (ej. Quiere ser distribuidor), se registra fecha/nombre/teléfono/**tipo de cliente**/empresa/provincia/dni/correo/CP/dirección (vacíos si no hay). |
+| Card en **Finalizado** | Caso cerrado (manual con éxito/sin éxito, o auto tras ventana); no reaparece en columnas activas. El `outcome` queda para métricas. |
+| Desplegable **Resultado** en cualquier card | `Finalizado con éxito` / `Finalizado sin éxito` → status `finalizado` + outcome + Kapso `ended` si el bot estaba activo; la card desaparece. |
 | Querés tomar el caso a mano | Arrastrá / cambiá estado a la columna que corresponda (handoff manual) |
 
 ### Qué no hace el sistema (aún)
@@ -357,7 +401,8 @@ Mandale a soporte / tech:
 
 | # | Caso | WA OK | Pipeline OK | Sheet OK | Handoff OK | Notas |
 |---|------|-------|-------------|----------|------------|-------|
-| 1 | Quiere ser distribuidor | ☐ | ☐ | Atención comercial ☐ | ☐ | |
+| 1 | Quiere ser distribuidor (4 sí) | ☐ | ☐ | Atención comercial ☐ | ☐ | |
+| 1b | Dist. sin requisitos → ofrece compra | ☐ | no columna dist. ☐ | — | — | |
 | 2 | Sin cobertura | ☐ | ☐ | Sin cobertura ☐ | ☐ | |
 | 3 | Minorista → derivado | ☐ | ☐ | Derivados ☐ | ☐ | |
 | 4 | Menú Cool Meals CBA ≥50 | ☐ | ☐ | — | (aún no) | |

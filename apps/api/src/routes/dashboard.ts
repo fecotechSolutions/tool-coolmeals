@@ -140,6 +140,12 @@ dashboardRoutes.get(
     const conversationsClosed = conversations.filter(
       (x) => x.status === "finalizado" || x.status === "descartado",
     ).length;
+    const closedWithSuccess = conversations.filter(
+      (x) => x.outcome === "finalizado_exito",
+    ).length;
+    const closedWithoutSuccess = conversations.filter(
+      (x) => x.outcome === "finalizado_sin_exito",
+    ).length;
     const noClientReplyCount = conversations.filter(
       (x) => x.status === "esperando_respuesta",
     ).length;
@@ -168,6 +174,8 @@ dashboardRoutes.get(
       leadsMonth: conversations.length,
       conversationsOpen,
       conversationsClosed,
+      closedWithSuccess,
+      closedWithoutSuccess,
       noClientReplyCount,
       conversationsTotal: conversations.length,
       pctNoClientReply:

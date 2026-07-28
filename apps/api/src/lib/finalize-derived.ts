@@ -11,15 +11,9 @@ import type { DbConversation } from "./mappers";
 const DEFAULT_NUDGE =
   "Hola! ¿Tenés alguna consulta más? Si no recibimos respuesta, vamos a cerrar esta conversación. Quedamos atentos.";
 
-/** Statuses que ya están en ventana de handoff → Finalizado. */
+/** Solo estos statuses auto-pasan a Finalizado cuando vence la ventana. */
 const HANDOFF_FINALIZE_STATUSES = [
-  "derivado_distribuidor",
-  "atencion_representante",
-  "quiere_ser_distribuidor",
-  "quiere_ser_representante",
-  "quiere_ser_fason",
   "sin_cobertura",
-  "muestras",
   "esperando_respuesta",
 ] as const;
 
@@ -62,8 +56,10 @@ function cutoffIso(hours: number, from = new Date()): string {
 /**
  * 1) Mid-flujo inactivo ≥ ABANDONED_TO_WAITING_HOURS (22):
  *    → Esperando respuesta + mensaje WA + handoff + finalize_at (+22h)
- * 2) Handoff windows vencidas (derive/atención 24h, esperando 22h):
- *    → Finalizado + Kapso ended
+ * 2) Ventana vencida:
+ *    - Sin cobertura → Descartado + Kapso ended
+ *    - Esperando respuesta → Finalizado + Kapso ended
+ *    (resto de columnas: quedan hasta cierre manual con resultado)
  */
 export async function runPipelineTimeouts(): Promise<PipelineTimeoutsResult> {
   const escalated = await escalateAbandonedToWaiting();
@@ -189,14 +185,13 @@ export async function finalizeHandoffWindows(): Promise<
   const supabase = getSupabase();
   const now = new Date();
   const nowIso = now.toISOString();
-  const deriveHours = env.DERIVE_HANDOFF_HOURS;
   const esperandoHours = env.ESPERANDO_TO_FINALIZE_HOURS;
 
   const byId = new Map<string, DbConversation>();
 
   for (const status of HANDOFF_FINALIZE_STATUSES) {
-    const fallbackHours =
-      status === "esperando_respuesta" ? esperandoHours : deriveHours;
+    // Sin cobertura / Esperando respuesta: 22h → cierre automático.
+    const fallbackHours = esperandoHours;
     const fallbackCutoff = cutoffIso(fallbackHours, now);
 
     const dueWithFinalize = await supabase
@@ -209,7 +204,7 @@ export async function finalizeHandoffWindows(): Promise<
       .limit(50);
 
     if (dueWithFinalize.error?.message.includes("finalize_at")) {
-      // Migration ausente: solo derivado/atención por updated_at; esperando exige human_handoff_at
+      // Migration ausente: por updated_at; esperando exige human_handoff_at
       let q = supabase
         .from("conversations")
         .select("*")
@@ -236,7 +231,7 @@ export async function finalizeHandoffWindows(): Promise<
       byId.set(row.id, row);
     }
 
-    // Fallback sin finalize_at: derivado/atención por updated_at;
+    // Fallback sin finalize_at: por updated_at;
     // esperando_respuesta solo si ya hubo handoff (human_handoff_at).
     let q = supabase
       .from("conversations")
@@ -285,27 +280,25 @@ export async function finalizeHandoffWindows(): Promise<
       }
     }
 
-    const note =
-      fromStatus === "esperando_respuesta"
+    const goesToDescartado = fromStatus === "sin_cobertura";
+    const nextStatus = goesToDescartado ? "descartado" : "finalizado";
+    const nextOutcome = goesToDescartado ? "descartado" : null;
+    const note = goesToDescartado
+      ? "Auto: Sin cobertura → Descartado tras ~22h de handoff + Kapso ended"
+      : fromStatus === "esperando_respuesta"
         ? "Auto-finalizado tras ventana en Esperando respuesta (post-nudge/handoff)"
-        : fromStatus === "atencion_representante"
-          ? "Auto-finalizado tras ventana de handoff (atención humana)"
-          : fromStatus === "quiere_ser_distribuidor"
-            ? "Auto-finalizado tras ventana de handoff (quiere ser distribuidor)"
-            : fromStatus === "quiere_ser_representante"
-              ? "Auto-finalizado tras ventana de handoff (quiere ser representante)"
-              : fromStatus === "quiere_ser_fason"
-                ? "Auto-finalizado tras ventana de handoff (quiere ser fasón)"
-                : fromStatus === "sin_cobertura"
-                  ? "Auto-finalizado tras ventana de handoff (sin cobertura)"
-                  : "Auto-finalizado tras ventana de handoff post-derivación";
+        : "Auto-finalizado tras ventana de handoff";
+
+    const patch: Record<string, unknown> = {
+      status: nextStatus,
+      notes: [row.notes, note].filter(Boolean).join("\n"),
+      finalize_at: null,
+    };
+    if (nextOutcome) patch.outcome = nextOutcome;
 
     const { error: updateError } = await supabase
       .from("conversations")
-      .update({
-        status: "finalizado",
-        notes: [row.notes, note].filter(Boolean).join("\n"),
-      })
+      .update(patch)
       .eq("id", row.id)
       .eq("status", fromStatus);
 
@@ -352,4 +345,95 @@ export function deriveFinalizeAt(from = new Date()): Date {
 export function esperandoFinalizeAt(from = new Date()): Date {
   const hours = getEnv().ESPERANDO_TO_FINALIZE_HOURS;
   return hoursFromNow(hours, from);
+}
+
+/**
+ * Cierre manual desde Pipeline:
+ * - éxito / sin éxito → status=finalizado + outcome
+ * - descartado → status=descartado + outcome=descartado
+ * En todos los casos: Kapso ended.
+ */
+export async function finalizeConversationWithResult(input: {
+  conversationId: string;
+  result: "finalizado_exito" | "finalizado_sin_exito" | "descartado";
+  reason?: string;
+  kapsoExecutionId?: string | null;
+}): Promise<{
+  ok: true;
+  row: DbConversation;
+  fromStatus: string;
+  outcome: "finalizado_exito" | "finalizado_sin_exito" | "descartado";
+  kapsoExecutionId: string | null;
+  kapsoEnded: boolean;
+  kapsoError?: string;
+}> {
+  const supabase = getSupabase();
+  const { data: existing, error: findError } = await supabase
+    .from("conversations")
+    .select("*")
+    .eq("id", input.conversationId)
+    .maybeSingle();
+
+  if (findError) throw new Error(findError.message);
+  if (!existing) throw new Error("Conversation not found");
+
+  const row = existing as DbConversation;
+  const fromStatus = row.status;
+
+  const executionId = await findKapsoExecutionForHandoff({
+    executionId: input.kapsoExecutionId ?? row.kapso_execution_id,
+    whatsappConversationId: row.kapso_conversation_id,
+    statuses: ["handoff", "waiting", "running"],
+  });
+
+  const endId = executionId || row.kapso_execution_id || null;
+  let kapsoEnded = false;
+  let kapsoError: string | undefined;
+
+  if (endId) {
+    const result = await setKapsoExecutionEnded(endId);
+    kapsoEnded = result.ok;
+    kapsoError = result.error;
+    if (!result.ok && /ended|cannot transition/i.test(result.error ?? "")) {
+      kapsoEnded = true;
+      kapsoError = undefined;
+    }
+  } else {
+    // Sin execution: ok (ej. card solo en Pipeline sin bot activo).
+    kapsoEnded = true;
+  }
+
+  const isDescartado = input.result === "descartado";
+  const label = isDescartado
+    ? "Descartado"
+    : input.result === "finalizado_exito"
+      ? "Finalizado con éxito"
+      : "Finalizado sin éxito";
+  const note = [`Pipeline: ${label}`, input.reason?.trim() || null]
+    .filter(Boolean)
+    .join(" — ");
+
+  const { data: updated, error: updateError } = await supabase
+    .from("conversations")
+    .update({
+      status: isDescartado ? "descartado" : "finalizado",
+      outcome: input.result,
+      finalize_at: null,
+      notes: [row.notes, note].filter(Boolean).join("\n"),
+    })
+    .eq("id", row.id)
+    .select("*")
+    .single();
+
+  if (updateError) throw new Error(updateError.message);
+
+  return {
+    ok: true,
+    row: updated as DbConversation,
+    fromStatus,
+    outcome: input.result,
+    kapsoExecutionId: endId,
+    kapsoEnded,
+    ...(kapsoError ? { kapsoError } : {}),
+  };
 }

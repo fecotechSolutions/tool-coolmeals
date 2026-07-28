@@ -6,9 +6,15 @@ const NAV = [
   { href: "/pipeline", label: "Pipeline", id: "pipeline" },
   { href: "/distribuidores", label: "Distribuidores", id: "distribuidores" },
   { href: "/comercial", label: "Config. comercial", id: "comercial" },
-  { href: "/muestras", label: "Muestras", id: "muestras" },
-  { href: "/conocimiento", label: "Base de conocimiento", id: "conocimiento" },
-  { href: "/prompts", label: "Prompt Manager", id: "prompts" },
+  // Ocultos por ahora; las rutas siguen existiendo para reactivar después.
+  { href: "/muestras", label: "Muestras", id: "muestras", hidden: true },
+  {
+    href: "/conocimiento",
+    label: "Base de conocimiento",
+    id: "conocimiento",
+    hidden: true,
+  },
+  { href: "/prompts", label: "Prompt Manager", id: "prompts", hidden: true },
 ] as const;
 
 export type NavId = (typeof NAV)[number]["id"];
@@ -20,6 +26,8 @@ export function AppShell({
   children: React.ReactNode;
   current: NavId;
 }) {
+  const visibleNav = NAV.filter((item) => !("hidden" in item && item.hidden));
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -32,7 +40,7 @@ export function AppShell({
         </div>
 
         <nav className="nav" aria-label="Módulos">
-          {NAV.map((item) => (
+          {visibleNav.map((item) => (
             <Link
               key={item.id}
               href={item.href}

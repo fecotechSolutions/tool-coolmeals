@@ -135,7 +135,7 @@ async function appendViaServiceAccount(
  *
  * Columnas:
  * - derived: fecha | nombre | teléfono | empresa | tipo negocio | client_type | provincia | ciudad | CP | distribuidor | seguimiento
- * - samples: fecha | Nombre y Apellido | Teléfono | Domicilio
+ * - samples: fecha | nombre | tel | tipo_cliente | empresa | provincia | dni | correo | CP | dirección completa
  * - commercial_attention: fecha | nombre | teléfono | empresa | tipo_cliente (distribuidor|representante|fason) | provincia | ciudad | motivo | seguimiento
  * - no_coverage: fecha | nombre | teléfono | empresa | provincia | ciudad | client_type | motivo | seguimiento
  */
@@ -295,18 +295,30 @@ export function derivedLeadSheetRow(input: {
   ];
 }
 
-/** Exactamente los 3 datos pedidos para logística + fecha. */
+/** Muestras: fecha | nombre | tel | tipo_cliente | empresa | provincia | dni | correo | CP | dirección. */
 export function sampleLogisticsSheetRow(input: {
   fullName: string;
   phone: string;
-  address: string;
+  clientType?: string | null;
+  company?: string | null;
+  province?: string | null;
+  dni?: string | null;
+  email?: string | null;
+  postalCode?: string | null;
+  address?: string | null;
   date?: string;
 }): (string | number)[] {
   return [
     input.date ?? new Date().toISOString().slice(0, 10),
     input.fullName,
     input.phone,
-    input.address,
+    input.clientType ?? "",
+    input.company ?? "",
+    input.province ?? "",
+    input.dni ?? "",
+    input.email ?? "",
+    input.postalCode ?? "",
+    input.address ?? "",
   ];
 }
 

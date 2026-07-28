@@ -17,13 +17,13 @@ export default function MuestrasPage() {
     <AppShell current="muestras">
       <PageHeader
         title="Muestras"
-        description="Agenda de envíos Cool Meals (solo cuando Cool Meals atiende, no la red de dist.): Nombre y Apellido, Teléfono y Domicilio. Sin seguimiento de despacho."
+        description="Agenda de envíos Cool Meals (solo cuando Cool Meals atiende, no la red de dist.): nombre, teléfono, empresa, provincia, DNI, correo, código postal y dirección completa."
       />
 
       {rows.length === 0 ? (
         <EmptyState>
           Sin solicitudes todavía. Aparecen cuando un lead de atención Cool Meals
-          completa los 3 datos de envío (no aplica a leads derivados a distribuidores).
+          completa los datos de envío (no aplica a leads derivados a distribuidores).
         </EmptyState>
       ) : (
         <div className="table-wrap panel">
@@ -31,9 +31,14 @@ export default function MuestrasPage() {
             <thead>
               <tr>
                 <th>Fecha</th>
-                <th>Nombre y apellido</th>
+                <th>Nombre</th>
                 <th>Teléfono</th>
-                <th>Domicilio</th>
+                <th>Empresa</th>
+                <th>Provincia</th>
+                <th>DNI</th>
+                <th>Correo</th>
+                <th>CP</th>
+                <th>Dirección completa</th>
                 <th>Sheet</th>
               </tr>
             </thead>
@@ -43,11 +48,12 @@ export default function MuestrasPage() {
                   <td>{new Date(row.createdAt).toLocaleDateString("es-AR")}</td>
                   <td>{row.fullName}</td>
                   <td>{row.phone}</td>
-                  <td>
-                    {row.address}
-                    {row.city ? ` · ${row.city}` : ""}
-                    {row.province ? ` · ${row.province}` : ""}
-                  </td>
+                  <td>{row.company || "—"}</td>
+                  <td>{row.province || "—"}</td>
+                  <td>{row.dni || "—"}</td>
+                  <td>{row.email || "—"}</td>
+                  <td>{row.postalCode || "—"}</td>
+                  <td>{row.address || "—"}</td>
                   <td>
                     {row.sheetSyncedAt ? (
                       <StatusBadge tone="ok">sync</StatusBadge>

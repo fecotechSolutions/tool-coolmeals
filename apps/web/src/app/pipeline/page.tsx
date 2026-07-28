@@ -7,6 +7,7 @@ import { dataApi } from "@/data/repository";
 import {
   CLIENT_TYPE_LABELS,
   CONVERSATION_STATUS_LABELS,
+  FINALIZE_RESULT_LABELS,
   HASHTAG_ATENCION_HUMANA,
   ORIGIN_LABELS,
   PIPELINE_STATUSES,
@@ -15,6 +16,7 @@ import {
   type Conversation,
   type ConversationStatus,
   type Distributor,
+  type FinalizeResult,
 } from "@/domain/types";
 
 type PipelineColumn = {
@@ -48,6 +50,12 @@ function statusSubtitle(status: ConversationStatus) {
   }
   if (status === "atencion_representante") {
     return "Seguimiento humano Cool Meals";
+  }
+  if (status === "finalizado") {
+    return "Cierre con resultado (éxito / sin éxito) o auto";
+  }
+  if (status === "descartado") {
+    return "Sin perfil comercial viable";
   }
   return "Estado";
 }
@@ -114,7 +122,13 @@ export default function PipelinePage() {
       dataApi.listConversations(),
       dataApi.listDistributors(),
     ]);
-    setConversations(rows);
+    setConversations(
+      rows.filter((row) =>
+        PIPELINE_STATUSES.includes(
+          row.status as (typeof PIPELINE_STATUSES)[number],
+        ),
+      ),
+    );
     setDistributors(dists);
     setLoading(false);
   }
@@ -233,6 +247,11 @@ export default function PipelinePage() {
       return;
     }
 
+    if (column.status === "muestras") {
+      await handoffToHuman(current, "muestras");
+      return;
+    }
+
     if (column.status === "derivado_distribuidor") {
       const distributorId =
         current.distributorId ??
@@ -300,7 +319,8 @@ export default function PipelinePage() {
       | "quiere_ser_distribuidor"
       | "quiere_ser_representante"
       | "quiere_ser_fason"
-      | "sin_cobertura" = "atencion_representante",
+      | "sin_cobertura"
+      | "muestras" = "atencion_representante",
   ) {
     try {
       const reason =
@@ -312,7 +332,9 @@ export default function PipelinePage() {
               ? "Quiere ser fasón — handoff comercial desde Pipeline"
               : status === "sin_cobertura"
                 ? "Sin cobertura — handoff desde Pipeline"
-                : "Atención humana desde Pipeline";
+                : status === "muestras"
+                  ? "Pipeline → Muestras (sheet logística)"
+                  : "Atención humana desde Pipeline";
       const updated = await dataApi.handoffConversation(
         card.id,
         reason,
@@ -331,7 +353,7 @@ export default function PipelinePage() {
       status,
       assignedTo: card.assignedTo ?? "admin@coolmeals.com",
       tags:
-        status === "sin_cobertura"
+        status === "sin_cobertura" || status === "muestras"
           ? stripLegacyRepHashtags(card.tags ?? [])
           : withHumanAttentionHashtag(card.tags ?? []),
     });
@@ -345,11 +367,41 @@ export default function PipelinePage() {
     });
   }
 
+  async function finalizeWithResult(card: Conversation, result: FinalizeResult) {
+    const previous = conversations;
+    const nextStatus =
+      result === "descartado" ? "descartado" : "finalizado";
+    // Optimistic: mueve a Finalizado o Descartado.
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === card.id
+          ? {
+              ...c,
+              status: nextStatus,
+              outcome: result,
+              updatedAt: new Date().toISOString(),
+            }
+          : c,
+      ),
+    );
+    try {
+      const updated = await dataApi.finalizeConversation(card.id, result);
+      if (updated) {
+        setConversations((prev) =>
+          prev.map((c) => (c.id === card.id ? updated : c)),
+        );
+      }
+    } catch (error) {
+      console.error("[pipeline] finalize failed", error);
+      setConversations(previous);
+    }
+  }
+
   return (
     <AppShell current="pipeline">
       <PageHeader
         title="Pipeline"
-        description="Una sola columna “Derivado a distribuidor”. El destinatario se ve como hashtag en la card."
+        description="Arrastrá cards entre columnas. El desplegable Resultado cierra el lead (éxito / sin éxito → Finalizado, o Descartado), corta el bot si estaba activo."
       />
 
       <div className="pipeline-legend">
@@ -523,23 +575,56 @@ export default function PipelinePage() {
                                 "es-AR",
                               )}
                             </span>
-                            <select
-                              aria-label={`Mover ${card.name}`}
-                              value={`status:${card.status}`}
-                              onClick={(event) => event.stopPropagation()}
-                              onChange={(event) => {
-                                const column = columns.find(
-                                  (c) => c.key === event.target.value,
-                                );
-                                if (column) void moveToColumn(card.id, column);
-                              }}
-                            >
-                              {columns.map((option) => (
-                                <option key={option.key} value={option.key}>
-                                  {option.title}
+                            <div className="pipeline-card-actions">
+                              <select
+                                aria-label={`Resultado de ${card.name}`}
+                                className="pipeline-result-select"
+                                defaultValue=""
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => {
+                                  const value = event.target
+                                    .value as FinalizeResult | "";
+                                  event.target.value = "";
+                                  if (
+                                    value === "finalizado_exito" ||
+                                    value === "finalizado_sin_exito" ||
+                                    value === "descartado"
+                                  ) {
+                                    void finalizeWithResult(card, value);
+                                  }
+                                }}
+                              >
+                                <option value="" disabled>
+                                  Resultado…
                                 </option>
-                              ))}
-                            </select>
+                                {(
+                                  Object.keys(
+                                    FINALIZE_RESULT_LABELS,
+                                  ) as FinalizeResult[]
+                                ).map((key) => (
+                                  <option key={key} value={key}>
+                                    {FINALIZE_RESULT_LABELS[key]}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                aria-label={`Mover ${card.name}`}
+                                value={`status:${card.status}`}
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => {
+                                  const column = columns.find(
+                                    (c) => c.key === event.target.value,
+                                  );
+                                  if (column) void moveToColumn(card.id, column);
+                                }}
+                              >
+                                {columns.map((option) => (
+                                  <option key={option.key} value={option.key}>
+                                    {option.title}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                         </article>
                       );

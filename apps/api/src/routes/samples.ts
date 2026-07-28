@@ -12,9 +12,12 @@ function mapSample(row: {
   lead_id: string | null;
   full_name: string;
   phone: string;
+  company?: string | null;
+  province: string;
+  dni?: string | null;
+  email?: string | null;
   address: string;
   city: string;
-  province: string;
   postal_code: string;
   status: string;
   sheet_synced_at: string | null;
@@ -28,9 +31,12 @@ function mapSample(row: {
     leadId: row.lead_id,
     fullName: row.full_name,
     phone: row.phone,
+    company: row.company ?? "",
+    province: row.province,
+    dni: row.dni ?? "",
+    email: row.email ?? "",
     address: row.address,
     city: row.city,
-    province: row.province,
     postalCode: row.postal_code,
     status: row.status,
     sheetSyncedAt: row.sheet_synced_at,

@@ -2,7 +2,7 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: 20 julio 2026 (sandbox Kapso: ruteos + sheets + dashboard con filtro de fechas).
+Actualizado: 24 julio 2026 (sandbox Kapso: calificación distribuidor con 4 requisitos + ruteos + sheets + dashboard).
 
 > **Para probar todos los flujos mañana (paso a paso + planilla):**  
 > [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) — pensado para pasárselo al operador.
@@ -16,7 +16,7 @@ Un lead escribe al WhatsApp de Cool Meals / Froodie. Un bot (Kapso) lo atiende, 
 - lo marca **sin cobertura**,
 - o lo marca interés comercial: **quiere ser distribuidor** / **representante** / **fasón** (handoff; un asesor contacta por otro canal).
 
-En los cierres con handoff el bot se pausa (~24 h) y después la card pasa a **Finalizado** sola.
+En handoffs el bot se pausa. **Auto-cierre (~22 h):** **Sin cobertura** → **Descartado** + ended; **Esperando respuesta** → **Finalizado** + ended. El resto queda hasta el desplegable **Resultado**.
 
 Todo se ve en el **Pipeline** (`/pipeline`) y, si hay muestras Cool Meals, en **`/muestras`** + sheet de logística. Las métricas viven en el **Dashboard** (`/`).
 
@@ -33,7 +33,7 @@ Además, al cerrar interés comercial o sin cobertura, el bot escribe en Google 
 | **Pipeline** (`/pipeline`) | Cards, columnas, hashtags, mover estados |
 | **Distribuidores** | Red comercial por provincia (**no** es un Google Sheet) |
 | **Config comercial** | Umbral de bultos (default 50) |
-| **Muestras** (`/muestras`) | Agenda logística Cool Meals: nombre, teléfono, domicilio + sync sheet |
+| **Muestras** (`/muestras`) | Agenda logística Cool Meals: nombre, teléfono, empresa, provincia, DNI, correo, CP, dirección completa + sync sheet |
 | **Kapso → Executions** | `waiting` / `handoff` / `ended` |
 
 Canvas sandbox:  
@@ -41,25 +41,36 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 
 ## Columnas del Pipeline (resumen)
 
-| Columna | Significado | ¿Handoff + 24h → Finalizado? |
-|---------|-------------|------------------------------|
-| Nuevo / IA atendiendo | El bot conversa / califica | No (salvo abandono mid-flujo) |
-| Esperando respuesta | Abandono mid-flujo + nudge | Sí (~22 h post-nudge) |
-| Atención humana | Cool Meals comercial (p. ej. eligió **pedido**) | Sí (~24 h) |
-| Quiere ser representante | Interés en representar Cool Meals | Sí (~24 h) |
-| Quiere ser fasón | Interés en producción a fasón | Sí (~24 h) |
-| Quiere ser distribuidor | Quiere sumarse a la red | Sí (~24 h) |
-| Derivado a distribuidor | Pasado a un dist. de la red | Sí (~24 h) |
-| Sin cobertura | Sin dist. activo en esa provincia | Sí (~24 h) |
-| Muestras | Cool Meals agendó envío de muestras (logística) | Sí (~24 h) |
-| Pedido lead / Pedido cliente | Pedidos (manual / flujos posteriores) | Según flujo |
-| Finalizado | Cerrada | Terminal |
+| Columna | Significado | ¿Auto → Finalizado? |
+|---------|-------------|---------------------|
+| Nuevo / IA atendiendo | El bot conversa / califica | No (salvo abandono → Esperando respuesta) |
+| Esperando respuesta | Abandono mid-flujo + nudge | Sí (~22 h) → Finalizado |
+| Atención humana | Cool Meals comercial (p. ej. eligió **pedido**) | No — cierre manual |
+| Quiere ser representante | Interés en representar Cool Meals | No — cierre manual |
+| Quiere ser fasón | Interés en producción a fasón | No — cierre manual |
+| Quiere ser distribuidor | Quiere sumarse a la red | No — cierre manual |
+| Derivado a distribuidor | Pasado a un dist. de la red | No — cierre manual |
+| Sin cobertura | Sin dist. activo en esa provincia | Sí (~22 h) → Descartado + ended |
+| Muestras | Cool Meals agendó envío de muestras (logística) | No — cierre manual |
+| Pedido lead / Pedido cliente | Pedidos (manual / flujos posteriores) | No — cierre manual |
+| Finalizado | Cerrada (manual con resultado o auto ~22 h) | Terminal |
+| Descartado | Sin perfil comercial viable | Terminal |
+| Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` | Cierra ya → columna Finalizado |
 
-## Umbral de 50 bultos (regla comercial)
+## Umbral de 50 bultos / cajas (regla comercial)
+
+**Unidades:** "bulto" y "caja" son lo mismo (1 bulto = 1 caja). Umbral = **≥ 50 bultos/cajas por mes**.
+
+| Producto | Unidades por caja |
+|----------|-------------------|
+| Wraps | 24 |
+| Platos listos | 12 |
+
+Si el lead habla en unidades (ej. "1200 wraps"), el bot convierte a cajas (1200÷24 = 50) antes de aplicar el umbral.
 
 | Tipo de cliente | ¿Aplica umbral 50? | Qué pasa |
 |-----------------|--------------------|----------|
-| **Distribuidor** (quiere serlo: depósito + logística de congelados) | No | **Quiere ser distribuidor** + handoff comercial |
+| **Distribuidor** (quiere serlo) | No | Primero 4 preguntas de requisitos. **4 sí** → **Quiere ser distribuidor** + handoff. Si falta alguna → explica requisitos + ofrece compra (no retail/mayorista auto). |
 | **Representante** | No | Columna **Quiere ser representante** + handoff (sin menú muestras/pedido) |
 | **Fasón** | No | Columna **Quiere ser fasón** + handoff (sin menú muestras/pedido) |
 | **Retail** / **Mayorista** | Sí | **Córdoba + ≥50** → Cool Meals (menú muestras/pedido). **Fuera de Córdoba** (aunque ≥50) → distribuidores |
@@ -77,7 +88,7 @@ Cuando el lead califica para Cool Meals, el bot **ofrece siempre** (sin esperar 
 
 ### Si elige muestras
 
-1. Pide Nombre y Apellido + Teléfono + Domicilio.  
+1. Pide Nombre y Apellido, Teléfono, Empresa, Provincia, DNI, Correo, Código postal y Dirección completa.  
 2. Agenda en **`/muestras`** + **sheet de logística** (así logística ve qué enviar).  
 3. Avisa que el **equipo de logística** se contacta para el envío (no “un asesor te arma las muestras”).  
 4. Handoff; card en columna **Muestras**.  
@@ -90,6 +101,8 @@ En esta versión **no** hay seguimiento enviado/entregado/cancelado en la UI.
 
 ## Interés comercial: representante / fasón / distribuidor
 
+### Representante / fasón
+
 Con la **intención clara** (sin formulario largo):
 
 1. Bot confirma el interés.  
@@ -98,8 +111,19 @@ Con la **intención clara** (sin formulario largo):
 4. Handoff; card en la columna correspondiente:
    - **Quiere ser representante**
    - **Quiere ser fasón** (incluye marca propia / maquila / “hacerme la comida con mi marca”)
-   - **Quiere ser distribuidor**
 5. Fila en el sheet [Atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ) con **tipo_cliente**.
+
+### Quiere ser distribuidor (calificación previa)
+
+Si el lead quiere sumarse como distribuidor, el bot **pregunta antes** (no cierra ni hace handoff todavía):
+
+1. ¿Trabajás actualmente con productos congelados?  
+2. ¿Tenés depósito / cámara de congelados?  
+3. ¿Contás con logística para productos congelados?  
+4. ¿Contás con una estructura de distribución?
+
+- **4 sí** → columna **Quiere ser distribuidor** + sheet Atención comercial + handoff (asesor contacta por otro canal + despedida).  
+- **Falta alguna** → explica que son requisitos para ser distribuidor Cool Meals y ofrece seguir si quiere **hacer una compra**. No lo manda automático a retail/mayorista ni a la columna de distribuidor.
 
 ### Sin cobertura
 
@@ -117,7 +141,11 @@ Además del Pipeline, se anota en el sheet [Sin cobertura](https://docs.google.c
 
 ## Cómo pasar a atención humana (manual)
 
-Desplegable o drag a **Atención humana** / **Quiere ser distribuidor** / **Quiere ser representante** / **Quiere ser fasón** / **Sin cobertura** / **Muestras** según corresponda → handoff Kapso + ventana ~24 h.
+Desplegable o drag a **Atención humana** / **Quiere ser distribuidor** / **Quiere ser representante** / **Quiere ser fasón** / **Sin cobertura** / **Muestras** según corresponda → handoff Kapso. **Sin cobertura** agenda auto-cierre (~22 h → Descartado); el resto queda hasta cierre manual con **Resultado**.
+
+Si movés una card a **Muestras** (aunque venga de Quiere ser distribuidor / handoff ya cerrado):
+- Se escribe en el **sheet de muestras** con fecha, nombre, teléfono, **tipo de cliente**, empresa, provincia, DNI, correo, CP y dirección completa (campos vacíos si el operador solo movió la card).
+- También queda registro en **`/muestras`**.
 
 ## Derivar a un distribuidor
 
@@ -125,7 +153,7 @@ Bot (o drag manual + selector de dist.):
 
 - fila en el **sheet único de derivados**,
 - hashtag naranja,
-- handoff ~24 h → Finalizado + `ended`.
+- handoff del bot (queda en la columna; **no** auto-finaliza — cierre manual con Resultado).
 
 ## Tiempos automáticos
 
@@ -135,17 +163,16 @@ Bot (o drag manual + selector de dist.):
 2. Handoff  
 3. ~22 h más → **Finalizado** + `ended`
 
-### Post-handoff comercial / operativo
+### Post-handoff: solo Sin cobertura
 
-Aplica a: Derivado, Atención humana, Quiere ser distribuidor, Quiere ser representante, Quiere ser fasón, Sin cobertura, **Muestras**.
-
-- ~24 h → **Finalizado** + `ended`
+- **Sin cobertura** → ~22 h → **Descartado** + `ended`
+- Derivado, Atención humana, Quiere ser dist/rep/fasón, Muestras, Pedidos → **no** auto-finalizan
 
 ## Cómo ver que hubo handoff
 
 1. Pipeline: columna correcta.  
 2. Kapso Executions: `handoff`.  
-3. Al cerrar: `ended` + **Finalizado**.
+3. Al cerrar (manual o auto en sin cobertura / esperando): `ended` + **Finalizado**.
 
 ## Tips para probar (sandbox)
 
@@ -156,7 +183,8 @@ Resumen rápido:
 
 | # | Caso | Mensaje | Esperado |
 |---|------|---------|----------|
-| 1 | Quiere ser distribuidor | `Hola, quiero ser distribuidor en Mendoza, tengo depósito y logística de congelados` | **Quiere ser distribuidor** + sheet Atención comercial + handoff |
+| 1 | Quiere ser distribuidor | `Hola, quiero ser distribuidor…` → 4 preguntas → 4 sí | **Quiere ser distribuidor** + sheet Atención comercial + handoff |
+| 1b | Dist. sin requisitos | Misma intención + respuestas negativas a requisitos | Explica requisitos + ofrece compra; sin columna dist. |
 | 2 | Sin cobertura | `Hola, rotisería en Salta, quiero productos` | **Sin cobertura** + sheet + handoff |
 | 3 | Derivación | `Hola, minorista en Mendoza, compro poco` | **Derivado** `#Cool_Logistica_Cuyo` + handoff |
 | 4 | Cool Meals CBA ≥50 | `Hola, mayorista en Córdoba Capital, ~60 bultos/mes` | Menú **muestras / pedido** |

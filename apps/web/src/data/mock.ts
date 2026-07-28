@@ -954,6 +954,12 @@ export function buildExecutiveDashboard(
   const conversationsClosed = conversations.filter(
     (c) => c.status === "finalizado" || c.status === "descartado",
   ).length;
+  const closedWithSuccess = conversations.filter(
+    (c) => c.outcome === "finalizado_exito",
+  ).length;
+  const closedWithoutSuccess = conversations.filter(
+    (c) => c.outcome === "finalizado_sin_exito",
+  ).length;
   const noClientReplyCount = conversations.filter(
     (c) => c.status === "esperando_respuesta",
   ).length;
@@ -966,6 +972,8 @@ export function buildExecutiveDashboard(
     leadsMonth: conversations.length,
     conversationsOpen,
     conversationsClosed,
+    closedWithSuccess,
+    closedWithoutSuccess,
     noClientReplyCount,
     conversationsTotal: conversations.length,
     pctNoClientReply:
