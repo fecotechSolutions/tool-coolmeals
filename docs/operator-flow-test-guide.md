@@ -3,7 +3,7 @@
 Documento para el **operador comercial** (o quien valide el bot).  
 Objetivo: probar **cada flujo** de punta a punta y saber **dónde mirar** si algo no cuadra.
 
-Actualizado: **28 julio 2026**.
+Actualizado: **29 julio 2026**.
 
 Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).
 
@@ -50,13 +50,17 @@ Después del handoff el bot **se pausa**. Cierre manual con **Resultado**. Auto:
 
 ## 4. Reset entre pruebas (importante)
 
-Si reutilizás el **mismo** WhatsApp:
+**Semana de pruebas (julio–ago 2026):** cada ~**20 min** un job automático limpia Kapso + Pipeline  
+(mismo teléfono puede tipificar de nuevo). Ver cheat sheet §7 / Actions → **Sandbox reset**.  
+No hace falta pedir reset a mano salvo que necesites probar **ya** (entonces: Actions → Run workflow, o esperá el próximo ciclo).
+
+Si reutilizás el **mismo** WhatsApp **fuera** de esa ventana automática:
 
 1. Pedile a quien tenga acceso Kapso que ponga la execution en **`ended`** (si sigue en `waiting` / `handoff` / `running`).  
 2. Pedile que en Supabase / Pipeline deje la conversación “limpia” (o que cree una conversación nueva).  
 3. **No** dejes una conversation a medias y arranques otro caso encima: el bot “recuerda” el hilo.
 
-Si no podés resetear: esperá o usá **otro número** de tester.
+Si no podés resetear: esperá el auto-reset, usá **otro número**, o pedí un Run workflow manual.
 
 ---
 

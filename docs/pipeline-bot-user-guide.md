@@ -202,6 +202,9 @@ Bot (o drag manual + selector de dist.):
 La guía completa (mensajes, checklist, reset entre casos, planilla) está en  
 [`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
 
+**Reset automático (semana de pruebas):** cada ~20 min GitHub Actions limpia Kapso + Pipeline  
+para reusar el mismo WhatsApp. Manual: [Actions → Sandbox reset](https://github.com/fecotechSolutions/tool-coolmeals/actions). Detalle: cheat sheet §7.
+
 Resumen rápido:
 
 | # | Caso | Mensaje | Esperado |

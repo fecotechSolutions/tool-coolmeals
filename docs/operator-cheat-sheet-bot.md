@@ -122,18 +122,17 @@ Mismo número muchas veces en el año → **1 lead**. Dos cards rojas en el per�
 
 ## 7. Semana de pruebas (sandbox) — reset cada 20 min
 
-Para que el mismo teléfono (el de Kapso sandbox) pueda tipificar otra vez:
+Para que el mismo teléfono (Kapso sandbox) pueda tipificar otra vez **sin hacer nada a mano**.
 
-**Prod (API):** `SANDBOX_RESET_ENABLED=true` hasta `2026-08-05T00:00:00-03:00`.  
-Sin `SANDBOX_RESET_PHONES` (limpia todas las cards).
+| Qué | Dónde |
+|-----|--------|
+| Flag + hasta | Vercel API: `SANDBOX_RESET_ENABLED=true`, `UNTIL=2026-08-05T00:00:00-03:00` |
+| Teléfonos | Sin lista (= limpia **todas** las cards) |
+| Scheduler | GitHub Actions cada 20 min → [runs](https://github.com/fecotechSolutions/tool-coolmeals/actions) |
+| Código | [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) → `/api/cron/sandbox-reset` |
 
-**Cron gratis (sin Pro de Vercel):** GitHub Actions  
-[`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) → cada 20 min llama  
-`/api/cron/sandbox-reset` (secret del repo: `CRON_SECRET`).
-
-- Runs: https://github.com/fecotechSolutions/tool-coolmeals/actions  
-- Manual: Actions → **Sandbox reset** → Run workflow  
-- Apagar: desactivar el workflow o `SANDBOX_RESET_ENABLED=false` en Vercel
+- Manual ya: Actions → **Sandbox reset** → Run workflow  
+- Apagar al fin de semana: Disable workflow **o** `SANDBOX_RESET_ENABLED=false`
 
 ```bash
 curl -sS -H "Authorization: Bearer $CRON_SECRET" \

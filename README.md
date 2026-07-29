@@ -92,6 +92,8 @@ Dos proyectos del mismo repo:
    Build: `npm run build -w @coolmeals/shared && npm run build:api:handler`  
    Antes de deploy CLI: `npm run build:api:handler`
 
+**Cron / Hobby:** Vercel Hobby solo permite crons **1×/día**. Para frecuencia mayor (ej. sandbox reset cada 20 min) usamos **GitHub Actions** que llama a `/api/cron/*` con `CRON_SECRET`. Ver [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) §7 y [`.github/workflows/sandbox-reset.yml`](.github/workflows/sandbox-reset.yml).
+
 ## Seguridad
 
 - Service role **solo** en la API / env de Vercel API.  

@@ -27,8 +27,9 @@ WhatsApp (Meta)
 | Timeouts / finalize | `apps/api/src/lib/finalize-derived.ts` |
 | Kapso client (API) | `apps/api/src/lib/kapso.ts` |
 | Bot HTTP (UI/ops) | `apps/api/src/routes/bot.ts` |
-| Cron | `apps/api/src/routes/cron.ts` → `/api/cron/pipeline-timeouts` |
+| Cron timeouts | `apps/api/src/routes/cron.ts` → `/api/cron/pipeline-timeouts` |
 | Sandbox reset (pruebas) | `/api/cron/sandbox-reset` + `SANDBOX_RESET_*` → `lib/sandbox-reset.ts` |
+| Cron cada 20 min (Hobby) | `.github/workflows/sandbox-reset.yml` (GitHub Actions → mismo endpoint) |
 | Dominio compartido | `packages/shared/src/domain.ts` |
 | Pipeline UI | `apps/web/src/app/pipeline/page.tsx` |
 | Dashboard | `apps/web/src/app/page.tsx` + `apps/api/src/routes/dashboard.ts` |
@@ -135,11 +136,25 @@ Ver `.env.example`. Críticas para este módulo:
 | `STUCK_RUNNING_MINUTES` | Execution Kapso en `running` sin avanzar → `ended` (+ mensaje de recuperación). Default 3 |
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
+| `SANDBOX_RESET_ENABLED` | `true` solo en semana de pruebas: permite wipe vía `/api/cron/sandbox-reset` |
+| `SANDBOX_RESET_UNTIL` | ISO datetime; pasado ese momento el endpoint no borra (ej. `2026-08-05T00:00:00-03:00`) |
+| `SANDBOX_RESET_PHONES` | Opcional CSV; vacío = todas las conversations |
 | `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención comercial / sin cobertura |
 | `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | Sheet dist / rep / fasón |
 | `GOOGLE_SHEET_NO_COVERAGE_ID` | Sheet sin cobertura |
 
 Web: `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
+
+## Sandbox reset (semana de pruebas)
+
+Objetivo: mismo teléfono tipifica de nuevo sin esperar el lock de 1 año.
+
+1. Vercel API: `SANDBOX_RESET_ENABLED=true` + `SANDBOX_RESET_UNTIL=…` (sin `PHONES` = wipe total).
+2. Endpoint: `GET|POST /api/cron/sandbox-reset` (auth `CRON_SECRET`) → Kapso `waiting|running|handoff` → `ended` + delete `conversations` (+ muestras).
+3. Scheduler gratis: [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) cada 20 min; secret del repo `CRON_SECRET` (= valor en Vercel).
+4. Apagar: Disable workflow y/o `SANDBOX_RESET_ENABLED=false`.
+
+Ops one-pager: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7.
 
 ## Dashboard (API)
 
@@ -246,7 +261,7 @@ Reset de un tester (ej. `543513053755`):
 3. Guard de status en **API** `/bot/upsert-conversation` (la function ya protege terminales + `muestras` + interés comercial).
 4. Unificar `decide_route` (function vs `routing.ts`) o llamar siempre a la API.
 5. Confirmar secrets Kapso de los 4 sheets (`GOOGLE_SHEET_*` + webhook) en todos los entornos.
-6. Verificar cron + `CRON_SECRET` en Vercel API en producción.
+6. Cron: Hobby no permite `*/20` en Vercel; sandbox reset va por GitHub Actions + `CRON_SECRET` en el repo. `pipeline-timeouts` se puede llamar igual con curl/Actions si hace falta más frecuente que 1×/día.
 7. Auth real (hoy `optionalInternalAuth` / roles stub).
 8. Tras cada `kapso build` + `update-graph`, **siempre** confirmar `function_id` en tools.
 9. No cortar executions `waiting`/`handoff` mid-prueba al desplegar (rompe el hilo del lead).
