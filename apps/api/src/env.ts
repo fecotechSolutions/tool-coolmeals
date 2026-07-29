@@ -49,6 +49,30 @@ const envSchema = z.object({
   STUCK_RUNNING_MINUTES: z.coerce.number().positive().default(3),
 
   /**
+   * Semana de pruebas sandbox: reset periódico (Kapso ended + borrar conversations).
+   * Debe ser explícito `true`. Combinar con SANDBOX_RESET_UNTIL para apagar solo.
+   */
+  SANDBOX_RESET_ENABLED: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
+  /** ISO datetime; pasado ese momento el endpoint no borra nada. Ej. 2026-08-05T00:00:00-03:00 */
+  SANDBOX_RESET_UNTIL: z.string().min(1).optional(),
+  /**
+   * Lista CSV de teléfonos a resetear. Vacío = todas las conversations (solo con ENABLED).
+   * Ej. +543513053755,+54911...
+   */
+  SANDBOX_RESET_PHONES: z
+    .string()
+    .optional()
+    .transform((value) =>
+      (value ?? "")
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean),
+    ),
+
+  /**
    * Google Sheets — set in `.env`. No production IDs hardcoded in source.
    */
   GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID: z.string().min(1).optional(),

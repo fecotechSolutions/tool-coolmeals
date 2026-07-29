@@ -1,6 +1,6 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: **28 jul 2026**.
+Una hoja para mostrar / imprimir. Actualizado: **29 jul 2026**.
 
 > Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md)
 
@@ -118,6 +118,32 @@ Mismo número muchas veces en el año → **1 lead**. Dos cards rojas en el per�
 - [ ] Sin cobertura / Esperando: auto ~22 h  
 - [ ] Dashboard con filtro de fecha  
 
+---
+
+## 7. Semana de pruebas (sandbox) — reset cada 20 min
+
+Para que el mismo teléfono (el de Kapso sandbox) pueda tipificar otra vez:
+
+**Ya en prod (API):** `SANDBOX_RESET_ENABLED=true` hasta `2026-08-05T00:00:00-03:00`.  
+No hace falta `SANDBOX_RESET_PHONES` (limpia todas las cards).
+
+**Pendiente — cron externo cada 20 min** (Hobby no permite `*/20` en Vercel):
+
+1. Abrí [cron-job.org](https://cron-job.org) (gratis) → Create cronjob.
+2. URL: `https://tool-coolmeals-api-ten.vercel.app/api/cron/sandbox-reset`
+3. Schedule: every 20 minutes.
+4. Header: `Authorization` = `Bearer ` + el valor de `CRON_SECRET`  
+   (Vercel → proyecto **tool-coolmeals-api** → Settings → Environment Variables → revelar `CRON_SECRET`).
+5. Al final de la semana: en Vercel poné `SANDBOX_RESET_ENABLED=false` (o esperá al `UNTIL`) y borrá el cronjob.
+
+Prueba manual (reemplazá el secret):
+
+```bash
+curl -sS -H "Authorization: Bearer TU_CRON_SECRET" \
+  "https://tool-coolmeals-api-ten.vercel.app/api/cron/sandbox-reset"
+```
+
+Respuesta OK: `"enabled": true` y counts de Kapso/DB. Si `"skippedReason"` → el flag no está activo o ya pasó la fecha.
 ---
 
 *Planilla técnica:* [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv)

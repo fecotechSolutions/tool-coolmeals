@@ -5,6 +5,7 @@ import {
   finalizeDerivedConversations,
   runPipelineTimeouts,
 } from "../lib/finalize-derived";
+import { runSandboxReset } from "../lib/sandbox-reset";
 
 export const cronRoutes = new Hono();
 
@@ -60,3 +61,26 @@ cronRoutes.post("/finalize-handoffs-only", async (c) => {
     return c.json(fail("CRON_ERROR", message), 500);
   }
 });
+
+/**
+ * Semana de pruebas: termina executions Kapso activas y borra conversations
+ * para que el mismo teléfono pueda tipificar de nuevo.
+ * Requiere SANDBOX_RESET_ENABLED=true (+ auth CRON_SECRET).
+ */
+async function runSandbox(c: {
+  json: (body: unknown, status?: number) => Response;
+}) {
+  if (!authorizeCron(c as never)) {
+    return c.json(fail("UNAUTHORIZED", "Invalid cron secret"), 401);
+  }
+  try {
+    const result = await runSandboxReset();
+    return c.json(ok(result));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return c.json(fail("CRON_ERROR", message), 500);
+  }
+}
+
+cronRoutes.post("/sandbox-reset", (c) => runSandbox(c));
+cronRoutes.get("/sandbox-reset", (c) => runSandbox(c));

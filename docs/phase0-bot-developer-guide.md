@@ -28,6 +28,7 @@ WhatsApp (Meta)
 | Kapso client (API) | `apps/api/src/lib/kapso.ts` |
 | Bot HTTP (UI/ops) | `apps/api/src/routes/bot.ts` |
 | Cron | `apps/api/src/routes/cron.ts` → `/api/cron/pipeline-timeouts` |
+| Sandbox reset (pruebas) | `/api/cron/sandbox-reset` + `SANDBOX_RESET_*` → `lib/sandbox-reset.ts` |
 | Dominio compartido | `packages/shared/src/domain.ts` |
 | Pipeline UI | `apps/web/src/app/pipeline/page.tsx` |
 | Dashboard | `apps/web/src/app/page.tsx` + `apps/api/src/routes/dashboard.ts` |
