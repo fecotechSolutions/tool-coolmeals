@@ -1,0 +1,38 @@
+# Semana de pruebas sandbox: limpia Kapso + conversations cada ~20 min.
+# Gratis (repo público). Apagar: desactivar este workflow o SANDBOX_RESET_ENABLED=false.
+name: Sandbox reset
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call sandbox-reset
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing CRON_SECRET repo secret" >&2
+            exit 1
+          fi
+          curl -sS -f -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://tool-coolmeals-api-ten.vercel.app/api/cron/sandbox-reset" \
+            | tee /tmp/sandbox-reset.json
+          python3 - <<'PY'
+          import json, sys
+          data = json.load(open("/tmp/sandbox-reset.json"))
+          # shared ok() wraps payload; accept either shape
+          payload = data.get("data", data)
+          if payload.get("enabled") is False and payload.get("skippedReason"):
+              print("skipped:", payload["skippedReason"])
+              sys.exit(0)
+          if "error" in data:
+              print(data)
+              sys.exit(1)
+          print("ok:", json.dumps(payload, ensure_ascii=False)[:800])
+          PY
