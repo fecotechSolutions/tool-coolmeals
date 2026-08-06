@@ -128,7 +128,7 @@ Para que el mismo teléfono (Kapso sandbox) pueda tipificar otra vez **sin hacer
 
 | Qué | Dónde |
 |-----|--------|
-| Flag + hasta | Vercel API: `SANDBOX_RESET_ENABLED=true`, `UNTIL=2026-08-05T00:00:00-03:00` |
+| Flag + hasta | Vercel API: `SANDBOX_RESET_ENABLED=true`, `UNTIL=2026-08-20T00:00:00-03:00` |
 | Teléfonos | Sin lista (= limpia **todas** las cards) |
 | Scheduler | GitHub Actions cada 20 min → [runs](https://github.com/fecotechSolutions/tool-coolmeals/actions) |
 | Código | [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) → `/api/cron/sandbox-reset` |

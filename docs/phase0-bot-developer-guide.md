@@ -137,7 +137,7 @@ Ver `.env.example`. Críticas para este módulo:
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
 | `SANDBOX_RESET_ENABLED` | `true` solo en semana de pruebas: permite wipe vía `/api/cron/sandbox-reset` |
-| `SANDBOX_RESET_UNTIL` | ISO datetime; pasado ese momento el endpoint no borra (ej. `2026-08-05T00:00:00-03:00`) |
+| `SANDBOX_RESET_UNTIL` | ISO datetime; pasado ese momento el endpoint no borra (ej. `2026-08-20T00:00:00-03:00`) |
 | `SANDBOX_RESET_PHONES` | Opcional CSV; vacío = todas las conversations |
 | `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención comercial / sin cobertura |
 | `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | Sheet dist / rep / fasón |
