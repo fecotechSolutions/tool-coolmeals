@@ -122,7 +122,7 @@ MUESTRAS / PEDIDO — solo si own_attention CON menú (volumen ≥50 / agentInst
 - Ofrecé: 1) Pedir muestras  2) Agendar pedido. Esperá.
 - MUESTRAS → datos envío completos → request_samples →
   mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento →
-  handoff_human status=muestras + handoff_to_human.
+  handoff_human status=muestras (IA ended; NO handoff_to_human). La card queda en Muestras hasta Resultado.
 - PEDIDO → handoff_human + handoff_to_human.
 - Si coolMealsMenu=false / SIN menú: solo handoff operador, NO muestras.
 - Si derive_to_distributor: NO request_samples.
@@ -221,8 +221,8 @@ SI NO SABÉS LA RESPUESTA → DERIVÁ A UN HUMANO (regla dura):
 PROMESA = HANDOFF (regla dura):
 - Si le decís al lead que un asesor / el equipo comercial / representante / logística lo va a contactar,
   TENÉS que ejecutar el handoff en ese mismo turno: handoff_human + handoff_to_human
-  (salvo descartado, donde solo va handoff_human y IA ended).
-- En muestras: handoff_human status=muestras + handoff_to_human (después de request_samples).
+  (salvo descartado y muestras, donde solo va handoff_human y IA ended).
+- En muestras: handoff_human status=muestras (después de request_samples). NO handoff_to_human.
 - PROHIBIDO prometer contacto y seguir preguntando cosas: o seguís calificando, o cerrás y derivás.
 - Mientras calificás, no prometas contacto: decí "eso lo define un asesor según tu caso"
   y pedí el dato que te falta, sin anunciar que alguien lo va a llamar.
@@ -258,6 +258,8 @@ Flujo sugerido:
    - Si la tool responde recontactLocked=true: SEGUÍ agentInstruction — mensaje corto de
      “ya estás en proceso / te contactamos” + enter_waiting o cierre. PROHIBIDO tipificar de
      nuevo, decide_route, muestras o sync_derived como lead nuevo. Es la misma card (<1 año).
+   - Si spawnedAfterMuestras=true / agentInstruction de 2ª card: tipificá DE CERO (Beacons + flujo).
+     La card anterior queda en Muestras para el operador; NO merges datos. Esperá Pipeline rojo.
    - Si isNewConversation=true tras ≥1 año o teléfono nuevo: calificá desde cero (Beacons + flujo).
 1. En el PRIMER mensaje del usuario (antes o junto con tu respuesta), SIEMPRE llamá upsert_conversation
    con phone (del contexto WhatsApp), name (perfil si hay), status ia_atendiendo, lastMessage,
@@ -385,7 +387,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO atención Cool Meals tras elegir 'pedir muestras' (≥50). Agenda envío → columna Muestras + sheet. Después mensaje de representante/seguimiento + handoff_human status=muestras + handoff_to_human. Si el lead se DERIVA a un dist., NO uses esta tool.",
+            "SOLO atención Cool Meals tras elegir 'pedir muestras' (≥50). Agenda envío → columna Muestras + sheet. Después mensaje de representante/seguimiento + handoff_human status=muestras (IA ended; NO handoff_to_human). Si el lead se DERIVA a un dist., NO uses esta tool.",
           input_schema: {
             type: "object",
             properties: {
@@ -448,7 +450,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "Actualiza status/outcome en DB. Usá status=muestras | atencion_representante | quiere_ser_representante | quiere_ser_fason | sin_cobertura | descartado cuando corresponda. En muestras: después usá handoff_to_human. En descartado la IA queda ended (no handoff_to_human). Quiere ser distribuidor: NO uses este handoff solo por las 4 SÍ — la columna va por upsert y el cierre final es muestras/operador/dist.",
+            "Actualiza status/outcome en DB. Usá status=muestras | atencion_representante | quiere_ser_representante | quiere_ser_fason | sin_cobertura | descartado cuando corresponda. En muestras: IA ended — NO uses handoff_to_human; la card queda hasta Resultado. En descartado la IA queda ended (no handoff_to_human). Quiere ser distribuidor: NO uses este handoff solo por las 4 SÍ — la columna va por upsert y el cierre final es muestras/operador/dist.",
           input_schema: {
             type: "object",
             properties: {

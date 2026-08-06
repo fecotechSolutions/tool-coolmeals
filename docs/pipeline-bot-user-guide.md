@@ -2,7 +2,7 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: **28 julio 2026** (ruteo volumen-first; recontacto 1 año; cards dup; handoff vs Kapso ended vs cierre ops).
+Actualizado: **6 ago 2026** (Muestras: Kapso ended + 2ª card si reescribe; ruteo volumen-first).
 
 > **One-pager para operadores:** [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md)  
 > **Planilla de lógica + casos:** [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) + [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md)  
@@ -85,13 +85,14 @@ Si hay **2+ cards** con el mismo número (normalizado):
 | Quiere ser representante / fasón | Sí, al confirmar |
 | Quiere ser distribuidor (solo 4 SÍ) | **No** — solo columna |
 | Dist → ruteo posterior (≥50 / CBA / fuera) | Sí, al cerrar ese camino |
-| Atención humana / Derivado / Sin cobertura / Muestras / pedido | Sí |
+| Atención humana / Derivado / Sin cobertura / pedido | Sí |
+| Muestras (agendadas) | **No** — Kapso `ended`; card sigue hasta Resultado |
 | Descartado consumidor | Ended directo (sin handoff humano) |
 
 ### Kapso `ended`
 
-Resultado del operador; auto Sin cobertura / Esperando ~22 h; Descartado basura; watchdog si `running` ≥3 min.  
-Un handoff **solo** deja la execution en `handoff` hasta ese cierre.
+Resultado del operador; auto Sin cobertura / Esperando ~22 h; Descartado basura; **Muestras** al agendar; watchdog si `running` ≥3 min.  
+Un handoff **solo** deja la execution en `handoff` hasta ese cierre (Atención / Derivado / etc.).
 
 ### Cierre para el equipo (Pipeline)
 
@@ -123,7 +124,8 @@ Cuando el volumen es **≥ 50 cajas** (Córdoba u otra), el bot ofrece el menú:
 1. Datos de envío completos (nombre, tel, empresa, provincia, DNI, correo, CP, dirección).  
 2. Sheet de logística + DB.  
 3. Mensaje: se coordinan las muestras y un **representante** hace el seguimiento.  
-4. Handoff; columna **Muestras**.
+4. Kapso **`ended`**; columna **Muestras** (card sigue hasta Resultado).  
+5. Si reescribe: tipificación nueva → **2ª card** (sin merge con la de Muestras).
 
 ### Si elige pedido
 

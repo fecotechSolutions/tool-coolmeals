@@ -1,6 +1,6 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: **29 jul 2026**.
+Una hoja para mostrar / imprimir. Actualizado: **6 ago 2026**.
 
 > Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md)
 
@@ -52,7 +52,7 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 | **Atención humana** | Sí | Córdoba &lt;50, pedido del menú, “hablar con alguien”, 2ª vez precio/dato desconocido |
 | **Derivado** | Sí | Tras derivar al dist |
 | **Sin cobertura** | Sí | Al avisar sin zona |
-| **Muestras** | Sí | Tras agendar muestras |
+| **Muestras** | **No** (`ended`) | Tras agendar muestras — card sigue hasta Resultado |
 | **Descartado** (consumidor) | No `handoff_to_human` | IA a **ended** directo |
 | Nuevo / IA atendiendo | No | Bot sigue |
 
@@ -64,7 +64,8 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 | Auto Sin cobertura ~22 h | Sí (+ Descartado) |
 | Auto Esperando respuesta ~22 h | Sí (+ Finalizado) |
 | Bot Descartado (consumidor) | Sí |
-| Solo handoff (Atención, Derivado, Muestras, Quiere ser rep/fasón…) | **No** — queda en `handoff` hasta Resultado (o auto si aplica) |
+| Bot **Muestras** (agendadas) | Sí — card sigue en **Muestras** hasta Resultado |
+| Solo handoff (Atención, Derivado, Quiere ser rep/fasón…) | **No** — queda en `handoff` hasta Resultado (o auto si aplica) |
 | Execution trabada en `running` ≥3 min | Sí (watchdog) |
 
 ### C) Cuándo se **cierra para ustedes** (Pipeline limpio)
@@ -87,7 +88,8 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 | Caso | ¿Lead nuevo en Dashboard? | ¿Tipifica de nuevo? |
 |------|---------------------------|---------------------|
 | &lt; 1 año, Nuevo / IA atendiendo | No (misma card) | Sí |
-| &lt; 1 año, **ya calificado** | **No** | **No** — “ya estás en proceso” |
+| &lt; 1 año, **Muestras** (IA ya ended) | **Sí** (2ª card) | **Sí**, de cero — la 1ª queda en Muestras |
+| &lt; 1 año, **ya calificado** (otras columnas) | **No** | **No** — “ya estás en proceso” |
 | Última card **≥ 1 año** | **Sí** | **Sí**, de cero |
 
 ---

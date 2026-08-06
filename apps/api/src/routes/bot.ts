@@ -90,10 +90,12 @@ botRoutes.post(
     };
 
     // Ya calificado / cerrado dentro del año: no pisar datos ni crear lead nuevo.
+    // Excepción muestras: card queda para ops; nuevo WA = 2ª card fresca (no merge).
     if (
       existing &&
       withinLock(existing.created_at) &&
-      !MID_FLOW.has(String(existing.status))
+      !MID_FLOW.has(String(existing.status)) &&
+      String(existing.status) !== "muestras"
     ) {
       const touch: Record<string, unknown> = {};
       if (body.lastMessage !== undefined) touch.last_message = body.lastMessage;
@@ -149,6 +151,10 @@ botRoutes.post(
       patch.kapso_execution_id = body.kapsoExecutionId;
 
     let row: DbConversation;
+    const spawnedAfterMuestras =
+      !!existing &&
+      withinLock(existing.created_at) &&
+      String(existing.status) === "muestras";
     const canPatch =
       existing &&
       withinLock(existing.created_at) &&
@@ -201,7 +207,18 @@ botRoutes.post(
       row = data as DbConversation;
     }
 
-    return c.json(ok(mapConversation(row)));
+    const mapped = mapConversation(row);
+    return c.json(
+      ok({
+        ...mapped,
+        ...(spawnedAfterMuestras
+          ? {
+              spawnedAfterMuestras: true,
+              priorConversationId: existing!.id,
+            }
+          : {}),
+      }),
+    );
   },
 );
 
@@ -272,9 +289,10 @@ botRoutes.post(
         ? body.status
         : "atencion_representante";
 
-    const closesBot = status === "descartado";
+    const closesBot = status === "descartado" || status === "muestras";
 
-    // Descartado: cerrar IA (ended). Muestras y resto: pausar (handoff) para seguimiento humano.
+    // Descartado / Muestras: cerrar IA (ended). Resto: pausar (handoff) para seguimiento humano.
+    // Muestras: la card permanece en Pipeline hasta Resultado del operador.
     // Incluir handoff en la búsqueda por si la card ya venía de otra columna pausada.
     const executionId = await findKapsoExecutionForHandoff({
       executionId: body.kapsoExecutionId ?? existingRow.kapso_execution_id,
@@ -345,7 +363,9 @@ botRoutes.post(
         ...(Array.isArray(existingRow.tags) ? existingRow.tags : []).filter(
           (tag) => tag !== "#atendido_por_representante",
         ),
-        ...(status === "sin_cobertura" || status === "descartado"
+        ...(status === "sin_cobertura" ||
+        status === "descartado" ||
+        status === "muestras"
           ? []
           : [HASHTAG_ATENCION_HUMANA]),
       ]),
@@ -361,7 +381,7 @@ botRoutes.post(
 
     const notePrefix =
       status === "muestras"
-        ? "Handoff muestras (seguimiento representante)"
+        ? "Muestras agendadas + IA cerrada (ended); card queda hasta Resultado"
         : status === "descartado"
           ? "Descartado + IA cerrada (ended)"
           : "Handoff";

@@ -181,7 +181,7 @@ Ops one-pager: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §
 | `no_coverage` | `sin_cobertura` → auto **Descartado** ~22h |
 | `quiere_ser_representante` / `fason` | handoff a su columna |
 
-**Muestras (≥50):** datos envío → `request_samples` → mensaje representante seguimiento → `handoff_human` `muestras` + `handoff_to_human`.
+**Muestras (≥50):** datos envío → `request_samples` → mensaje representante → `handoff_human` `muestras` (**Kapso ended**, sin `handoff_to_human`). Card queda hasta Resultado. Nuevo WA → 2ª card fresca.
 
 ### Timeouts
 

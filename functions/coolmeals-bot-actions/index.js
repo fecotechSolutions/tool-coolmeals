@@ -149,9 +149,15 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
 
   // Mismo teléfono con card de hace < 1 año:
   // - mid-flujo: seguir calificando (upsert completo)
-  // - ya calificado/cerrado: NO pisar datos ni crear lead nuevo (métricas)
-  if (prior && isWithinRecontactLock(prior.created_at)) {
-    const priorStatus = prior.status || "ia_atendiendo";
+  // - muestras: IA ya ended; la card queda para el operador → INSERT 2ª card fresca (no merge)
+  // - resto ya calificado/cerrado: NO pisar datos ni crear lead nuevo (métricas)
+  const priorStatus = prior ? prior.status || "ia_atendiendo" : null;
+  const spawnFreshAfterMuestras =
+    !!prior &&
+    isWithinRecontactLock(prior.created_at) &&
+    priorStatus === "muestras";
+
+  if (prior && isWithinRecontactLock(prior.created_at) && !spawnFreshAfterMuestras) {
     const stillQualifying = !!MID_FLOW_STATUSES[priorStatus];
 
     if (!stillQualifying) {
@@ -278,7 +284,7 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
     row = Array.isArray(created) ? created[0] : created;
   }
 
-  return {
+  const out = {
     ok: true,
     conversationId: row.id,
     status: row.status,
@@ -286,6 +292,15 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
     recontactLocked: false,
     isNewConversation: !canPatchExisting,
   };
+  if (spawnFreshAfterMuestras) {
+    out.priorConversationId = prior.id;
+    out.spawnedAfterMuestras = true;
+    out.agentInstruction =
+      "Hay otra card del mismo teléfono en Muestras (el operador la cierra con Resultado). " +
+      "ESTA es una conversación NUEVA: tipificá de cero con lo que diga el lead ahora. " +
+      "NO copies ni merges datos de la card de muestras. Esperá dos cards del mismo número (Pipeline rojo).";
+  }
+  return out;
 }
 
 async function decideRoute(input, supabaseUrl, supabaseKey) {
@@ -418,7 +433,7 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       syncDerivedSheet: false,
       coolMealsMenu: true,
       agentInstruction:
-        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras + handoff_to_human. Si pedido: asesor te contacta; handoff_human + handoff_to_human.",
+        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras (IA ended; NO handoff_to_human). Si pedido: asesor te contacta; handoff_human + handoff_to_human.",
     };
   }
 
@@ -628,7 +643,7 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
     conversationId: conversationId,
     sheet: sheet,
     instruction:
-      "Muestra agendada (Pipeline Muestras + sheet logística). Mensaje al lead: se acuerdan/envían las muestras y un REPRESENTANTE se va a comunicar para el seguimiento. Luego handoff_human status=muestras + handoff_to_human (IA queda en handoff/cerrada). NO digas solo 'logística'; priorizá representante/seguimiento.",
+      "Muestra agendada (Pipeline Muestras + sheet logística). Mensaje al lead: se acuerdan/envían las muestras y un REPRESENTANTE se va a comunicar para el seguimiento. Luego handoff_human status=muestras (IA ended; NO handoff_to_human). La card queda en Muestras hasta Resultado del operador. NO digas solo 'logística'; priorizá representante/seguimiento.",
   };
 }
 
@@ -700,7 +715,8 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     status === "descartado"
       ? "Descartado + IA cerrada (ended): " + (input.reason || "sin perfil comercial")
       : status === "muestras"
-        ? "Handoff muestras (seguimiento representante): " + (input.reason || "muestras")
+        ? "Muestras agendadas + IA cerrada (ended); card queda hasta Resultado: " +
+          (input.reason || "muestras")
         : "Handoff: " + (input.reason || "atención humana"),
   ]
     .filter(Boolean)
@@ -711,10 +727,12 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
   ).filter(function (t) {
     return t !== "#atendido_por_representante";
   });
-  // Sin cobertura / descartado: sin forzar hashtag. Muestras sí marca atención humana (handoff).
+  // Sin cobertura / descartado / muestras (IA ended): sin forzar hashtag de handoff.
   const tags = Array.from(
     new Set(
-      status === "sin_cobertura" || status === "descartado"
+      status === "sin_cobertura" ||
+        status === "descartado" ||
+        status === "muestras"
         ? tagsBase
         : tagsBase.concat(["#atencion_humana"]),
     ),
@@ -778,9 +796,10 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     };
   }
 
-  // Descartado: cerrar IA (ended). Muestras y resto: el agent usa handoff_to_human.
+  // Descartado + Muestras: cerrar IA (ended). Resto: el agent usa handoff_to_human.
+  // Muestras: la card permanece en Pipeline hasta Resultado del operador.
   let kapsoClose = { ok: false, skipped: true, mode: null };
-  if (status === "descartado" && kapsoExecutionId) {
+  if ((status === "descartado" || status === "muestras") && kapsoExecutionId) {
     kapsoClose = await kapsoSetExecutionStatus(env, kapsoExecutionId, "ended");
     kapsoClose.mode = "ended";
   }
@@ -795,7 +814,7 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     kapsoClose: kapsoClose,
     instruction:
       status === "muestras"
-        ? "Muestras: sheet/Pipeline listos. Usá handoff_to_human. Avisá que un representante hace el seguimiento."
+        ? "Muestras: sheet/Pipeline listos e IA en ended. NO uses handoff_to_human. Avisá que un representante hace el seguimiento. La card queda en Muestras hasta Resultado."
         : status === "descartado"
           ? "Descartado: IA en ended. NO uses handoff_to_human. Solo mensaje humano breve de cierre (sin decir 'descartado')."
           : "Usá handoff_to_human en el agent. Octavio responde en el mismo WhatsApp.",
