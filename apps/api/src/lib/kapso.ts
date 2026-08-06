@@ -69,6 +69,7 @@ async function kapsoRequest<T>(
       "X-API-Key": config.apiKey,
     },
     body: init?.body !== undefined ? JSON.stringify(init.body) : undefined,
+    signal: AbortSignal.timeout(12_000),
   });
 
   const text = await response.text();
