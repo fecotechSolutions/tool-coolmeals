@@ -1,7 +1,7 @@
 # Anexo: planilla + prompt + Pipeline
 
 Compañero de [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
-Actualizado: **28 julio 2026**.
+Actualizado: **11 ago 2026**.
 
 ---
 
@@ -14,12 +14,13 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | Beacons | `https://beacons.ai/froodie` en el **primer mensaje** y si piden catálogo/sabores. **Sin precios** |
 | Orden motor | 1) rep/fasón → 2) **≥50 cualquier provincia** → menú → 3) **Córdoba &lt;50** → operador sin menú → 4) fuera CBA &lt;50 → dist / sin_cobertura |
 | Minorista / gastronómico | Siempre `minorista`. No bloquear por volumen; si da ≥50 → menú |
-| Muestras | Solo si `own_attention` **con** `coolMealsMenu` (≥50). Luego `request_samples` + handoff `muestras` |
+| Muestras | Solo si `own_attention` **con** `coolMealsMenu` (≥50). `request_samples` + `handoff_human` `muestras` → **Kapso `ended`** (sin `handoff_to_human`). Card queda hasta Resultado |
 | Consumidor final | `descartado` (IA `ended`, **sin** `handoff_to_human`) |
 | “Hablar con un representante” | `atencion_representante` — **no** `quiere_ser_representante` |
 | Quiere ser distribuidor | 4 SÍ → columna con `upsert` **sin handoff** → luego `decide_route` por vol/zona |
 | Auto-cierre | `sin_cobertura` ~22h → **Descartado**; `esperando_respuesta` ~22h → **Finalizado** |
-| Recontacto mismo WA &lt;1 año (ya calificado) | No tipificar de nuevo; no lead nuevo en métricas |
+| Recontacto mismo WA &lt;1 año (ya calificado, **no** muestras) | No tipificar de nuevo; no lead nuevo en métricas |
+| Recontacto con card en **Muestras** | Tipifica de cero → **2ª card** (sin merge); la 1ª sigue en Muestras |
 | Recontacto ≥1 año | Nueva card + recalificar |
 | Pipeline dup phone | UI: cards rojas + badge 1/2 (solo visual) |
 
@@ -33,7 +34,7 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | ≥50 menú / operador CBA | `atencion_representante` (luego `muestras` si eligió) | `decide_route` → menú o handoff |
 | Derivado | `derivado_distribuidor` | `sync_derived` + `handoff_to_human` |
 | Sin cobertura | `sin_cobertura` | `handoff_human` + `handoff_to_human` → auto **Descartado** |
-| Muestras Cool Meals | `muestras` | `request_samples` + `handoff_human` + `handoff_to_human` |
+| Muestras Cool Meals | `muestras` | `request_samples` + `handoff_human` (IA **ended**; **no** `handoff_to_human`) |
 | Quiere ser dist (4 SÍ) | `quiere_ser_distribuidor` | solo `upsert` (sin handoff) |
 | Quiere ser rep / fasón | `quiere_ser_*` | `handoff_human` + `handoff_to_human` |
 | Basura | `descartado` | solo `handoff_human` |
@@ -61,7 +62,7 @@ flowchart TD
   R -->|<50 Córdoba| H2[Operador SIN menú]
   R -->|<50 fuera + dist| Dist[Nombrar dist + sync_derived]
   R -->|<50 fuera sin dist| SC[sin_cobertura → auto Descartado]
-  M -->|Muestras| MS[Datos + request_samples + handoff]
+  M -->|Muestras| MS[Datos + request_samples + Kapso ended]
   M -->|Pedido| H2
 ```
 

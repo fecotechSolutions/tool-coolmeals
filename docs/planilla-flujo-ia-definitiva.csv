@@ -10,7 +10,7 @@ ORDEN_EVALUACION,4,P4,Volumen ≥50 (prioridad volumen),casi cualquiera,CUALQUIE
 ORDEN_EVALUACION,4,P5,Córdoba + volumen <50 o sin volumen,minorista|retail|mayorista|dist|otro,Córdoba,<50 o null,Zona Córdoba sin umbral,Cierre operador SIN menú,decide_route → own_attention coolMealsMenu=false → handoff,atencion_representante,handoff_humano,Córdoba <50 NO va a dist de zona
 ORDEN_EVALUACION,4,P6,Fuera Córdoba + <50 o sin vol + hay dist,minorista|retail|mayorista|dist|otro,otra,<50 o null,Zona con cobertura,Nombrar dist + despedida (antes: nombre/tel/negocio),decide_route → sync_derived + handoff_to_human,derivado_distribuidor,derivado_distribuidor,"CP→mapa provincia→coveredProvinces→prov dist. Si pidió muestras con <50: NO request_samples."
 ORDEN_EVALUACION,4,P7,Fuera Córdoba + <50 + sin dist,mismo,otra,<50 o null,Zona sin cobertura,Aún no llegamos; te avisamos,handoff_human status=sin_cobertura + handoff_to_human,sin_cobertura,sin_cobertura,Auto ~22h → Descartado + ended
-ORDEN_EVALUACION,5,P8,Elige muestras (solo menú ≥50),—,cualquiera,≥50,Elige 1 muestras,Pedir datos envío completos + rep hace seguimiento,request_samples → handoff_human status=muestras + handoff_to_human,muestras,muestras,"Nombre Apellido Tel Empresa Provincia DNI Correo CP Dirección"
+ORDEN_EVALUACION,5,P8,Elige muestras (solo menú ≥50),—,cualquiera,≥50,Elige 1 muestras,Pedir datos envío completos + rep hace seguimiento,request_samples → handoff_human status=muestras (IA ended; NO handoff_to_human),muestras,muestras,"Card queda hasta Resultado. Nuevo WA → 2ª card fresca. Datos: Nombre Apellido Tel Empresa Provincia DNI Correo CP Dirección"
 ORDEN_EVALUACION,5,P9,Elige pedido (solo menú ≥50),—,cualquiera,≥50,Elige 2 pedido,Asesor te contacta + despedida,handoff_human + handoff_to_human,atencion_representante,handoff_humano,Octavio / comercial
 ORDEN_EVALUACION,6,P10,Quiere SER distribuidor — 4 preguntas,quiere dist,pedir,pedir tras 4 SÍ,Quiere sumarse a la red,4 preguntas juntas,PROHIBIDO decide_route/handoff hasta completar 4,ia_atendiendo,—,"YA tiene dist y quiere COMPRAR = mayorista (sin las 4)."
 ORDEN_EVALUACION,6,P10a,4 SÍ distribuidor,distribuidor,pedir,pedir,4 SÍ,Seguir zona/volumen (aviso 50); NO handoff por los 4 SÍ,upsert status=quiere_ser_distribuidor (columna) → luego decide_route,quiere_ser_distribuidor → luego ruta por vol/zona,—,"Columna vía upsert; el cierre lo define decide_route (≥50 menú / CBA operador / dist)."
@@ -30,7 +30,7 @@ CASO_PRUEBA,2,C10,Córdoba mayorista <50,mayorista,Córdoba,20,~20 bultos Córdo
 CASO_PRUEBA,2,C11,Mendoza ≥50 (fuera CBA),mayorista,Mendoza,120,~120 cajas Mendoza,Menú muestras/pedido (volumen gana),decide_route coolMealsMenu,atencion_representante → muestras|pedido,—,"ANTES: iba a dist; AHORA menú Cool Meals"
 CASO_PRUEBA,2,C12,Mendoza <50 con dist,minorista,Mendoza,null o <50,Rotisería Mendoza,Derivar nombrando dist,sync_derived + handoff,derivado_distribuidor,—,Sin request_samples Cool Meals
 CASO_PRUEBA,2,C13,Provincia sin cobertura,mayorista,La Rioja,20,Zona sin dist,Sin cobertura + aviso,handoff sin_cobertura,sin_cobertura,→ auto Descartado ~22h,
-CASO_PRUEBA,3,C14,Elige muestras tras menú,mayorista,CBA,60,Elige muestras + datos,Datos + mensaje rep seguimiento,request_samples + handoff muestras,muestras,muestras,Sheet logística
+CASO_PRUEBA,3,C14,Elige muestras tras menú,mayorista,CBA,60,Elige muestras + datos,Datos + mensaje rep seguimiento,request_samples + handoff_human muestras (ended),muestras,muestras,"Sheet logística; Kapso ended; card hasta Resultado"
 CASO_PRUEBA,3,C15,Elige pedido tras menú,mayorista,CBA,60,Elige pedido,Asesor contacta,handoff,atencion_representante,—,
 CASO_PRUEBA,3,C16,Muestras pedidas sin calificar,?,?,"Quiero muestras",Seguir tipificar/zona/vol; NO armar envío aún,según decide_route,—,—,Muestras solo con coolMealsMenu
 CASO_PRUEBA,3,C17,Local gastronómico = minorista,minorista,Mendoza,—,Rotisería/resto,Sin exigir volumen; ruteo zona,decide_route,derivado o CBA operador,—,
@@ -43,12 +43,12 @@ EMBALAJE,—,E02,Conversión unidades→cajas,—,—,—,Lead habla en unidades
 AUTO_CIERRE,—,A01,nuevo / ia_atendiendo inactivo ≥22h,—,—,—,Abandono,Nudge WA + handoff,cron,esperando_respuesta,—,ABANDONED_TO_WAITING_HOURS
 AUTO_CIERRE,—,A02,esperando_respuesta finalize_at,—,—,—,Ventana vencida,Finalizado + ended,cron,finalizado,—,ESPERANDO_TO_FINALIZE_HOURS
 AUTO_CIERRE,—,A03,sin_cobertura finalize_at,—,—,—,Ventana vencida,Descartado + ended,cron,descartado,—,No Finalizado
-AUTO_CIERRE,—,A04,derivado / atencion / muestras / quiere_ser_* / pedidos,—,—,—,Handoff activo,NO auto; Resultado manual,—,según Resultado,—,"éxito / sin éxito / descartado"
+AUTO_CIERRE,—,A04,derivado / atencion / quiere_ser_* / pedidos,—,—,—,Handoff activo,NO auto; Resultado manual,—,según Resultado,—,"éxito / sin éxito / descartado. Muestras: Kapso ya ended; card igual hasta Resultado"
 UI,—,U01,Menú lateral web,—,—,—,—,Visibles: Dashboard Pipeline Distribuidores Config comercial,—,—,—,"Ocultos por ahora: Muestras Conocimiento Prompt Manager (rutas viven)"
 UI,—,U02,URLs producción,—,—,—,—,—,—,—,—,"Web https://tool-coolmeals-web.vercel.app | API https://tool-coolmeals-api-ten.vercel.app | Team Vercel FEcotech | Deploy CLI (sin Git auto)"
-CASO_PRUEBA,4,C22,Recontacto <1 año ya calificado,—,—,—,Mismo WA tras handoff,Mensaje corto ya en proceso,upsert recontactLocked,misma card,—,No métrica nueva
+CASO_PRUEBA,4,C22,Recontacto <1 año ya calificado (no muestras),—,—,—,Mismo WA tras handoff (Atención/Derivado/etc.),Mensaje corto ya en proceso,upsert recontactLocked,misma card,—,No métrica nueva
+CASO_PRUEBA,4,C22b,Recontacto tras Muestras,—,—,—,Mismo WA con card en Muestras (IA ended),Tipifica de cero,upsert 2ª card (spawnedAfterMuestras),muestras (1ª) + nueva,—,Pipeline rojo 1/2; sin merge
 UI,—,U03,Cards mismo teléfono Pipeline,—,—,—,—,Rojas + badge 1 (primera) / 2 (segunda),—,—,—,Cerrar ambas con Resultado
 HANDOFF,—,H01,Tabla handoff vs Kapso ended vs cierre ops,—,—,—,—,—,—,—,—,"Ver operator-cheat-sheet-bot.md §2"
 REFS,—,R01,Fuentes de verdad,—,—,—,—,—,—,—,—,"routing.ts + coolmeals-bot-actions + workflow.ts | Docs: planilla + cheat-sheet + pipeline-bot-user-guide"
-REFS,—,R02,Recontacto mismo teléfono 1 año,—,—,—,—,—,—,—,—,"<1 año ya calificado: no métrica nueva ni tipificar. ≥1 año: nueva card + recalificar. Mid-flujo: seguir calificando."
-
+REFS,—,R02,Recontacto mismo teléfono 1 año,—,—,—,—,—,—,—,—,"<1 año ya calificado (salvo muestras): no métrica nueva ni tipificar. Muestras: 2ª card fresca. ≥1 año: nueva card + recalificar. Mid-flujo: seguir calificando."

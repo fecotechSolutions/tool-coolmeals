@@ -3,7 +3,7 @@
 Documento para el **operador comercial** (o quien valide el bot).  
 Objetivo: probar **cada flujo** de punta a punta y saber **dónde mirar** si algo no cuadra.
 
-Actualizado: **29 julio 2026**.
+Actualizado: **11 ago 2026**.
 
 Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).
 
@@ -42,15 +42,15 @@ Para **cada** caso, marcá estas 3–4 cosas:
 1. **WhatsApp:** el bot dijo lo esperado (derivación / asesor contacta / logística / menú, etc.).  
 2. **Pipeline:** la card está en la **columna correcta** (y el hashtag naranja del dist. si corresponde).  
 3. **Sheet** (si aplica): apareció una **fila nueva** con datos coherentes.  
-4. **Kapso** (si tenés acceso): execution en `handoff` (y más tarde `ended` cuando pasan ~24 h).
+4. **Kapso** (si tenés acceso): en handoffs típicos → `handoff`; en **Muestras** / Descartado → `ended`.
 
-Después del handoff el bot **se pausa**. Cierre manual con **Resultado**. Auto: **Sin cobertura** → **Descartado** ~22 h; **Esperando respuesta** → **Finalizado** ~22 h.
+Después del handoff el bot **se pausa** (Atención / Derivado / etc.). En **Muestras** Kapso ya está `ended` y la card **sigue** hasta **Resultado**. Auto: **Sin cobertura** → **Descartado** ~22 h; **Esperando respuesta** → **Finalizado** ~22 h.
 
 ---
 
 ## 4. Reset entre pruebas (importante)
 
-**Semana de pruebas (julio–ago 2026):** cada ~**20 min** un job automático limpia Kapso + Pipeline  
+**Semana de pruebas (hasta ~20 ago 2026):** cada ~**20 min** un job automático limpia Kapso + Pipeline  
 (mismo teléfono puede tipificar de nuevo). Ver cheat sheet §7 / Actions → **Sandbox reset**.  
 No hace falta pedir reset a mano salvo que necesites probar **ya** (entonces: Actions → Run workflow, o esperá el próximo ciclo).
 
@@ -245,13 +245,14 @@ Fernanda Romay, +543513053755, Cool Meals Test SA, Córdoba, 30111222, fernanda@
 **Qué tiene que pasar**
 
 1. Confirma que las muestras quedaron **agendadas**.  
-2. Dice que el **equipo de logística** se contacta para el envío (no “un asesor te arma las muestras”).  
-3. **Pipeline** → columna **Muestras**.  
+2. Dice que un **representante** se comunica para el seguimiento (no “un asesor te arma las muestras” / no solo “logística”).  
+3. **Pipeline** → columna **Muestras** (la card **queda** hasta Resultado).  
 4. Pantalla **`/muestras`** → aparece el registro.  
 5. **Sheet de muestras** → fila nueva.  
-6. Handoff.
+6. Kapso → **`ended`** (no queda en `handoff`).  
+7. Si el lead escribe de nuevo: tipificación **de cero** → **2ª card** (Pipeline rojo 1/2); la de Muestras no se mergea.
 
-**No debe:** quedar en Atención humana solo por las muestras, ni prometer que “el asesor te va a armar el kit” por ese chat.
+**No debe:** quedar en Atención humana solo por las muestras; usar `handoff_to_human`; ni prometer que “el asesor te va a armar el kit” por ese chat.
 
 ---
 
@@ -308,7 +309,7 @@ Hola, soy mayorista en Mendoza, compro unos 80 bultos por mes
 
 1. **Menú Cool Meals** (muestras / pedido) — el volumen ≥50 **gana** sobre la zona.  
 2. **No** derivado a dist solo por estar en Mendoza.  
-3. Si elige muestras → columna Muestras + sheet; si pedido → Atención humana.
+3. Si elige muestras → columna Muestras + sheet + Kapso `ended`; si pedido → Atención humana + handoff.
 
 ---
 
@@ -388,7 +389,7 @@ Mandale a soporte / tech:
 | 3 | Minorista → derivado | ☐ | ☐ | Derivados ☐ | ☐ | |
 | 4 | Menú Cool Meals CBA ≥50 | ☐ | ☐ | — | (aún no) | |
 | 5a | Muestras Mendoza (derive) | ☐ | ☐ | sin sheet CM ☐ | ☐ | |
-| 5b | Muestras Cool Meals | ☐ | ☐ | Muestras + `/muestras` ☐ | ☐ | |
+| 5b | Muestras Cool Meals | ☐ | ☐ | Muestras + `/muestras` + Kapso `ended` ☐ | ☐ | |
 | 6 | Representante | ☐ | ☐ | Atención comercial ☐ | ☐ | |
 | 7 | Fasón | ☐ | ☐ | Atención comercial ☐ | ☐ | |
 | E1 | ≥50 fuera CBA → dist. | ☐ | ☐ | Derivados ☐ | ☐ | |
