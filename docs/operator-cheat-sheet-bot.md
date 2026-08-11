@@ -1,6 +1,6 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: **6 ago 2026**.
+Una hoja para mostrar / imprimir. Actualizado: **11 ago 2026**.
 
 > Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md)
 
@@ -14,6 +14,7 @@ Lead escribe por WhatsApp
 Saludo + link Beacons (catálogo, SIN precios)
         ↓
 Califica: tipo de negocio + zona (+ volumen si aplica)
+  (si algo no está claro → pregunta de desambiguación)
         ↓
 ¿Qué decide el sistema?
 ```

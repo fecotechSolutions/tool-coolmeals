@@ -1,7 +1,7 @@
 # Anexo: planilla + prompt + Pipeline
 
 Compañero de [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
-Actualizado: **11 ago 2026**.
+Actualizado: **11 ago 2026** (desambiguación si algo no está claro).
 
 ---
 
@@ -18,6 +18,7 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | Consumidor final | `descartado` (IA `ended`, **sin** `handoff_to_human`) |
 | “Hablar con un representante” | `atencion_representante` — **no** `quiere_ser_representante` |
 | Quiere ser distribuidor | 4 SÍ → columna con `upsert` **sin handoff** → luego `decide_route` por vol/zona |
+| Desambiguación | Si **cualquier** dato/camino no está claro → **1 pregunta** (2 opciones) antes de avanzar. Ej.: dist. compra vs ser marca; retail vs mayorista. Si ya está claro, no preguntar de más |
 | Auto-cierre | `sin_cobertura` ~22h → **Descartado**; `esperando_respuesta` ~22h → **Finalizado** |
 | Recontacto mismo WA &lt;1 año (ya calificado, **no** muestras) | No tipificar de nuevo; no lead nuevo en métricas |
 | Recontacto con card en **Muestras** | Tipifica de cero → **2ª card** (sin merge); la 1ª sigue en Muestras |
