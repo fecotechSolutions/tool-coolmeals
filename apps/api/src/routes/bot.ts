@@ -237,6 +237,26 @@ botRoutes.post(
 
     if (error) return c.json(fail("DB_ERROR", error.message), 500);
 
+    const certainty = String(input.certainty ?? "")
+      .trim()
+      .toLowerCase();
+    const isHigh =
+      certainty === "high" || certainty === "sure" || certainty === "claro";
+    if (!isHigh) {
+      return c.json(
+        ok({
+          ok: false,
+          needDisambiguation: true,
+          certainty: "low",
+          reason:
+            "Tipificación poco clara: no se puede rutear hasta desambiguar.",
+          agentInstruction:
+            "DESAMBIGUACIÓN OBLIGATORIA. UNA pregunta con 2 opciones sobre lo poco claro + enter_waiting. " +
+            "Cuando estés segura, volvé a decide_route con certainty=high.",
+        }),
+      );
+    }
+
     const distributors = ((distRows ?? []) as DbDistributor[]).map(
       mapDistributor,
     );

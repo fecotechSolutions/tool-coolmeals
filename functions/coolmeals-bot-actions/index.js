@@ -81,6 +81,55 @@ function sanitizeClientType(value) {
   return VALID_CLIENT_TYPES[n] ? n : null;
 }
 
+/** high = tipificación segura para avanzar; low/missing = forzar desambiguación. */
+function normalizeCertainty(value) {
+  const n = normalize(value);
+  if (
+    n === "high" ||
+    n === "sure" ||
+    n === "seguro" ||
+    n === "cierta" ||
+    n === "claro" ||
+    n === "clear"
+  ) {
+    return "high";
+  }
+  if (
+    n === "low" ||
+    n === "unsure" ||
+    n === "inseguro" ||
+    n === "incierto" ||
+    n === "dudoso" ||
+    n === "unclear"
+  ) {
+    return "low";
+  }
+  return null;
+}
+
+function disambiguationBlock(contextHint) {
+  return {
+    ok: false,
+    needDisambiguation: true,
+    certainty: "low",
+    reason:
+      "Tipificación poco clara: no se puede avanzar al ruteo/cierre hasta desambiguar.",
+    agentInstruction:
+      "DESAMBIGUACIÓN OBLIGATORIA (gate duro). NO llames decide_route / request_samples / sync_derived / handoff comercial todavía. " +
+      "Mandá UNA pregunta clara con 2 opciones (máx. 3) sobre lo que no esté claro" +
+      (contextHint ? " (" + contextHint + ")" : "") +
+      " + enter_waiting. " +
+      "Ej. dist.: ¿comprar/revender producto Cool Meals o sumarte como distribuidor oficial de la marca? " +
+      "Ej. retail vs mayorista: ¿supermercado/cadena o compra por volumen para revender? " +
+      "Cuando el lead responda y estés segura, volvé a llamar la tool con certainty=high.",
+  };
+}
+
+function requireHighCertainty(input, contextHint) {
+  if (normalizeCertainty(input && input.certainty) === "high") return null;
+  return disambiguationBlock(contextHint);
+}
+
 async function sb(supabaseUrl, supabaseKey, path, init) {
   const res = await fetch(supabaseUrl.replace(/\/$/, "") + "/rest/v1/" + path, {
     ...init,
@@ -304,6 +353,12 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
 }
 
 async function decideRoute(input, supabaseUrl, supabaseKey) {
+  const blocked = requireHighCertainty(
+    input,
+    "tipo de cliente / compra vs ser dist. / retail vs mayorista / zona o volumen",
+  );
+  if (blocked) return blocked;
+
   const clientType = input.clientType || "minorista";
   const province = input.province || "";
   const postalCode = input.postalCode || "";
@@ -524,6 +579,12 @@ async function appendSheet(env, kind, spreadsheetId, values) {
 }
 
 async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env, ctx) {
+  const blocked = requireHighCertainty(
+    input,
+    "que el lead eligió muestras tras menú Cool Meals calificado",
+  );
+  if (blocked) return blocked;
+
   const fullName = String(input.fullName || "").trim();
   const phone = String(input.phone || phoneFromCtx || "").trim();
   const company = String(input.company || "").trim();
@@ -900,6 +961,12 @@ function deriveHandoffHours(env) {
 }
 
 async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, ctx) {
+  const blocked = requireHighCertainty(
+    input,
+    "derivación a dist. de zona ya confirmada por decide_route",
+  );
+  if (blocked) return blocked;
+
   const system = (ctx && ctx.system) || {};
   const context = (ctx && ctx.context) || {};
   const kapsoExecutionId =

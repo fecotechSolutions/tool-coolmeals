@@ -512,6 +512,8 @@ export const decideRouteInputSchema = z.object({
   estimatedVolume: z.number().int().nonnegative().nullable().optional(),
   wantsToBeDistributor: z.boolean().optional().default(false),
   isCustomer: z.boolean().optional().default(false),
+  /** high = tipificación segura; low/omitido → la API/function piden desambiguar. */
+  certainty: z.enum(["high", "low", "sure", "unsure"]).optional(),
 });
 export type DecideRouteInput = z.infer<typeof decideRouteInputSchema>;
 

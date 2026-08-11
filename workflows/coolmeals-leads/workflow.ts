@@ -84,7 +84,11 @@ DESAMBIGUACIÓN (regla dura — cualquier dato o camino poco claro):
      sync_derived / “te conecto con el equipo comercial” solo por no saber tipificar).
   2) UNA sola pregunta clara con 2 opciones (máx. 3 si hace falta) + enter_waiting.
   3) Recién con la respuesta seguí el flujo correcto.
-- Si el dato YA está claro, NO preguntes de más: seguí directo.
+- GATE DURO en tools: decide_route / request_samples / sync_derived EXIGEN certainty=high.
+  Si estás insegura llamá con certainty=low (o sin certainty) y la tool te devolverá
+  needDisambiguation=true: SEGUÍ agentInstruction (preguntá) y NO inventes el ruteo.
+  Solo con tipificación clara usá certainty=high.
+- Si el dato YA está claro, NO preguntes de más: seguí directo con certainty=high.
 - Ejemplos obligatorios:
   - Dist. poco claro (“tengo una distribuidora” / “soy distribuidor” sin compra ni “ser de la marca”):
     "Perfecto. ¿Querés comprar producto Cool Meals para revender desde tu distribuidora,
@@ -395,7 +399,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "Decide derivación según tipo, volumen y cobertura. Seguí agentInstruction / coolMealsMenu. representante/fasón → su columna; ≥50 → menú; Córdoba <50 → operador; fuera → dist o sin_cobertura.",
+            "Decide derivación según tipo, volumen y cobertura. EXIGE certainty=high si tipificación segura; si dudás usá certainty=low y desambiguá. Seguí agentInstruction / coolMealsMenu.",
           input_schema: {
             type: "object",
             properties: {
@@ -405,8 +409,14 @@ workflow.addNode(
               postalCode: { type: "string" },
               estimatedVolume: { type: ["integer", "null"] },
               wantsToBeDistributor: { type: "boolean" },
+              certainty: {
+                type: "string",
+                description:
+                  "high = tipificación segura (único valor que rutea). low = no segura → tool bloquea y pide desambiguar.",
+                enum: ["high", "low"],
+              },
             },
-            required: ["action", "clientType", "province"],
+            required: ["action", "clientType", "province", "certainty"],
           },
         },
         {
@@ -415,7 +425,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO atención Cool Meals tras elegir 'pedir muestras' (≥50). Agenda envío → columna Muestras + sheet. Después mensaje de representante/seguimiento + handoff_human status=muestras (IA ended; NO handoff_to_human). Si el lead se DERIVA a un dist., NO uses esta tool.",
+            "SOLO atención Cool Meals tras elegir 'pedir muestras' (≥50). EXIGE certainty=high. Agenda envío → Muestras + sheet + handoff_human muestras (IA ended; NO handoff_to_human).",
           input_schema: {
             type: "object",
             properties: {
@@ -433,6 +443,11 @@ workflow.addNode(
                 description: "Dirección completa de envío",
               },
               city: { type: "string" },
+              certainty: {
+                type: "string",
+                enum: ["high", "low"],
+                description: "Debe ser high cuando el flujo de muestras está claro.",
+              },
             },
             required: [
               "action",
@@ -444,6 +459,7 @@ workflow.addNode(
               "email",
               "postalCode",
               "address",
+              "certainty",
             ],
           },
         },
@@ -453,7 +469,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO después de tener nombre completo, teléfono confirmado y nombre de negocio. Marca derivado + sheet. Pasá company=nombre del negocio. Después handoff_to_human. NUNCA complete_task. No narres nada al lead.",
+            "SOLO después de decide_route derive. EXIGE certainty=high. Marca derivado + sheet. Después handoff_to_human. NUNCA complete_task.",
           input_schema: {
             type: "object",
             properties: {
@@ -468,8 +484,13 @@ workflow.addNode(
               company: { type: "string" },
               businessType: { type: "string" },
               aiSummary: { type: "string" },
+              certainty: {
+                type: "string",
+                enum: ["high", "low"],
+                description: "Debe ser high cuando la derivación está clara.",
+              },
             },
-            required: ["action"],
+            required: ["action", "certainty"],
           },
         },
         {
