@@ -392,7 +392,7 @@ Mandale a soporte / tech:
 | 5b | Muestras Cool Meals | ☐ | ☐ | Muestras + `/muestras` + Kapso `ended` ☐ | ☐ | |
 | 6 | Representante | ☐ | ☐ | Atención comercial ☐ | ☐ | |
 | 7 | Fasón | ☐ | ☐ | Atención comercial ☐ | ☐ | |
-| E1 | ≥50 fuera CBA → dist. | ☐ | ☐ | Derivados ☐ | ☐ | |
+| E1 | ≥50 fuera CBA → menú Cool Meals | ☐ | ☐ | Atención ☐ | ☐ | |
 | E2 | Pedido Cool Meals | ☐ | Atención humana ☐ | — | ☐ | |
 | D | Dashboard filtro + provincia | ☐ | — | — | — | |
 

@@ -156,6 +156,24 @@ export function mentions(regex, description) {
   };
 }
 
+/** Lead debería ver una pregunta con 2 opciones típicas de desambiguación. */
+export function asksDisambiguation(description = "pregunta para desambiguar la tipificación") {
+  return {
+    name: description,
+    check(result) {
+      const text = normalize(result.userVisible.join(" \n "));
+      const distAsk =
+        /(comprar|revender|sumar.*product)/.test(text) &&
+        /(distribuidor oficial|sumarte como distribuidor|ser distribuidor)/.test(text);
+      const retailAsk =
+        /(supermercado|cadena)/.test(text) && /(mayorista|volumen|revender)/.test(text);
+      return distAsk || retailAsk
+        ? pass()
+        : fail("no aparece una pregunta clara con 2 opciones de tipificación");
+    },
+  };
+}
+
 export function doesNotMention(regex, description) {
   return {
     name: description,

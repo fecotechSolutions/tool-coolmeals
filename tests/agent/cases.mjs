@@ -1,5 +1,6 @@
 import {
   answeredEveryTurn,
+  asksDisambiguation,
   calledTool,
   didNotCallTool,
   doesNotMention,
@@ -164,6 +165,96 @@ export const cases = [
       routeClientType("mayorista"),
       mentions(/muestra/, "ofrece el menú de muestras"),
       mentions(/pedido/, "ofrece armar un pedido"),
+    ],
+  },
+
+  // --- Smoke: 5 tipologías distintas (correr con --case tipos-) ---
+  {
+    id: "tipos-minorista-gastro",
+    title: "Minorista gastronómico claro → derivado a dist. de zona",
+    turns: [
+      "Hola, tengo un restaurante en Mendoza y quiero comprar wraps congelados",
+      "Unos 15 o 20 bultos al mes me alcanzan",
+      "Me interesan wraps",
+      "Resto Test Tipos, Ana Gómez, este número está bien",
+    ],
+    asserts: [
+      routeClientType("minorista"),
+      neverRouteClientType("mayorista"),
+      neverRouteClientType("distribuidor"),
+      calledTool("decide_route"),
+      mentions(/cool logistica cuyo/, "nombra al distribuidor de la zona"),
+    ],
+  },
+  {
+    id: "tipos-mayorista-volumen",
+    title: "Mayorista claro ≥50 en Córdoba → menú muestras/pedido",
+    turns: [
+      "Hola, soy mayorista en Córdoba y compro para revender a almacenes",
+      "Calculo unos 90 bultos por mes",
+      "Me interesan wraps y platos listos",
+      "Mayorista Tipos SA, Laura Ferrer, este número sirve",
+    ],
+    asserts: [
+      routeClientType("mayorista"),
+      neverRouteClientType("minorista"),
+      neverRouteClientType("distribuidor"),
+      mentions(/muestra/, "ofrece muestras"),
+      mentions(/pedido/, "ofrece armar pedido"),
+    ],
+  },
+  {
+    id: "tipos-retail-supermercado",
+    title: "Retail ≥50 fuera de Córdoba → Cool Meals directo (no dist. de zona)",
+    turns: [
+      "Hola, tengo una cadena de supermercados en Santa Fe y quiero sumar Cool Meals a la góndola",
+      "Somos 8 locales, compramos al por mayor unos 120 bultos al mes",
+      "Me interesan wraps y platos listos",
+      "Super Tipos, Martín López, este WhatsApp sirve",
+    ],
+    asserts: [
+      routeClientType("retail"),
+      neverRouteClientType("distribuidor"),
+      calledTool("decide_route"),
+      mentions(/muestra/, "ofrece menú de muestras (Cool Meals directo)"),
+      mentions(/pedido/, "ofrece armar pedido"),
+      doesNotMention(/litoral fresh/, "no deriva a dist. de zona con ≥50"),
+    ],
+  },
+  {
+    id: "tipos-dist-ambigua-desambigua",
+    title: "Dist. ambigua → desambigua → compra ≥50 Mendoza = Cool Meals (no dist. asociado)",
+    turns: [
+      "Hola, tengo una distribuidora en Mendoza",
+      "Quiero comprar productos de ustedes para revender en mi cartera, no sumarme como distribuidor oficial",
+      "Unos 80 bultos por mes",
+      "Wraps y platos listos",
+      "Distribuidora Tipos Mendoza, Octavio Test, este número está bien",
+    ],
+    asserts: [
+      asksDisambiguation("pregunta si compra/revende o quiere ser dist. oficial"),
+      neverRouteClientType("distribuidor"),
+      routeClientType("mayorista"),
+      calledTool("decide_route"),
+      mentions(/muestra/, "≥50 → menú Cool Meals"),
+      doesNotMention(/cool logistica cuyo/, "no deriva a dist. asociado con ≥50"),
+    ],
+  },
+  {
+    id: "tipos-quiere-ser-distribuidor",
+    title: "Quiere ser dist. oficial + ≥50 → columna dist. y menú Cool Meals (no handoff solo por 4 SÍ)",
+    turns: [
+      "Hola, quiero sumarme como distribuidor oficial de Cool Meals en Mendoza",
+      "Sí: trabajo con congelados, tengo cámara, logística y estructura de distribución",
+      "Distribuidora Red Sur, Marcos Díaz, este número",
+      "Podría mover unos 100 bultos por mes",
+      "Wraps y platos listos",
+    ],
+    asserts: [
+      routeClientType("distribuidor"),
+      mentions(/muestra/, "≥50 → menú muestras Cool Meals"),
+      mentions(/pedido/, "≥50 → ofrece pedido"),
+      doesNotMention(/cool logistica cuyo/, "no deriva a dist. asociado"),
     ],
   },
 ];

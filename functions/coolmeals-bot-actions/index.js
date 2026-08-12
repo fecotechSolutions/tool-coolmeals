@@ -130,6 +130,34 @@ function requireHighCertainty(input, contextHint) {
   return disambiguationBlock(contextHint);
 }
 
+function resolveEstimatedVolume(input, conv) {
+  if (input && input.estimatedVolume !== undefined && input.estimatedVolume !== null) {
+    return Number(input.estimatedVolume);
+  }
+  if (conv && conv.estimated_volume !== undefined && conv.estimated_volume !== null) {
+    return Number(conv.estimated_volume);
+  }
+  return null;
+}
+
+/** ≥50 → Cool Meals directo en cualquier provincia; sync_derived a dist. queda bloqueado. */
+function blockDerivationAtHighVolume(input, conv, minBundles) {
+  const volume = resolveEstimatedVolume(input, conv);
+  const threshold = minBundles || 50;
+  if (volume === null || Number.isNaN(volume) || volume < threshold) return null;
+  return {
+    ok: false,
+    error:
+      "Volumen ≥ " + threshold + ": Cool Meals atiende directo. No derivar a distribuidor de zona.",
+    agentInstruction:
+      "GATE ≥" +
+      threshold +
+      ". PROHIBIDO sync_derived / nombrar distribuidor de zona. " +
+      "Llamá decide_route con clientType + provincia + estimatedVolume y certainty=high. " +
+      "Seguí agentInstruction: menú 1) Pedir muestras  2) Agendar pedido (cualquier provincia).",
+  };
+}
+
 async function sb(supabaseUrl, supabaseKey, path, init) {
   const res = await fetch(supabaseUrl.replace(/\/$/, "") + "/rest/v1/" + path, {
     ...init,
@@ -997,6 +1025,9 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     conv = Array.isArray(rows) && rows[0];
   }
   if (!conv) throw new Error("Conversation not found");
+
+  const volumeBlock = blockDerivationAtHighVolume(input, conv, 50);
+  if (volumeBlock) return volumeBlock;
 
   let distributorName = input.distributorName || "";
   if (!distributorName && (input.distributorId || conv.distributor_id)) {

@@ -53,6 +53,75 @@ function normalize(value) {
     .toLowerCase();
 }
 
+function normalizeCertainty(value) {
+  const n = normalize(value);
+  if (!n) return null;
+  if (n === "high" || n === "alta" || n === "alto" || n === "segura" || n === "seguro" || n === "claro") {
+    return "high";
+  }
+  if (
+    n === "low" ||
+    n === "baja" ||
+    n === "bajo" ||
+    n === "media" ||
+    n === "medio" ||
+    n === "medium" ||
+    n === "inseguro" ||
+    n === "incierto" ||
+    n === "dudoso" ||
+    n === "unclear"
+  ) {
+    return "low";
+  }
+  return null;
+}
+
+function disambiguationBlock(contextHint) {
+  return {
+    ok: false,
+    needDisambiguation: true,
+    certainty: "low",
+    reason:
+      "Tipificación poco clara: no se puede avanzar al ruteo/cierre hasta desambiguar.",
+    agentInstruction:
+      "DESAMBIGUACIÓN OBLIGATORIA (gate duro). NO llames decide_route / request_samples / sync_derived / handoff comercial todavía. " +
+      "Mandá UNA pregunta clara con 2 opciones (máx. 3) sobre lo que no esté claro" +
+      (contextHint ? " (" + contextHint + ")" : "") +
+      " + enter_waiting. " +
+      "Ej. dist.: ¿comprar/revender producto Cool Meals o sumarte como distribuidor oficial de la marca? " +
+      "Ej. retail vs mayorista: ¿supermercado/cadena o compra por volumen para revender? " +
+      "Cuando el lead responda y estés segura, volvé a llamar la tool con certainty=high.",
+  };
+}
+
+function requireHighCertainty(input, contextHint) {
+  if (normalizeCertainty(input && input.certainty) === "high") return null;
+  return disambiguationBlock(contextHint);
+}
+
+function resolveEstimatedVolume(input) {
+  if (input && input.estimatedVolume !== undefined && input.estimatedVolume !== null) {
+    return Number(input.estimatedVolume);
+  }
+  return null;
+}
+
+function blockDerivationAtHighVolume(input) {
+  const volume = resolveEstimatedVolume(input);
+  if (volume === null || Number.isNaN(volume) || volume < MIN_BUNDLES) return null;
+  return {
+    ok: false,
+    error:
+      "Volumen ≥ " + MIN_BUNDLES + ": Cool Meals atiende directo. No derivar a distribuidor de zona.",
+    agentInstruction:
+      "GATE ≥" +
+      MIN_BUNDLES +
+      ". PROHIBIDO sync_derived / nombrar distribuidor de zona. " +
+      "Llamá decide_route con clientType + provincia + estimatedVolume y certainty=high. " +
+      "Seguí agentInstruction: menú 1) Pedir muestras  2) Agendar pedido (cualquier provincia).",
+  };
+}
+
 function upsertConversation(input, phoneFromCtx) {
   const phone = String(input.phone || phoneFromCtx || "").trim();
   if (!phone) return { ok: false, error: "phone required" };
@@ -65,6 +134,12 @@ function upsertConversation(input, phoneFromCtx) {
 }
 
 function decideRoute(input) {
+  const blocked = requireHighCertainty(
+    input,
+    "tipo de cliente o intención (comprar vs ser distribuidor / retail vs mayorista)",
+  );
+  if (blocked) return blocked;
+
   const clientType = normalize(input.clientType) || "minorista";
   const province = input.province || "";
   const estimatedVolume =
@@ -75,22 +150,8 @@ function decideRoute(input) {
     input.wantsToBeDistributor || clientType === "distribuidor",
   );
 
-  if (wantsToBeDistributor) {
-    return {
-      ok: true,
-      action: "quiere_ser_distribuidor",
-      conversationStatus: "quiere_ser_distribuidor",
-      outcome: "quiere_ser_distribuidor",
-      distributorId: null,
-      distributorName: null,
-      reason:
-        "Quiere ser distribuidor — columna Quiere ser distribuidor + handoff comercial (sin umbral 50).",
-      syncDerivedSheet: false,
-      agentInstruction:
-        "Mensaje humano corto al lead: un asesor te contacta (NO este número) + despedida. PROHIBIDO decir handoff/transfiero/completo el handoff. Luego en silencio: handoff_human status=quiere_ser_distribuidor + handoff_to_human.",
-    };
-  }
-
+  // Misma prioridad que producción: rep/fasón → ≥50 cualquier zona → Córdoba <50 → dist/<cobertura.
+  // Quiere-ser-dist (4 SÍ): la columna va por upsert; decide_route rutea por volumen/zona (sin handoff "quiere ser dist").
   if (clientType === "representante") {
     return {
       ok: true,
@@ -129,10 +190,13 @@ function decideRoute(input) {
     DISTRIBUTORS.find((d) => d.provinces.some((p) => p === normalize(province))) || null;
 
   const isCordoba = normalize(province) === "cordoba";
-  const usesVolumeThreshold = clientType === "mayorista" || clientType === "retail";
   const highVolume = estimatedVolume !== null && estimatedVolume >= MIN_BUNDLES;
+  const distNote = wantsToBeDistributor
+    ? " (lead dist.; columna Quiere ser distribuidor vía upsert, sin handoff)"
+    : "";
 
-  if (usesVolumeThreshold && isCordoba && highVolume) {
+  // ≥50 → Cool Meals directo SIEMPRE (cualquier provincia / tipo). Nunca derivar a dist. asociados.
+  if (highVolume) {
     return {
       ok: true,
       action: "own_attention",
@@ -141,11 +205,40 @@ function decideRoute(input) {
       distributorId: null,
       distributorName: null,
       reason:
-        clientType + " en Córdoba con volumen ≥ " + MIN_BUNDLES + " bultos — atención Cool Meals.",
+        "Volumen ≥ " +
+        MIN_BUNDLES +
+        " (" +
+        clientType +
+        ", " +
+        province +
+        ") — menú muestras/pedido." +
+        distNote,
       syncDerivedSheet: false,
       coolMealsMenu: true,
       agentInstruction:
-        "Cool Meals. Menú corto: 1) Pedir muestras 2) Agendar pedido. Esperá. Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → logística te contacta → handoff_human status=muestras (IA ended; sin handoff_to_human). Si pedido: un asesor te contacta; handoff_human + handoff_to_human. Sin procesos internos ni 'te registro'.",
+        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras (IA ended; NO handoff_to_human). Si pedido: asesor te contacta; handoff_human + handoff_to_human.",
+    };
+  }
+
+  // <50 (o sin volumen): Córdoba → operador Cool Meals (sin menú)
+  if (isCordoba) {
+    return {
+      ok: true,
+      action: "own_attention",
+      conversationStatus: "atencion_representante",
+      outcome: "handoff_humano",
+      distributorId: null,
+      distributorName: null,
+      reason:
+        clientType +
+        " en Córdoba con volumen < " +
+        MIN_BUNDLES +
+        " (o sin volumen) — operador Cool Meals." +
+        distNote,
+      syncDerivedSheet: false,
+      coolMealsMenu: false,
+      agentInstruction:
+        "Cool Meals operador/representante. SIN menú muestras. Mensaje: un asesor/representante te contacta + despedida. Silencio: handoff_human status=atencion_representante + handoff_to_human.",
     };
   }
 
@@ -157,17 +250,12 @@ function decideRoute(input) {
       outcome: "sin_cobertura",
       distributorId: null,
       distributorName: null,
-      reason: "Sin cobertura en " + province,
+      reason: "Sin cobertura en " + province + distNote,
       syncDerivedSheet: false,
       agentInstruction:
         "Avisá que aún no hay cobertura. Llamá handoff_human con status=sin_cobertura (NO atencion_representante) y reason claro; después handoff_to_human. La card queda en Sin cobertura; en ~22h pasa a Finalizado.",
     };
   }
-
-  const volumeNote =
-    usesVolumeThreshold && highVolume && !isCordoba
-      ? " (volumen ≥ " + MIN_BUNDLES + " fuera de Córdoba → red de distribuidores)"
-      : "";
 
   return {
     ok: true,
@@ -176,7 +264,7 @@ function decideRoute(input) {
     outcome: "derivado_distribuidor",
     distributorId: distributor.id,
     distributorName: distributor.name,
-    reason: "Derivado a " + distributor.name + " (" + province + ")" + volumeNote,
+    reason: "Derivado a " + distributor.name + " (" + province + ")" + distNote,
     syncDerivedSheet: true,
     agentInstruction:
       "DERIVAR: 1) Si faltan nombre completo, teléfono de contacto (confirmá si este WhatsApp sirve) o nombre del negocio → pedilos YA, NO sync_derived todavía. 2) Mensaje humano: 'Te va a contactar " +
@@ -186,6 +274,9 @@ function decideRoute(input) {
 }
 
 function requestSamples(input, phoneFromCtx) {
+  const blocked = requireHighCertainty(input, "pedido de muestras");
+  if (blocked) return blocked;
+
   const required = [
     "fullName",
     "phone",
@@ -234,6 +325,12 @@ function handoff(input) {
 }
 
 function syncDerived(input) {
+  const blocked = requireHighCertainty(input, "derivación a distribuidor");
+  if (blocked) return blocked;
+
+  const volumeBlock = blockDerivationAtHighVolume(input);
+  if (volumeBlock) return volumeBlock;
+
   return {
     ok: true,
     conversationId: input.conversationId || "mock-conv",

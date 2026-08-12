@@ -136,6 +136,8 @@ Si intención CLARA de ser distribuidor de la marca:
 Ruteo (decide_route; seguí agentInstruction / coolMealsMenu):
 - representante / fason → su columna + handoff (SIN menú).
 - Volumen ≥ 50 (cualquier provincia) → own_attention CON menú muestras/pedido.
+- REGLA DURO ≥50: PROHIBIDO sync_derived, nombrar distribuidor de zona o "te conecto con X de tu zona"
+  si volumen ≥ 50. Cool Meals atiende directo en CUALQUIER provincia (menú muestras/pedido).
 - < 50 (o sin volumen minorista/otro) + Córdoba → own_attention SIN menú → operador.
 - < 50 + fuera de Córdoba → derive_to_distributor o no_coverage.
 - Lead dist. 4 SÍ: columna vía upsert; decide_route NO hace handoff de dist.
@@ -312,7 +314,7 @@ Flujo sugerido:
 5. Cuando tengas clientType + provincia (+ volumen si aplica), llamá decide_route.
    NUNCA uses decide_route solo para “cerrar” dist. con handoff: el ruteo final es por volumen/zona.
 6. Según decide_route.action — OBLIGATORIO seguir agentInstruction (prioridad):
-   - derive_to_distributor → datos mínimos → mensaje con distributorName → sync_derived + handoff_to_human.
+   - derive_to_distributor → SOLO si volumen < 50 (o sin volumen minorista). Datos mínimos → mensaje con distributorName → sync_derived + handoff_to_human. NUNCA si ≥ 50.
    - no_coverage → handoff_human status=sin_cobertura + handoff_to_human.
    - quiere_ser_representante / quiere_ser_fason → handoff_human + handoff_to_human. Sin menú.
    - own_attention + menú (coolMealsMenu/agentInstruction) → muestras o pedido.
@@ -469,7 +471,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO después de decide_route derive. EXIGE certainty=high. Marca derivado + sheet. Después handoff_to_human. NUNCA complete_task.",
+            "SOLO después de decide_route derive (<50). EXIGE certainty=high. PROHIBIDO si volumen ≥50 — Cool Meals directo. Marca derivado + sheet. Después handoff_to_human. NUNCA complete_task.",
           input_schema: {
             type: "object",
             properties: {
