@@ -110,6 +110,16 @@ function isHumanAttentionTag(tag: string) {
   return tag === HASHTAG_ATENCION_HUMANA || tag === "#atendido_por_representante";
 }
 
+/** Cards en Finalizado: visibles 5 días desde updatedAt (cierre); después solo métricas. */
+const FINALIZADO_VISIBLE_MS = 5 * 24 * 60 * 60 * 1000;
+
+function isVisibleOnPipeline(row: Conversation): boolean {
+  if (row.status !== "finalizado") return true;
+  const closedAt = Date.parse(row.updatedAt);
+  if (!Number.isFinite(closedAt)) return true;
+  return Date.now() - closedAt < FINALIZADO_VISIBLE_MS;
+}
+
 export default function PipelinePage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [distributors, setDistributors] = useState<Distributor[]>([]);
@@ -123,10 +133,11 @@ export default function PipelinePage() {
       dataApi.listDistributors(),
     ]);
     setConversations(
-      rows.filter((row) =>
-        PIPELINE_STATUSES.includes(
-          row.status as (typeof PIPELINE_STATUSES)[number],
-        ),
+      rows.filter(
+        (row) =>
+          PIPELINE_STATUSES.includes(
+            row.status as (typeof PIPELINE_STATUSES)[number],
+          ) && isVisibleOnPipeline(row),
       ),
     );
     setDistributors(dists);

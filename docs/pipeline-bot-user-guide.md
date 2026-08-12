@@ -53,7 +53,7 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 | Sin cobertura | Sin dist. activo en esa provincia | Sí (~22 h) → Descartado + ended |
 | Muestras | Cool Meals agendó envío de muestras (logística) | No — cierre manual |
 | Pedido lead / Pedido cliente | Pedidos (manual / flujos posteriores) | No — cierre manual |
-| Finalizado | Cerrada (manual con resultado o auto ~22 h) | Terminal |
+| Finalizado | Cerrada (manual con resultado o auto ~22 h). **Visible 5 días** en Pipeline; después solo Dashboard/métricas | Terminal |
 | Descartado | Sin perfil comercial viable | Terminal |
 | Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` / `Descartado` | Cierra → Finalizado o Descartado + Kapso ended |
 

@@ -353,7 +353,7 @@ Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 | Lead en **Quiere ser dist. / rep. / fasón** | Revisá sheet **Atención comercial** y contactá por otro canal |
 | Lead en **Sin cobertura** | Sheet **Sin cobertura** → lista de recontacto cuando haya zona |
 | Lead en **Muestras** | Logística mira `/muestras` + sheet muestras. Si el operador arrastra la card a Muestras desde otra columna (ej. Quiere ser distribuidor), se registra fecha/nombre/teléfono/**tipo de cliente**/empresa/provincia/dni/correo/CP/dirección (vacíos si no hay). |
-| Card en **Finalizado** | Caso cerrado (manual con éxito/sin éxito, o auto tras ventana); no reaparece en columnas activas. El `outcome` queda para métricas. |
+| Card en **Finalizado** | Visible **5 días** en la columna Finalizado; después **desaparece del Pipeline** (sigue en DB / Dashboard). |
 | Desplegable **Resultado** en cualquier card | `Finalizado con éxito` / `Finalizado sin éxito` → status `finalizado` + outcome + Kapso `ended` si el bot estaba activo; la card desaparece. |
 | Querés tomar el caso a mano | Arrastrá / cambiá estado a la columna que corresponda (handoff manual) |
 
