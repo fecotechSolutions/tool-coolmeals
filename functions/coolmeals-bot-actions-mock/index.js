@@ -597,10 +597,12 @@ function decideRoute(input) {
       distributor.name +
       ". " +
       contactChecklistInstruction() +
-      " PROHIBIDO sync_derived hasta tener esos datos (o contactRefused). " +
-      "Mensaje humano: 'Te va a contactar " +
+      " ORDEN OBLIGATORIO (si lo invertís el lead no recibe mensaje): " +
+      "1) send_notification_to_user: 'Te va a contactar " +
       distributor.name +
-      " de tu zona…' (usá ese nombre exacto) + despedida corta. 3) En silencio: sync_derived (con company=nombre negocio) + handoff_to_human. PROHIBIDO decir 'registro/derivación/sistema'. Si pidieron muestras: NO request_samples — el dist. se hace cargo.",
+      " de tu zona…' (nombre exacto) + despedida corta. " +
+      "2) sync_derived (fullName, company, contactPhone, phoneConfirmed=true, distributorName). " +
+      "3) handoff_to_human. PROHIBIDO sync_derived antes del mensaje. PROHIBIDO decir 'registro/derivación/sistema'. Si pidieron muestras: NO request_samples — el dist. se hace cargo.",
   };
 }
 
@@ -708,8 +710,13 @@ function syncDerived(input) {
     sheet: { attempted: true, success: true },
     finalizeAt: null,
     handoffHours: 24,
-    kapsoHandoff: { ok: true, skipped: false },
+    kapsoHandoff: { ok: false, skipped: true, mode: "agent_must_handoff_to_human" },
     instruction:
-      "Después de sync_derived: llamá handoff_to_human. NUNCA complete_task al derivar.",
+      "sync_derived OK (Pipeline/sheet). NO corta la IA. ORDEN: " +
+      "1) Si todavía NO mandaste mensaje humano de cierre → send_notification_to_user YA: " +
+      "'Te va a contactar " +
+      (input.distributorName || "el distribuidor de tu zona") +
+      "…' + despedida corta. " +
+      "2) Después handoff_to_human. NUNCA complete_task. NUNCA sync_derived otra vez.",
   };
 }

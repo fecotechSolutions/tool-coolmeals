@@ -936,10 +936,12 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       distributor.name +
       ". " +
       contactChecklistInstruction() +
-      " PROHIBIDO sync_derived hasta tener esos datos (o contactRefused). " +
-      "Mensaje: 'Te va a contactar " +
+      " ORDEN OBLIGATORIO (si lo invertís el lead no recibe mensaje): " +
+      "1) send_notification_to_user: 'Te va a contactar " +
       distributor.name +
-      "…' + despedida. Silencio: sync_derived (fullName, company, contactPhone, phoneConfirmed=true) + handoff_to_human. Si pidieron muestras con <50: NO request_samples.",
+      "…' + despedida. " +
+      "2) sync_derived (fullName, company, contactPhone, phoneConfirmed=true, distributorName). " +
+      "3) handoff_to_human. PROHIBIDO sync_derived antes del mensaje. Si pidieron muestras con <50: NO request_samples.",
   };
 }
 
@@ -1496,6 +1498,31 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     );
     distributorName = Array.isArray(dists) && dists[0] ? dists[0].name : "";
   }
+  if (!distributorName) {
+    const province = resolveProvince(input.province, conv.province);
+    if (province) {
+      const dists = await sb(
+        supabaseUrl,
+        supabaseKey,
+        "distributors?active=eq.true&select=id,name,province,covered_provinces",
+        { method: "GET" },
+      );
+      const list = Array.isArray(dists) ? dists : [];
+      const hit =
+        list.find(function (d) {
+          return normalize(d.province) === normalize(province);
+        }) ||
+        list.find(function (d) {
+          return (d.covered_provinces || []).some(function (p) {
+            return normalize(p) === normalize(province);
+          });
+        });
+      if (hit) {
+        distributorName = hit.name || "";
+        if (hit.id) input.distributorId = input.distributorId || hit.id;
+      }
+    }
+  }
 
   const now = new Date();
   const hours = deriveHandoffHours(env);
@@ -1559,9 +1586,9 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
   const today = new Date().toISOString().slice(0, 10);
   const sheet = await appendSheet(env, "derived_distributors", sheetId, [
     today,
-    conv.name || "",
-    conv.phone || "",
-    input.company || "",
+    derivedName || conv.name || "",
+    derivedPhone || conv.phone || "",
+    derivedCompany || input.company || "",
     input.businessType || "",
     input.clientType || conv.client_type || "",
     input.province || conv.province || "",
@@ -1571,12 +1598,8 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     "",
   ]);
 
-  const handoff = await kapsoSetExecutionStatus(
-    env,
-    kapsoExecutionId || conv.kapso_execution_id,
-    "handoff",
-  );
-
+  // NO forzar handoff Kapso acá: si lo hacemos, la IA muere antes del mensaje de cierre.
+  // El agent debe: 1) send_notification  2) sync_derived  3) handoff_to_human.
   return {
     ok: true,
     conversationId: conv.id,
@@ -1584,9 +1607,13 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     sheet: sheet,
     finalizeAt: null,
     handoffHours: hours,
-    kapsoHandoff: handoff,
+    kapsoHandoff: { ok: false, skipped: true, mode: "agent_must_handoff_to_human" },
     instruction:
-      "Después de sync_derived: llamá handoff_to_human. NUNCA complete_task al derivar. " +
-      "El bot queda en handoff. Esta columna NO auto-finaliza: el operador cierra con Resultado cuando corresponda.",
+      "sync_derived OK (Pipeline/sheet). NO corta la IA. ORDEN: " +
+      "1) Si todavía NO mandaste mensaje humano de cierre → send_notification_to_user YA: " +
+      "'Te va a contactar " +
+      (distributorName || "el distribuidor de tu zona") +
+      "…' + despedida corta. " +
+      "2) Después handoff_to_human. NUNCA complete_task. NUNCA sync_derived otra vez.",
   };
 }

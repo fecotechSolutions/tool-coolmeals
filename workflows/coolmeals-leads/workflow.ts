@@ -345,7 +345,7 @@ Flujo sugerido:
    NO decide_route → handoff operador (atencion_representante).
    NUNCA uses decide_route solo para “cerrar” dist. con handoff: el ruteo final es por volumen/zona.
 6. Según decide_route.action — OBLIGATORIO seguir agentInstruction (prioridad):
-   - derive_to_distributor → SOLO si volumen < 50 (o sin volumen minorista). Datos mínimos → mensaje con distributorName → sync_derived + handoff_to_human. NUNCA si ≥ 50.
+   - derive_to_distributor → SOLO si volumen < 50 (o sin volumen minorista). Contacto → mensaje con distributorName → sync_derived → handoff_to_human. NUNCA sync_derived antes del mensaje (corta la IA). NUNCA si ≥ 50.
    - no_coverage → handoff_human status=sin_cobertura + handoff_to_human.
    - quiere_ser_representante / quiere_ser_fason → handoff_human + handoff_to_human. Sin menú.
    - own_attention + menú (coolMealsMenu/agentInstruction) → muestras o pedido.
@@ -502,7 +502,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO después de decide_route derive (<50). EXIGE certainty=high + contacto (fullName, company, contactPhone, phoneConfirmed=true) o contactRefused. PROHIBIDO si volumen ≥50 — Cool Meals directo. Marca derivado + sheet. Después handoff_to_human. NUNCA complete_task.",
+            "SOLO después de decide_route derive (<50) y del mensaje humano de cierre. EXIGE certainty=high + contacto. PROHIBIDO si volumen ≥50. Marca derivado + sheet; NO corta la IA. Después: handoff_to_human. NUNCA complete_task.",
           input_schema: {
             type: "object",
             properties: {
