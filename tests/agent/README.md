@@ -17,7 +17,8 @@ Necesita `KAPSO_API_KEY` y `KAPSO_API_BASE_URL` en `.env`, y **créditos** en el
 | Pieza | Rol |
 |-------|-----|
 | `sync-workflow.mjs` | Clona `workflows/coolmeals-leads/definition.json` en el workflow **[TEST]**, apuntando las tools a la function mock |
-| `functions/coolmeals-bot-actions-mock` | Responde igual que la function real (mismos `agentInstruction`) pero sin Supabase ni Sheets |
+| `functions/coolmeals-bot-actions-mock` | Misma lógica de ruteo que prod (`agentInstruction` idénticos) sin Supabase/Sheets. **Debe** reflejar la regla acordada; si se atrasa, las pruebas mienten |
+| `assert-routing-contract.mjs` | Corre antes de los casos: falla si el mock no cumple ≥50 → Cool Meals directo (cualquier provincia) |
 | `lib/conversation.mjs` | Arranca la ejecución con trigger `api_call` y manda cada turno del lead con `resume` |
 | `lib/assertions.mjs` | Asserts reutilizables |
 | `cases.mjs` | Los casos: turnos del lead + asserts |

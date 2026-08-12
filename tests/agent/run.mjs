@@ -12,6 +12,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { assertRoutingContract } from "./assert-routing-contract.mjs";
 import { cases } from "./cases.mjs";
 import { noEmptyMessages, noInternalNarration, promiseImpliesHandoff } from "./lib/assertions.mjs";
 import { runConversation } from "./lib/conversation.mjs";
@@ -102,6 +103,19 @@ if (!flag("no-sync") || !workflowId) {
   const workflow = await syncTestWorkflow();
   workflowId = workflow.id;
   console.log(`ok (${workflow.name})`);
+}
+
+process.stdout.write("Verificando contrato de ruteo (mock ≡ regla acordada)… ");
+try {
+  await assertRoutingContract();
+  console.log("ok");
+} catch (error) {
+  console.log("FAIL");
+  console.error(error.message || error);
+  console.error(
+    "El mock no refleja el comportamiento real. Alineá coolmeals-bot-actions-mock con prod y redeploy.",
+  );
+  process.exit(1);
 }
 
 console.log(`Corriendo ${selected.length} caso(s) con concurrencia ${concurrency}\n`);
