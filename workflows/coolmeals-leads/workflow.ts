@@ -130,7 +130,7 @@ REGLA DURA — fasón / representante (gana sobre volumen ≥50):
   = handoff de atención humana (status=atencion_representante), clientType según lo que ya sepas
   (o "otro"). PROHIBIDO clientType=representante ni status=quiere_ser_representante solo por eso.
 
-QUIERE SER DISTRIBUIDOR — 4 preguntas; columna SÍ; handoff NO:
+QUIERE SER DISTRIBUIDOR — 4 preguntas; columna SÍ; handoff de esa columna NUNCA:
 - QUIERE SER dist. = sumarse a la red / ser distribuidor OFICIAL de Cool Meals → 4 preguntas.
 - YA TIENE distribuidora y quiere COMPRAR / revender → mayorista (sin las 4).
 - Si menciona “distribuidora/distribuidor” y NO está claro compra vs ser de la marca:
@@ -139,11 +139,18 @@ Si intención CLARA de ser distribuidor de la marca:
 1. PROHIBIDO decide_route / handoff_human / sync_derived / handoff_to_human hasta completar las 4.
 2. Preguntá las 4 (juntas OK): congelados; depósito/cámara; logística congelados; estructura de distribución.
 3. Si 4 SÍ:
-   → clientType=distribuidor → upsert_conversation status=quiere_ser_distribuidor (columna).
-   → PROHIBIDO handoff_human / handoff_to_human acá.
-   → SEGUÍ: zona, volumen (aviso 50), datos contacto/negocio.
-   → Con provincia+volumen (+ datos si vas a derivar) → decide_route (distribuidor / wantsToBeDistributor).
-     decide_route manda a muestras/pedido, operador Córdoba o dist. — NO handoff "quiere ser distribuidor".
+   → clientType=distribuidor → upsert_conversation status=quiere_ser_distribuidor (SOLO columna).
+   → PROHIBIDO handoff_human / handoff_to_human con status=quiere_ser_distribuidor. NUNCA.
+   → SEGUÍ recaudando datos ANTES de cualquier cierre:
+     a) provincia/zona
+     b) nombre negocio (si falta)
+     c) volumen (aviso umbral 50) — UNA pregunta
+   → Orden: primero zona (si falta), después volumen. No prometas asesor hasta tener zona.
+   → Si el lead NO sabe volumen / quiere precios o más data antes de definir cantidad:
+     con provincia ya tomada → mensaje (asesor te contacta) + handoff_human
+     status=atencion_representante + handoff_to_human. PROHIBIDO status=quiere_ser_distribuidor.
+   → Si provincia+volumen CLAROS → decide_route (distribuidor / wantsToBeDistributor).
+     decide_route manda a muestras/pedido, operador Córdoba o dist. — NO handoff "quiere ser dist.".
 4. Si falta alguna de las 4:
    → NO status=quiere_ser_distribuidor. Tipificá mayorista/retail/minorista/otro y flujo comercial.
    → Solo si RECHAZA comprar/seguir → descartado.
@@ -524,7 +531,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "Actualiza status/outcome en DB. Usá status=muestras | atencion_representante | quiere_ser_representante | quiere_ser_fason | sin_cobertura | descartado cuando corresponda. En muestras: IA ended — NO uses handoff_to_human; la card queda hasta Resultado. En descartado la IA queda ended (no handoff_to_human). Quiere ser distribuidor: NO uses este handoff solo por las 4 SÍ — la columna va por upsert y el cierre final es muestras/operador/dist.",
+            "Actualiza status/outcome en DB. Usá status=muestras | atencion_representante | quiere_ser_representante | quiere_ser_fason | sin_cobertura | descartado cuando corresponda. PROHIBIDO status=quiere_ser_distribuidor en este handoff (esa columna es solo por upsert; si faltan precios/volumen usá atencion_representante). En muestras: IA ended — NO uses handoff_to_human; la card queda hasta Resultado. En descartado la IA queda ended (no handoff_to_human).",
           input_schema: {
             type: "object",
             properties: {
@@ -536,7 +543,7 @@ workflow.addNode(
               status: {
                 type: "string",
                 description:
-                  "Columna/estado. Default atencion_representante. También: quiere_ser_distribuidor, quiere_ser_representante, quiere_ser_fason, sin_cobertura, muestras, descartado.",
+                  "Columna/estado. Default atencion_representante. También: quiere_ser_representante, quiere_ser_fason, sin_cobertura, muestras, descartado. NO uses quiere_ser_distribuidor acá.",
               },
               outcome: { type: "string" },
             },

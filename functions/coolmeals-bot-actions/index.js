@@ -264,6 +264,8 @@ const RECONTACT_LOCK_DAYS = 365;
 const MID_FLOW_STATUSES = {
   nuevo: true,
   ia_atendiendo: true,
+  // 4 SÍ ya marcó la columna, pero aún faltan zona/volumen antes del ruteo final.
+  quiere_ser_distribuidor: true,
 };
 
 function isWithinRecontactLock(createdAt) {
@@ -850,7 +852,6 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
 
   const allowedStatus = {
     atencion_representante: true,
-    quiere_ser_distribuidor: true,
     quiere_ser_representante: true,
     quiere_ser_fason: true,
     sin_cobertura: true,
@@ -858,29 +859,35 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     esperando_respuesta: true,
     descartado: true,
   };
-  const status =
+  // Quiere ser distribuidor = SOLO columna vía upsert. Nunca handoff con ese status:
+  // si el modelo lo manda (precios / volumen inseguro / cierre), va a operador.
+  let status =
     input.status && allowedStatus[input.status]
       ? input.status
       : "atencion_representante";
+  if (normalize(input.status) === "quiere_ser_distribuidor") {
+    status = "atencion_representante";
+  }
   const outcome =
     input.outcome ||
-    (status === "quiere_ser_distribuidor"
-      ? "quiere_ser_distribuidor"
-      : status === "quiere_ser_representante"
-        ? "quiere_ser_representante"
-        : status === "quiere_ser_fason"
-          ? "quiere_ser_fason"
-          : status === "sin_cobertura"
-            ? "sin_cobertura"
-            : status === "muestras"
-              ? "muestras"
-              : status === "descartado"
-                ? "descartado"
-                : "handoff_humano");
+    (status === "quiere_ser_representante"
+      ? "quiere_ser_representante"
+      : status === "quiere_ser_fason"
+        ? "quiere_ser_fason"
+        : status === "sin_cobertura"
+          ? "sin_cobertura"
+          : status === "muestras"
+            ? "muestras"
+            : status === "descartado"
+              ? "descartado"
+              : "handoff_humano");
 
   const notes = [
     existing.notes,
-    status === "descartado"
+    normalize(input.status) === "quiere_ser_distribuidor"
+      ? "Handoff operador (no usar columna Quiere ser distribuidor para handoff): " +
+        (input.reason || "faltan precios/volumen u otro dato comercial")
+      : status === "descartado"
       ? "Descartado + IA cerrada (ended): " + (input.reason || "sin perfil comercial")
       : status === "muestras"
         ? "Muestras agendadas + IA cerrada (ended); card queda hasta Resultado: " +
