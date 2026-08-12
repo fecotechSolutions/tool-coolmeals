@@ -257,4 +257,89 @@ export const cases = [
       doesNotMention(/cool logistica cuyo/, "no deriva a dist. asociado"),
     ],
   },
+
+  // --- Chats “vivos”: aperturas distintas como leads reales (correr con --case vivo-) ---
+  {
+    id: "vivo-precio-hotel-cordoba",
+    title: "Arranca pidiendo precio → hotel Córdoba bajo volumen → operador",
+    turns: [
+      "Hola, cuánto sale la caja de wraps?",
+      "Es para el hotel, estamos en Córdoba capital",
+      "Más o menos 25 cajas al mes",
+      "Hotel Sol Norte, Carla Méndez, este WhatsApp está bien",
+    ],
+    asserts: [
+      doesNotMention(/\$\s?\d|\d+\s?(pesos|usd)/, "no inventa precios"),
+      calledTool("decide_route"),
+      routeClientType("minorista"),
+    ],
+  },
+  {
+    id: "vivo-beacons-rotiseria-ba",
+    title: "Vio Beacons → rotisería BA volumen bajo → dist. de zona",
+    turns: [
+      "Buenas, vi el catálogo en beacons y me interesan los platos listos",
+      "Tengo una rotisería en Lanús, Buenos Aires",
+      "Calculo 30 bultos por mes",
+      "Rotisería Don Pepe, José Álvarez, sí este número",
+    ],
+    asserts: [
+      routeClientType("minorista"),
+      calledTool("decide_route"),
+      mentions(/pampa fria|pampa fría/, "nombra dist. de BA"),
+    ],
+  },
+  {
+    id: "vivo-soy-distribuidor-rosario",
+    title: "“Soy distribuidor” poco claro en Rosario → desambigua → compra ≥50 menú",
+    turns: [
+      "Hola buenas, soy distribuidor en Rosario",
+      "Quiero sumar sus productos a lo que ya vendo, no ser distribuidor oficial de la marca",
+      "Unas 60 cajas al mes fácil",
+      "Wraps sobre todo",
+      "Distribuidora Litoral Pepe, Pepe Ríos, este número sirve",
+    ],
+    asserts: [
+      asksDisambiguation("desambigua compra vs ser dist. oficial"),
+      neverRouteClientType("distribuidor"),
+      mentions(/muestra|pedido/, "con ≥50 ofrece menú Cool Meals"),
+    ],
+  },
+  {
+    id: "vivo-fason-marca-propia",
+    title: "Quiere marca propia / fasón → cierre comercial sin menú",
+    turns: [
+      "Hola, fabriqué comida con mi marca? Quiero que me hagan platos congelados con mi marca propia",
+    ],
+    asserts: [
+      routeClientType("fason"),
+      endsWithHumanHandoff(),
+      didNotCallTool("request_samples"),
+    ],
+  },
+  {
+    id: "vivo-consumidor-casa",
+    title: "Consumidor final (casa) → cierre / descartado, no tipifica comercial",
+    turns: [
+      "Hola, quiero comprar wraps para mi heladera de casa, viven cerca de Núñez?",
+    ],
+    asserts: [
+      didNotCallTool("decide_route"),
+      mentions(/(no (atendemos|trabajamos)|consumidor|hogar|persona particular|cliente final)/, "aclara que no es B2C"),
+    ],
+  },
+  {
+    id: "vivo-volumen-sin-tipo-sanjuan",
+    title: "Pide 70 cajas sin decir tipo → San Juan ≥50 → Cool Meals directo",
+    turns: [
+      "Necesito 70 cajas mensuales de platos listos, estoy en San Juan",
+      "Es para reventa, tengo un depósito chico",
+      "Depósito Andino, Lucía Torres, este WhatsApp",
+    ],
+    asserts: [
+      calledTool("decide_route"),
+      mentions(/muestra|pedido/, "≥50 → menú Cool Meals"),
+      doesNotMention(/cool logistica cuyo/, "no deriva a dist. con ≥50"),
+    ],
+  },
 ];

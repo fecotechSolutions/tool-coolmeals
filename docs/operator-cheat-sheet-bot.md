@@ -50,6 +50,7 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 | Quiere ser **fasón** | Sí | Al confirmar fasón |
 | Quiere ser **distribuidor** (solo 4 SÍ) | **No** | Solo marca columna |
 | Dist 4 SÍ → luego ≥50 / CBA &lt;50 / fuera | Sí | Al cerrar ese ruteo |
+| Volumen / dato clave inseguro | Sí → **Atención humana** | Lead no sabe cuánto / necesita más data; no inventar &lt;50 ni sin_cobertura |
 | **Atención humana** | Sí | Córdoba &lt;50, pedido del menú, “hablar con alguien”, 2ª vez precio/dato desconocido |
 | **Derivado** | Sí | Tras derivar al dist |
 | **Sin cobertura** | Sí | Al avisar sin zona |

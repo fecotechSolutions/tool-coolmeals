@@ -81,6 +81,79 @@ function sanitizeClientType(value) {
   return VALID_CLIENT_TYPES[n] ? n : null;
 }
 
+/** El modelo a veces manda "<UNKNOWN>" / "N/A" como nombre o provincia. */
+function sanitizeHumanField(value) {
+  const raw = String(value == null ? "" : value).trim();
+  if (!raw) return "";
+  const n = normalize(raw);
+  if (
+    n === "unknown" ||
+    n === "<unknown>" ||
+    n === "n/a" ||
+    n === "na" ||
+    n === "null" ||
+    n === "undefined" ||
+    n === "sin dato" ||
+    n === "s/d" ||
+    n === "-" ||
+    n === "none"
+  ) {
+    return "";
+  }
+  if (/^<[^>]+>$/.test(raw)) return "";
+  return raw;
+}
+
+var ARG_PROVINCES = [
+  "Buenos Aires",
+  "CABA",
+  "Catamarca",
+  "Chaco",
+  "Chubut",
+  "Córdoba",
+  "Corrientes",
+  "Entre Ríos",
+  "Formosa",
+  "Jujuy",
+  "La Pampa",
+  "La Rioja",
+  "Mendoza",
+  "Misiones",
+  "Neuquén",
+  "Río Negro",
+  "Salta",
+  "San Juan",
+  "San Luis",
+  "Santa Cruz",
+  "Santa Fe",
+  "Santiago del Estero",
+  "Tierra del Fuego",
+  "Tucumán",
+];
+
+/** Preferí un valor limpio; si falta, intentá detectar provincia en textos (motivo / resumen). */
+function resolveProvince() {
+  const candidates = [];
+  for (let i = 0; i < arguments.length; i++) {
+    const cleaned = sanitizeHumanField(arguments[i]);
+    if (cleaned) candidates.push(cleaned);
+  }
+  for (let i = 0; i < candidates.length; i++) {
+    const c = candidates[i];
+    const hit = ARG_PROVINCES.find(function (p) {
+      return normalize(p) === normalize(c);
+    });
+    if (hit) return hit;
+  }
+  const blob = normalize(candidates.join(" \n "));
+  if (!blob) return candidates[0] || "";
+  for (let i = 0; i < ARG_PROVINCES.length; i++) {
+    const p = ARG_PROVINCES[i];
+    if (blob.indexOf(normalize(p)) !== -1) return p;
+  }
+  return candidates[0] || "";
+}
+
 /** high = tipificación segura para avanzar; low/missing = forzar desambiguación. */
 function normalizeCertainty(value) {
   const n = normalize(value);
@@ -279,7 +352,10 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
     phone: phone,
     origin: input.origin || "whatsapp",
   };
-  if (input.name) patch.name = input.name;
+  if (input.name) {
+    const cleanName = sanitizeHumanField(input.name);
+    if (cleanName) patch.name = cleanName;
+  }
 
   const protectedStatuses = {
     derivado_distribuidor: true,
@@ -308,7 +384,10 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
   }
   const patchClientType = sanitizeClientType(input.clientType);
   if (patchClientType) patch.client_type = patchClientType;
-  if (input.province) patch.province = input.province;
+  if (input.province) {
+    const cleanProvince = resolveProvince(input.province, input.aiSummary, input.notes);
+    if (cleanProvince) patch.province = cleanProvince;
+  }
   if (input.distributorId !== undefined) patch.distributor_id = input.distributorId;
   if (input.aiSummary !== undefined) patch.ai_summary = input.aiSummary;
   if (input.lastMessage !== undefined) patch.last_message = input.lastMessage;
@@ -853,6 +932,21 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     kapso_conversation_id: kapsoConversationId || existing.kapso_conversation_id || null,
   };
 
+  const handoffProvince = resolveProvince(
+    input.province,
+    existing.province,
+    input.aiSummary,
+    existing.ai_summary,
+    input.reason,
+  );
+  if (handoffProvince && sanitizeHumanField(existing.province) !== handoffProvince) {
+    patchBody.province = handoffProvince;
+  }
+  const handoffName = sanitizeHumanField(input.name) || sanitizeHumanField(existing.name);
+  if (handoffName && sanitizeHumanField(existing.name) !== handoffName) {
+    patchBody.name = handoffName;
+  }
+
   let updated;
   try {
     updated = await sb(supabaseUrl, supabaseKey, "conversations?id=eq." + existing.id, {
@@ -929,11 +1023,11 @@ async function syncHandoffInterestSheets(env, row, status, reason) {
     }
     const sheet = await appendSheet(env, "commercial_attention", sheetId, [
       date,
-      row.name || "",
+      sanitizeHumanField(row.name) || "",
       row.phone || "",
       "",
       tipoCliente,
-      row.province || "",
+      resolveProvince(row.province, reason, row.ai_summary),
       "",
       reason || "",
       "",
@@ -945,12 +1039,13 @@ async function syncHandoffInterestSheets(env, row, status, reason) {
     if (!sheetId) {
       return { attempted: false, success: false, error: "GOOGLE_SHEET_NO_COVERAGE_ID missing" };
     }
+    const province = resolveProvince(row.province, reason, row.ai_summary);
     const sheet = await appendSheet(env, "no_coverage", sheetId, [
       date,
-      row.name || "",
+      sanitizeHumanField(row.name) || "",
       row.phone || "",
       "",
-      row.province || "",
+      province,
       "",
       row.client_type || "",
       reason || "",
