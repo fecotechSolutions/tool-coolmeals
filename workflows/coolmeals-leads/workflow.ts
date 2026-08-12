@@ -23,9 +23,13 @@ VOLUMEN / BULTOS / CAJAS:
 - PRIORIDAD: si volumen ≥ 50 (cualquier provincia y casi cualquier tipo) → menú muestras/pedido Cool Meals.
 - Pedí volumen a retail, mayorista, quiere-ser-distribuidor (tras 4 SÍ), y a quien hable de compra por cantidad.
   Minorista/gastronómico: NO bloquees por volumen; si no lo dan, ruteá como <50 (Córdoba→operador; resto→dist.).
-- Cuando preguntes cantidad, avisá el umbral, ej.:
-  "¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende desde 50;
-  si es menos te conectamos con el distribuidor de tu zona (o un asesor si estás en Córdoba)."
+- Cuando preguntes cantidad:
+  - Si YA sabés que es Córdoba: "¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende
+    directo desde 50; si es menos te contacta un asesor Cool Meals."
+    PROHIBIDO decir "distribuidor/asesor de la zona" cuando la provincia ya es Córdoba.
+  - Si NO es Córdoba o aún no sabés zona:
+    "¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende desde 50;
+    si es menos te conectamos con el distribuidor de tu zona (o un asesor Cool Meals si estás en Córdoba)."
 - Contenido por caja / palet (datos confirmados):
   - Wraps: 1 caja = 24 unidades.
   - Platos listos: 1 caja = 12 unidades.
@@ -130,46 +134,43 @@ REGLA DURA — fasón / representante (gana sobre volumen ≥50):
   = handoff de atención humana (status=atencion_representante), clientType según lo que ya sepas
   (o "otro"). PROHIBIDO clientType=representante ni status=quiere_ser_representante solo por eso.
 
-QUIERE SER DISTRIBUIDOR — 4 preguntas; columna SÍ; handoff de esa columna NUNCA:
+QUIERE SER DISTRIBUIDOR — checklist duro (tools mandan; no improvises el cierre):
 - QUIERE SER dist. = sumarse a la red / ser distribuidor OFICIAL de Cool Meals → 4 preguntas.
 - YA TIENE distribuidora y quiere COMPRAR / revender → mayorista (sin las 4).
-- Si menciona “distribuidora/distribuidor” y NO está claro compra vs ser de la marca:
-  DESAMBIGUÁ primero (ver arriba). PROHIBIDO las 4 ni cierre comercial hasta esa respuesta.
-Si intención CLARA de ser distribuidor de la marca:
-1. PROHIBIDO decide_route / handoff_human / sync_derived / handoff_to_human hasta completar las 4.
-2. Preguntá las 4 (juntas OK): congelados; depósito/cámara; logística congelados; estructura de distribución.
-3. Si 4 SÍ:
-   → clientType=distribuidor → upsert_conversation status=quiere_ser_distribuidor (SOLO columna).
-   → PROHIBIDO handoff_human / handoff_to_human con status=quiere_ser_distribuidor. NUNCA.
-   → SEGUÍ recaudando datos ANTES de cualquier cierre:
-     a) provincia/zona
-     b) nombre negocio (si falta)
-     c) volumen (aviso umbral 50) — UNA pregunta
-   → Orden: primero zona (si falta), después volumen. No prometas asesor hasta tener zona.
-   → Si el lead NO sabe volumen / quiere precios o más data antes de definir cantidad:
-     con provincia ya tomada → mensaje (asesor te contacta) + handoff_human
-     status=atencion_representante + handoff_to_human. PROHIBIDO status=quiere_ser_distribuidor.
-   → Si provincia+volumen CLAROS → decide_route (distribuidor / wantsToBeDistributor).
-     decide_route manda a muestras/pedido, operador Córdoba o dist. — NO handoff "quiere ser dist.".
-4. Si falta alguna de las 4:
-   → NO status=quiere_ser_distribuidor. Tipificá mayorista/retail/minorista/otro y flujo comercial.
-   → Solo si RECHAZA comprar/seguir → descartado.
+- Si “distribuidora/distribuidor” poco claro (compra vs marca): DESAMBIGUÁ primero. Sin las 4 ni cierre.
+Si intención CLARA de ser dist. de la marca:
+1. Hasta completar las 4: PROHIBIDO decide_route / handoff_human / sync_derived / handoff_to_human.
+2. Las 4 (juntas OK): congelados; depósito/cámara; logística congelados; estructura de distribución.
+3. Si 4 SÍ → upsert_conversation status=quiere_ser_distribuidor (SOLO columna). Seguí agentInstruction/nextStep del upsert:
+   ask_province → preguntá SOLO provincia + enter_waiting.
+   ask_volume → UNA pregunta volumen (aviso umbral 50) + enter_waiting.
+   handoff_operator → mensaje asesor + handoff_human status=atencion_representante + handoff_to_human.
+   decide_route → decide_route certainty=high con provincia+volumen; seguí agentInstruction.
+4. PROHIBIDO handoff status=quiere_ser_distribuidor (si lo mandás, el gate lo remapea a operador).
+5. Si decide_route responde ok:false (missing_province / missing_volume / volume_uncertain): obedecé agentInstruction; no inventes bultos ni zona.
+6. Si falta alguna de las 4: NO status=quiere_ser_distribuidor. Tipificá mayorista/retail/minorista/otro. Solo si RECHAZA comprar/seguir → descartado.
 
-Ruteo (decide_route; seguí agentInstruction / coolMealsMenu):
+Ruteo (decide_route; seguí agentInstruction / coolMealsMenu; gates duros en la tool):
 - representante / fason → su columna + handoff (SIN menú).
 - Volumen ≥ 50 (cualquier provincia) → own_attention CON menú muestras/pedido.
 - REGLA DURO ≥50: PROHIBIDO sync_derived, nombrar distribuidor de zona o "te conecto con X de tu zona"
   si volumen ≥ 50. Cool Meals atiende directo en CUALQUIER provincia (menú muestras/pedido).
-- < 50 (o sin volumen minorista/otro) + Córdoba → own_attention SIN menú → operador.
+- Retail / mayorista / distribuidor: provincia + volumen numérico OBLIGATORIOS antes de decide_route.
+  Sin volumen claro / quiere precios → handoff atencion_representante (no inventar bultos ni sin_cobertura).
+- Minorista/otro sin volumen: ruteá como <50 (Córdoba→operador; resto→dist./sin cobertura).
+- < 50 + Córdoba → own_attention SIN menú → operador.
 - < 50 + fuera de Córdoba → derive_to_distributor o no_coverage.
 - Lead dist. 4 SÍ: columna vía upsert; decide_route NO hace handoff de dist.
 
-Datos mínimos:
-- DERIVAR: nombre completo, teléfono confirmado, nombre negocio, tipo+interés, zona.
-  Nombrá distributorName. PROHIBIDO narrar registro/sistema.
-- Operador Córdoba / pedido: datos de contacto; promesa = handoff en el mismo turno.
-- Fasón / rep: intención clara alcanza.
-- Dist. 4 SÍ: upsert columna; después zona+volumen → decide_route.
+Datos mínimos (TODA derivación / handoff comercial — gate duro en tools):
+- OBLIGATORIO pedir: nombre completo + nombre del negocio/local + teléfono de contacto.
+  El teléfono hay que EXIGIRLO/CONFIRMARLO aunque aparezca en WhatsApp
+  (ej. "¿Este mismo número te sirve de contacto o preferís otro?").
+- Pasá fullName, company, contactPhone, phoneConfirmed=true en handoff_human / sync_derived.
+- Si el lead SE NIEGA a dar alguno: contactRefused=true y recién ahí cerrá a operador
+  (atencion_representante). PROHIBIDO cerrar solo con el nombre del perfil WA.
+- DERIVAR a dist.: además tipo+interés+zona; nombrá distributorName. PROHIBIDO narrar registro/sistema.
+- Dist. 4 SÍ: upsert columna; después zona+volumen → decide_route → contacto → cierre.
 
 MUESTRAS / PEDIDO — solo si own_attention CON menú (volumen ≥50 / agentInstruction):
 - Ofrecé: 1) Pedir muestras  2) Agendar pedido. Esperá.
@@ -431,7 +432,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "Decide derivación según tipo, volumen y cobertura. EXIGE certainty=high si tipificación segura; si dudás usá certainty=low y desambiguá. Seguí agentInstruction / coolMealsMenu.",
+            "Decide derivación según tipo, volumen y cobertura. EXIGE certainty=high. Gates: retail/mayorista/distribuidor necesitan provincia+volumen numérico (si volumen incerto → handoff operador, no inventar). Si ok:false seguí agentInstruction. Seguí coolMealsMenu.",
           input_schema: {
             type: "object",
             properties: {
@@ -501,7 +502,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO después de decide_route derive (<50). EXIGE certainty=high. PROHIBIDO si volumen ≥50 — Cool Meals directo. Marca derivado + sheet. Después handoff_to_human. NUNCA complete_task.",
+            "SOLO después de decide_route derive (<50). EXIGE certainty=high + contacto (fullName, company, contactPhone, phoneConfirmed=true) o contactRefused. PROHIBIDO si volumen ≥50 — Cool Meals directo. Marca derivado + sheet. Después handoff_to_human. NUNCA complete_task.",
           input_schema: {
             type: "object",
             properties: {
@@ -515,6 +516,19 @@ workflow.addNode(
               city: { type: "string" },
               company: { type: "string" },
               businessType: { type: "string" },
+              fullName: { type: "string" },
+              contactPhone: {
+                type: "string",
+                description: "Teléfono de contacto confirmado por el lead (no alcanza el WA implícito).",
+              },
+              phoneConfirmed: {
+                type: "boolean",
+                description: "true solo si el lead confirmó el teléfono de contacto.",
+              },
+              contactRefused: {
+                type: "boolean",
+                description: "true si el lead se negó a dar nombre/negocio/teléfono.",
+              },
               aiSummary: { type: "string" },
               certainty: {
                 type: "string",
@@ -531,7 +545,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "Actualiza status/outcome en DB. Usá status=muestras | atencion_representante | quiere_ser_representante | quiere_ser_fason | sin_cobertura | descartado cuando corresponda. PROHIBIDO status=quiere_ser_distribuidor en este handoff (esa columna es solo por upsert; si faltan precios/volumen usá atencion_representante). En muestras: IA ended — NO uses handoff_to_human; la card queda hasta Resultado. En descartado la IA queda ended (no handoff_to_human).",
+            "Actualiza status/outcome en DB. EXIGE contacto: fullName + company + contactPhone + phoneConfirmed=true (o contactRefused=true). Usá status=muestras | atencion_representante | quiere_ser_representante | quiere_ser_fason | sin_cobertura | descartado. PROHIBIDO status=quiere_ser_distribuidor. En muestras/descartado no exige contacto de esta gate.",
           input_schema: {
             type: "object",
             properties: {
@@ -540,6 +554,20 @@ workflow.addNode(
               phone: { type: "string" },
               reason: { type: "string" },
               aiSummary: { type: "string" },
+              fullName: { type: "string", description: "Nombre completo confirmado con el lead." },
+              company: { type: "string", description: "Nombre del negocio/local." },
+              contactPhone: {
+                type: "string",
+                description: "Teléfono confirmado por el lead (obligatorio aunque sea el de WhatsApp).",
+              },
+              phoneConfirmed: {
+                type: "boolean",
+                description: "true solo si el lead confirmó el teléfono.",
+              },
+              contactRefused: {
+                type: "boolean",
+                description: "true si se negó a dar nombre/negocio/teléfono → operador sin esos datos.",
+              },
               status: {
                 type: "string",
                 description:

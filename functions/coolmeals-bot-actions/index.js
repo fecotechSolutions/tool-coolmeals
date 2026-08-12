@@ -231,6 +231,240 @@ function blockDerivationAtHighVolume(input, conv, minBundles) {
   };
 }
 
+function needsVolumeForClientType(clientType) {
+  const t = normalize(clientType);
+  return t === "retail" || t === "mayorista" || t === "distribuidor";
+}
+
+function isVolumeUncertain(input) {
+  if (!input) return false;
+  if (input.volumeUncertain === true || input.wantsPricesBeforeVolume === true) return true;
+  const flag = normalize(
+    input.volumeUncertain || input.volumeStatus || input.volumeCertainty || "",
+  );
+  if (
+    flag === "uncertain" ||
+    flag === "unknown" ||
+    flag === "incierto" ||
+    flag === "inseguro" ||
+    flag === "low" ||
+    flag === "true" ||
+    flag === "1"
+  ) {
+    return true;
+  }
+  const blob = normalize(
+    [input.aiSummary, input.reason, input.lastMessage, input.notes].filter(Boolean).join(" "),
+  );
+  if (!blob) return false;
+  return (
+    /(no se|no lo se|no sabe|todavia no|aun no|después vemos|despues vemos|quiero (saber |ver )?precios|necesito (mas |más )?data|necesito (mas |más )?info)/.test(
+      blob,
+    ) && /(volumen|bulto|caja|cantidad|precio|comprar)/.test(blob)
+  );
+}
+
+/**
+ * Checklist duro antes de rutear/cerrar.
+ * La IA conversa; el código decide si se puede avanzar.
+ */
+function buildQualification(input, conv) {
+  const clientType =
+    sanitizeClientType(input && input.clientType) ||
+    sanitizeClientType(conv && conv.client_type) ||
+    "otro";
+  const province = resolveProvince(
+    input && input.province,
+    conv && conv.province,
+    input && input.aiSummary,
+    conv && conv.ai_summary,
+    input && input.reason,
+    input && input.notes,
+  );
+  const volume = resolveEstimatedVolume(input, conv);
+  const volumeUncertain = isVolumeUncertain(input);
+  const hasVolume = volume !== null && !Number.isNaN(volume);
+
+  return {
+    clientType: clientType,
+    province: province,
+    volume: hasVolume ? volume : null,
+    volumeUncertain: volumeUncertain,
+    needsVolume: needsVolumeForClientType(clientType),
+  };
+}
+
+function nextStepAfterDistributorColumn(q) {
+  if (!q.province) {
+    return {
+      nextStep: "ask_province",
+      agentInstruction:
+        "CHECKLIST dist. (gate). Columna Quiere ser distribuidor OK. Falta PROVINCIA. " +
+        "Preguntá SOLO la provincia + enter_waiting. PROHIBIDO handoff, decide_route, prometer asesor todavía.",
+    };
+  }
+  if (q.volumeUncertain || q.volume === null) {
+    if (q.volumeUncertain) {
+      return {
+        nextStep: "handoff_operator",
+        agentInstruction:
+          "CHECKLIST dist. (gate). Provincia OK pero volumen INCERTO / pide precios o más data. " +
+          "PROHIBIDO inventar bultos y PROHIBIDO status=quiere_ser_distribuidor en handoff. " +
+          contactChecklistInstruction() +
+          " Mensaje: un asesor te contacta para precios/volumen/condiciones + despedida. " +
+          "Silencio: handoff_human status=atencion_representante + handoff_to_human.",
+      };
+    }
+    return {
+      nextStep: "ask_volume",
+      agentInstruction:
+        "CHECKLIST dist. (gate). Provincia OK. Falta VOLUMEN. " +
+        "UNA pregunta de bultos/cajas/mes con aviso umbral 50 + enter_waiting. " +
+        "Si responde que no sabe / quiere precios / más data: " +
+        contactChecklistInstruction() +
+        " Luego handoff_human status=atencion_representante " +
+        "(NO quiere_ser_distribuidor) + handoff_to_human. " +
+        "Si da número claro: decide_route con estimatedVolume + certainty=high.",
+    };
+  }
+  return {
+    nextStep: "decide_route",
+    agentInstruction:
+      "CHECKLIST dist. completo (provincia+volumen). Llamá decide_route certainty=high " +
+      "con clientType=distribuidor, province y estimatedVolume. Seguí agentInstruction (menú / operador / dist.). " +
+      "PROHIBIDO handoff status=quiere_ser_distribuidor.",
+  };
+}
+
+/** Texto fijo: cualquier cierre comercial exige contacto (o negativa explícita). */
+function contactChecklistInstruction() {
+  return (
+    "CONTACTO OBLIGATORIO antes de cerrar (gate duro): " +
+    "pedí nombre completo + nombre del negocio/local + teléfono de contacto. " +
+    "El teléfono hay que EXIGIRLO/CONFIRMARLO aunque aparezca en WhatsApp " +
+    "(ej. '¿Este mismo número te sirve de contacto o preferís otro?'). " +
+    "Después handoff_human o sync_derived con fullName, company, contactPhone y phoneConfirmed=true. " +
+    "Si el lead SE NIEGA a dar alguno: contactRefused=true y recién ahí cerrá " +
+    "(operador atencion_representante). PROHIBIDO cerrar solo con el nombre del perfil WA."
+  );
+}
+
+function isContactRefused(input) {
+  if (!input) return false;
+  if (input.contactRefused === true || input.refusedContactData === true) return true;
+  const flag = normalize(input.contactRefused || input.refusedContactData || "");
+  return flag === "true" || flag === "1" || flag === "si" || flag === "yes";
+}
+
+function isPhoneConfirmed(input) {
+  if (!input) return false;
+  if (input.phoneConfirmed === true || input.contactPhoneConfirmed === true) return true;
+  const flag = normalize(input.phoneConfirmed || input.contactPhoneConfirmed || "");
+  return flag === "true" || flag === "1" || flag === "si" || flag === "yes";
+}
+
+function resolveExplicitContactPhone(input) {
+  return sanitizeHumanField(
+    (input && (input.contactPhone || input.confirmedPhone || input.phoneExplicit)) || "",
+  );
+}
+
+function resolveExplicitFullName(input) {
+  return sanitizeHumanField((input && (input.fullName || input.contactName)) || "");
+}
+
+function resolveExplicitCompany(input) {
+  return sanitizeHumanField(
+    (input && (input.company || input.businessName || input.negocio)) || "",
+  );
+}
+
+/**
+ * Antes de cualquier derivación/handoff comercial: nombre + negocio + tel confirmado.
+ * No alcanza el phone del contexto WA ni el name del perfil.
+ * Si contactRefused=true → se permite (operador sin esos datos).
+ */
+function gateContactBeforeClose(input, forAction) {
+  if (isContactRefused(input)) {
+    return {
+      ok: true,
+      contactRefused: true,
+      agentInstruction:
+        "Lead se negó a dar datos de contacto. Cerrá a operador: mensaje breve + " +
+        "handoff_human status=atencion_representante contactRefused=true + handoff_to_human.",
+    };
+  }
+  const missing = [];
+  const fullName = resolveExplicitFullName(input);
+  const company = resolveExplicitCompany(input);
+  const contactPhone = resolveExplicitContactPhone(input);
+  if (!fullName) missing.push("fullName");
+  if (!company) missing.push("company");
+  if (!contactPhone) missing.push("contactPhone");
+  if (!isPhoneConfirmed(input)) missing.push("phoneConfirmed");
+  if (!missing.length) return null;
+  return {
+    ok: false,
+    gate: "missing_contact",
+    needData: true,
+    missing: missing,
+    forAction: forAction || "close",
+    reason:
+      "Faltan datos de contacto obligatorios antes de derivar/handoff (nombre, negocio, teléfono confirmado).",
+    agentInstruction: contactChecklistInstruction(),
+  };
+}
+
+function gateDecideRouteQualification(input, conv) {
+  const earlyType =
+    sanitizeClientType(input && input.clientType) ||
+    sanitizeClientType(conv && conv.client_type) ||
+    "";
+  // Rep / fasón: handoff comercial sin checklist de volumen.
+  if (earlyType === "representante" || earlyType === "fason") return null;
+
+  const q = buildQualification(input, conv);
+  if (!q.province) {
+    return {
+      ok: false,
+      gate: "missing_province",
+      needData: true,
+      missing: ["province"],
+      reason: "Falta provincia/zona antes de rutear.",
+      agentInstruction:
+        "GATE: falta provincia. NO inventes zona. Preguntá SOLO provincia + enter_waiting. " +
+        "Después volvé a decide_route con province y certainty=high.",
+    };
+  }
+  if (q.needsVolume && q.volumeUncertain) {
+    return {
+      ok: false,
+      gate: "volume_uncertain",
+      needData: true,
+      nextStep: "handoff_operator",
+      reason: "Volumen incerto: no rutea; va a operador.",
+      agentInstruction:
+        "GATE volumen incerto. PROHIBIDO estimar bultos bajos ni sin_cobertura/dist por eso. " +
+        "handoff_human status=atencion_representante + handoff_to_human. " +
+        "Mensaje: asesor te contacta para definir cantidades/precios/condiciones.",
+    };
+  }
+  if (q.needsVolume && q.volume === null) {
+    return {
+      ok: false,
+      gate: "missing_volume",
+      needData: true,
+      missing: ["estimatedVolume"],
+      reason: "Falta volumen numérico para tipologías retail/mayorista/distribuidor.",
+      agentInstruction:
+        "GATE: falta volumen. UNA pregunta de bultos/cajas/mes (aviso umbral 50) + enter_waiting. " +
+        "Si no sabe / quiere precios: handoff status=atencion_representante. " +
+        "Si da número: decide_route con estimatedVolume + certainty=high.",
+    };
+  }
+  return null;
+}
+
 async function sb(supabaseUrl, supabaseKey, path, init) {
   const res = await fetch(supabaseUrl.replace(/\/$/, "") + "/rest/v1/" + path, {
     ...init,
@@ -457,6 +691,28 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
       "Hay otra card del mismo teléfono en Muestras (el operador la cierra con Resultado). " +
       "ESTA es una conversación NUEVA: tipificá de cero con lo que diga el lead ahora. " +
       "NO copies ni merges datos de la card de muestras. Esperá dos cards del mismo número (Pipeline rojo).";
+  } else if (
+    row.status === "quiere_ser_distribuidor" ||
+    normalize(input.status) === "quiere_ser_distribuidor"
+  ) {
+    const next = nextStepAfterDistributorColumn(
+      buildQualification(
+        {
+          clientType: "distribuidor",
+          province: row.province,
+          estimatedVolume: row.estimated_volume,
+          aiSummary: row.ai_summary,
+          notes: row.notes,
+          volumeUncertain: input.volumeUncertain,
+          wantsPricesBeforeVolume: input.wantsPricesBeforeVolume,
+          reason: input.reason || input.aiSummary,
+        },
+        row,
+      ),
+    );
+    out.nextStep = next.nextStep;
+    out.gate = "dist_checklist";
+    out.agentInstruction = next.agentInstruction;
   }
   return out;
 }
@@ -468,13 +724,29 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
   );
   if (blocked) return blocked;
 
-  const clientType = input.clientType || "minorista";
-  const province = input.province || "";
+  let conv = null;
+  if (input.conversationId) {
+    const convRows = await sb(
+      supabaseUrl,
+      supabaseKey,
+      "conversations?id=eq." + input.conversationId + "&limit=1",
+      { method: "GET" },
+    );
+    conv = Array.isArray(convRows) && convRows[0] ? convRows[0] : null;
+  }
+
+  const qualBlock = gateDecideRouteQualification(input, conv);
+  if (qualBlock) return qualBlock;
+
+  const q = buildQualification(input, conv);
+  const clientType =
+    sanitizeClientType(input.clientType) ||
+    sanitizeClientType(conv && conv.client_type) ||
+    input.clientType ||
+    "minorista";
+  const province = q.province || "";
   const postalCode = input.postalCode || "";
-  const estimatedVolume =
-    input.estimatedVolume === null || input.estimatedVolume === undefined
-      ? null
-      : Number(input.estimatedVolume);
+  const estimatedVolume = q.volume;
   const wantsToBeDistributor = Boolean(
     input.wantsToBeDistributor || clientType === "distribuidor",
   );
@@ -515,7 +787,9 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       syncDerivedSheet: false,
       coolMealsMenu: false,
       agentInstruction:
-        "REPRESENTANTE — mensaje: asesor te contacta (NO este número) + despedida. Silencio: handoff_human status=quiere_ser_representante + handoff_to_human. Sin menú muestras aunque diga volumen alto.",
+        "REPRESENTANTE — " +
+        contactChecklistInstruction() +
+        " Luego mensaje: asesor te contacta (NO este número) + despedida. Silencio: handoff_human status=quiere_ser_representante + handoff_to_human. Sin menú muestras aunque diga volumen alto.",
     };
   }
 
@@ -532,7 +806,9 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       syncDerivedSheet: false,
       coolMealsMenu: false,
       agentInstruction:
-        "FASÓN — mensaje: sí hacemos fasón/marca propia; asesor te contacta + despedida. Silencio: handoff_human status=quiere_ser_fason + handoff_to_human. Sin menú muestras aunque diga volumen alto.",
+        "FASÓN — " +
+        contactChecklistInstruction() +
+        " Luego mensaje: sí hacemos fasón/marca propia; asesor te contacta + despedida. Silencio: handoff_human status=quiere_ser_fason + handoff_to_human. Sin menú muestras aunque diga volumen alto.",
     };
   }
 
@@ -597,7 +873,11 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       syncDerivedSheet: false,
       coolMealsMenu: true,
       agentInstruction:
-        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras (IA ended; NO handoff_to_human). Si pedido: asesor te contacta; handoff_human + handoff_to_human.",
+        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. " +
+        "Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras (IA ended; NO handoff_to_human). " +
+        "Si pedido: " +
+        contactChecklistInstruction() +
+        " Luego asesor te contacta; handoff_human + handoff_to_human.",
     };
   }
 
@@ -619,7 +899,9 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       syncDerivedSheet: false,
       coolMealsMenu: false,
       agentInstruction:
-        "Cool Meals operador/representante. SIN menú muestras. Mensaje: un asesor/representante te contacta + despedida. Silencio: handoff_human status=atencion_representante + handoff_to_human.",
+        "Cool Meals operador (Córdoba <50). SIN menú muestras. PROHIBIDO decir 'asesor/distribuidor de la zona'. " +
+        contactChecklistInstruction() +
+        " Luego mensaje: un asesor Cool Meals te contacta + despedida. Silencio: handoff_human status=atencion_representante + handoff_to_human.",
     };
   }
 
@@ -634,7 +916,8 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       reason: "Sin cobertura en " + province + distNote,
       syncDerivedSheet: false,
       agentInstruction:
-        "Avisá que aún no hay cobertura; te avisamos cuando lleguemos. handoff_human status=sin_cobertura + handoff_to_human. Queda ~22h en handoff y después pasa a Descartado (IA ended).",
+        contactChecklistInstruction() +
+        " Luego avisá que aún no hay cobertura; te avisamos cuando lleguemos. handoff_human status=sin_cobertura + handoff_to_human.",
     };
   }
 
@@ -649,9 +932,14 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       "Derivado a " + distributor.name + " (" + province + ")" + distNote,
     syncDerivedSheet: true,
     agentInstruction:
-      "DERIVAR: 1) Si faltan nombre completo, teléfono (confirmá WhatsApp) o nombre del negocio → pedilos, NO sync_derived aún. 2) Mensaje: 'Te va a contactar " +
+      "DERIVAR a " +
       distributor.name +
-      "…' + despedida. 3) Silencio: sync_derived + handoff_to_human. Si pidieron muestras con <50: NO request_samples.",
+      ". " +
+      contactChecklistInstruction() +
+      " PROHIBIDO sync_derived hasta tener esos datos (o contactRefused). " +
+      "Mensaje: 'Te va a contactar " +
+      distributor.name +
+      "…' + despedida. Silencio: sync_derived (fullName, company, contactPhone, phoneConfirmed=true) + handoff_to_human. Si pidieron muestras con <50: NO request_samples.",
   };
 }
 
@@ -865,8 +1153,45 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     input.status && allowedStatus[input.status]
       ? input.status
       : "atencion_representante";
+  let gateRemap = null;
   if (normalize(input.status) === "quiere_ser_distribuidor") {
     status = "atencion_representante";
+    gateRemap = "quiere_ser_distribuidor_to_atencion_representante";
+  }
+
+  // Descartado / muestras: no exigen checklist de contacto de esta gate
+  // (muestras ya pasó por request_samples; descartado es rechazo).
+  if (status !== "descartado" && status !== "muestras") {
+    const contactGate = gateContactBeforeClose(input, "handoff");
+    if (contactGate && contactGate.ok === false) return contactGate;
+    if (contactGate && contactGate.contactRefused) {
+      // fuerza operador si se negó a dar datos en un cierre que no era operador
+      if (status === "sin_cobertura" || status === "quiere_ser_representante" || status === "quiere_ser_fason") {
+        // keep status: still a valid commercial close; note refusal below
+      }
+    }
+  }
+
+  if (status === "sin_cobertura") {
+    const coverageProvince = resolveProvince(
+      input.province,
+      existing.province,
+      input.aiSummary,
+      existing.ai_summary,
+      input.reason,
+    );
+    if (!coverageProvince) {
+      return {
+        ok: false,
+        gate: "missing_province",
+        needData: true,
+        missing: ["province"],
+        reason: "No se puede marcar sin_cobertura sin provincia.",
+        agentInstruction:
+          "GATE: falta provincia antes de sin_cobertura. Preguntá SOLO provincia + enter_waiting. " +
+          "Si el lead no sabe zona y pide precios/humano: handoff status=atencion_representante (no sin_cobertura).",
+      };
+    }
   }
   const outcome =
     input.outcome ||
@@ -882,8 +1207,13 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
               ? "descartado"
               : "handoff_humano");
 
+  const handoffCompany = resolveExplicitCompany(input);
   const notes = [
     existing.notes,
+    handoffCompany ? "Negocio/empresa: " + handoffCompany : null,
+    isContactRefused(input)
+      ? "Contacto incompleto: el lead se negó a dar nombre/negocio/teléfono confirmado."
+      : null,
     normalize(input.status) === "quiere_ser_distribuidor"
       ? "Handoff operador (no usar columna Quiere ser distribuidor para handoff): " +
         (input.reason || "faltan precios/volumen u otro dato comercial")
@@ -949,9 +1279,16 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
   if (handoffProvince && sanitizeHumanField(existing.province) !== handoffProvince) {
     patchBody.province = handoffProvince;
   }
-  const handoffName = sanitizeHumanField(input.name) || sanitizeHumanField(existing.name);
+  const handoffName =
+    resolveExplicitFullName(input) ||
+    sanitizeHumanField(input.name) ||
+    sanitizeHumanField(existing.name);
   if (handoffName && sanitizeHumanField(existing.name) !== handoffName) {
     patchBody.name = handoffName;
+  }
+  const handoffContactPhone = resolveExplicitContactPhone(input);
+  if (handoffContactPhone && String(existing.phone || "").trim() !== handoffContactPhone) {
+    patchBody.phone = handoffContactPhone;
   }
 
   let updated;
@@ -1002,6 +1339,7 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     finalizeAt: finalizeAt,
     sheet: sheet,
     kapsoClose: kapsoClose,
+    gateRemap: gateRemap,
     instruction:
       status === "muestras"
         ? "Muestras: sheet/Pipeline listos e IA en ended. NO uses handoff_to_human. Avisá que un representante hace el seguimiento. La card queda en Muestras hasta Resultado."
@@ -1131,6 +1469,22 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
   const volumeBlock = blockDerivationAtHighVolume(input, conv, 50);
   if (volumeBlock) return volumeBlock;
 
+  const contactGate = gateContactBeforeClose(input, "sync_derived");
+  if (contactGate && contactGate.ok === false) return contactGate;
+  // Si se negó al contacto en un derive: no sync_derived a dist.; devolver instrucción a operador.
+  if (contactGate && contactGate.contactRefused) {
+    return {
+      ok: false,
+      gate: "contact_refused_use_operator",
+      needData: false,
+      reason: "Lead se negó a dar contacto: no derivar a dist.; va a operador.",
+      agentInstruction:
+        "Lead se negó a dar nombre/negocio/teléfono. PROHIBIDO sync_derived. " +
+        "Mensaje: un asesor Cool Meals te contacta + despedida. " +
+        "handoff_human status=atencion_representante contactRefused=true + handoff_to_human.",
+    };
+  }
+
   let distributorName = input.distributorName || "";
   if (!distributorName && (input.distributorId || conv.distributor_id)) {
     const distId = input.distributorId || conv.distributor_id;
@@ -1160,6 +1514,16 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
   if (derivedClientType) patch.client_type = derivedClientType;
   if (input.province) patch.province = input.province;
   if (input.aiSummary) patch.ai_summary = input.aiSummary;
+  const derivedName = resolveExplicitFullName(input);
+  if (derivedName) patch.name = derivedName;
+  const derivedPhone = resolveExplicitContactPhone(input);
+  if (derivedPhone) patch.phone = derivedPhone;
+  const derivedCompany = resolveExplicitCompany(input);
+  if (derivedCompany) {
+    patch.notes = [conv.notes, "Negocio/empresa: " + derivedCompany]
+      .filter(Boolean)
+      .join("\n");
+  }
 
   if (distributorName) {
     const slug = String(distributorName)

@@ -50,6 +50,18 @@ function assertSourceAligned() {
     !/fuera de Córdoba → red de distribuidores/.test(mock),
     "mock NO puede decir que ≥50 fuera de Córdoba va a la red de dist.",
   );
+  assert(
+    /gateContactBeforeClose/.test(mock) && /gateContactBeforeClose/.test(prod),
+    "mock y prod deben exigir contacto (nombre/negocio/tel confirmado) antes de handoff/derive",
+  );
+  assert(
+    /gateDecideRouteQualification/.test(mock) && /gateDecideRouteQualification/.test(prod),
+    "mock y prod deben tener gateDecideRouteQualification (checklist duro)",
+  );
+  assert(
+    /nextStepAfterDistributorColumn/.test(mock) && /nextStepAfterDistributorColumn/.test(prod),
+    "mock y prod deben devolver nextStep tras columna quiere_ser_distribuidor",
+  );
 }
 
 async function assertRuntimeContract() {
@@ -110,6 +122,79 @@ async function assertRuntimeContract() {
   assert(
     cba.action === "own_attention" && cba.coolMealsMenu === false,
     `<50 Córdoba debía own_attention sin menú; action=${cba.action} menu=${cba.coolMealsMenu}`,
+  );
+
+  // Checklist: retail sin volumen → bloquea
+  const noVol = await invokeMock({
+    action: "decide_route",
+    certainty: "high",
+    clientType: "retail",
+    province: "Mendoza",
+  });
+  assert(noVol?.ok === false && noVol.gate === "missing_volume", `retail sin volumen debía missing_volume: ${JSON.stringify(noVol)}`);
+
+  // Checklist: volumen incerto → operador (no rutea)
+  const uncertain = await invokeMock({
+    action: "decide_route",
+    certainty: "high",
+    clientType: "distribuidor",
+    province: "Córdoba",
+    volumeUncertain: true,
+  });
+  assert(
+    uncertain?.ok === false && uncertain.gate === "volume_uncertain",
+    `volumen incerto debía volume_uncertain: ${JSON.stringify(uncertain)}`,
+  );
+
+  // Upsert dist → nextStep ask_province
+  const upsert = await invokeMock({
+    action: "upsert_conversation",
+    status: "quiere_ser_distribuidor",
+    phone: "+5493511111111",
+  });
+  assert(
+    upsert?.nextStep === "ask_province" && upsert.gate === "dist_checklist",
+    `upsert dist sin zona debía ask_province: ${JSON.stringify(upsert)}`,
+  );
+
+  // Handoff ilegal quiere_ser_distribuidor → remap operador (con contacto OK)
+  const remap = await invokeMock({
+    action: "handoff",
+    status: "quiere_ser_distribuidor",
+    reason: "quiere precios",
+    fullName: "Fer Romay",
+    company: "Distribuidora Test",
+    contactPhone: "543513053755",
+    phoneConfirmed: true,
+  });
+  assert(
+    remap?.ok === true &&
+      remap.status === "atencion_representante" &&
+      remap.gateRemap === "quiere_ser_distribuidor_to_atencion_representante",
+    `handoff dist debía remapear a operador: ${JSON.stringify(remap)}`,
+  );
+
+  // Contacto obligatorio: handoff sin datos → missing_contact
+  const noContact = await invokeMock({
+    action: "handoff",
+    status: "atencion_representante",
+    reason: "operador",
+  });
+  assert(
+    noContact?.ok === false && noContact.gate === "missing_contact",
+    `handoff sin contacto debía missing_contact: ${JSON.stringify(noContact)}`,
+  );
+
+  // Negativa de contacto → permite handoff operador
+  const refused = await invokeMock({
+    action: "handoff",
+    status: "atencion_representante",
+    reason: "no quiere dar datos",
+    contactRefused: true,
+  });
+  assert(
+    refused?.ok === true && refused.status === "atencion_representante",
+    `contactRefused debía permitir handoff: ${JSON.stringify(refused)}`,
   );
 }
 
