@@ -2,7 +2,7 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: **28 julio 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
+Actualizado: **13 ago 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
 
 Planilla: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) · Anexo: [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md).  
 Operador E2E: [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) · Uso: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
@@ -28,8 +28,9 @@ WhatsApp (Meta)
 | Kapso client (API) | `apps/api/src/lib/kapso.ts` |
 | Bot HTTP (UI/ops) | `apps/api/src/routes/bot.ts` |
 | Cron timeouts | `apps/api/src/routes/cron.ts` → `/api/cron/pipeline-timeouts` |
-| Sandbox reset (pruebas) | `/api/cron/sandbox-reset` + `SANDBOX_RESET_*` → `lib/sandbox-reset.ts` |
-| Cron cada 20 min (Hobby) | `.github/workflows/sandbox-reset.yml` (GitHub Actions → mismo endpoint) |
+| Sandbox reset (wipe a pedido) | `/api/cron/sandbox-reset` + `SANDBOX_RESET_*` → `lib/sandbox-reset.ts`. **Default OFF** |
+| Cron GitHub (no usar en permanente) | `.github/workflows/sandbox-reset.yml` — no dejar schedule activo |
+| Teléfonos AR | `packages/shared/src/phone.ts` (`canonicalizeArPhone`, `phoneLookupVariants`) |
 | Dominio compartido | `packages/shared/src/domain.ts` |
 | Pipeline UI | `apps/web/src/app/pipeline/page.tsx` |
 | Dashboard | `apps/web/src/app/page.tsx` + `apps/api/src/routes/dashboard.ts` |
@@ -107,8 +108,8 @@ Secrets de la function (Platform API; valores en Kapso, no en git):
 
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 - `GOOGLE_SHEETS_WEBHOOK_URL`, `GOOGLE_SHEETS_WEBHOOK_SECRET` (y sheet ids si aplica)
-- `KAPSO_API_BASE_URL`, `KAPSO_API_KEY` (handoff desde `sync_derived` / tools)
-- `DERIVE_HANDOFF_HOURS` (default 24)
+- `KAPSO_API_BASE_URL`, `KAPSO_API_KEY` (ended/handoff **desde tools de cierre**, no desde `sync_derived`)
+- `DERIVE_HANDOFF_HOURS` (default 24; ya no auto-finaliza derivados)
 
 ## Migraciones Supabase
 
@@ -136,8 +137,8 @@ Ver `.env.example`. Críticas para este módulo:
 | `STUCK_RUNNING_MINUTES` | Execution Kapso en `running` sin avanzar → `ended` (+ mensaje de recuperación). Default 3 |
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
-| `SANDBOX_RESET_ENABLED` | `true` solo en semana de pruebas: permite wipe vía `/api/cron/sandbox-reset` |
-| `SANDBOX_RESET_UNTIL` | ISO datetime; pasado ese momento el endpoint no borra (ej. `2026-08-20T00:00:00-03:00`) |
+| `SANDBOX_RESET_ENABLED` | Debe quedar **`false`**. `true` solo para un wipe puntual |
+| `SANDBOX_RESET_UNTIL` | ISO datetime; pasado ese momento el endpoint no borra |
 | `SANDBOX_RESET_PHONES` | Opcional CSV; vacío = todas las conversations |
 | `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención comercial / sin cobertura |
 | `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | Sheet dist / rep / fasón |
@@ -145,41 +146,51 @@ Ver `.env.example`. Críticas para este módulo:
 
 Web: `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
 
-## Sandbox reset (semana de pruebas)
+## Sandbox reset (wipe a pedido)
 
-Objetivo: mismo teléfono tipifica de nuevo sin esperar el lock de 1 año.
+Objetivo: mismo teléfono tipifica de nuevo sin esperar el lock de 1 año. **No** corre solo.
 
-1. Vercel API: `SANDBOX_RESET_ENABLED=true` + `SANDBOX_RESET_UNTIL=…` (sin `PHONES` = wipe total).
-2. Endpoint: `GET|POST /api/cron/sandbox-reset` (auth `CRON_SECRET`) → Kapso `waiting|running|handoff` → `ended` + delete `conversations` (+ muestras).
-3. Scheduler gratis: [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) cada 20 min; secret del repo `CRON_SECRET` (= valor en Vercel).
-4. Apagar: Disable workflow y/o `SANDBOX_RESET_ENABLED=false`.
+1. Default: `SANDBOX_RESET_ENABLED=false`. No habilitar el workflow de GitHub en permanente.
+2. Wipe puntual: Kapso `ended` en `waiting|running|handoff` + delete `conversations` / `sample_requests` de ese tester. O prender el flag **un rato**, pegarle a `GET|POST /api/cron/sandbox-reset` (auth `CRON_SECRET`) y volver a `false`.
+3. El workflow [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) existe por si hace falta; no es el flujo diario.
 
-Ops one-pager: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7.
+Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7.
 
 ## Dashboard (API)
 
 `GET /api/dashboard?from=YYYY-MM-DD&to=YYYY-MM-DD` (default: mes corriente).
 
 - Fuente única: tabla **`conversations`** (no `leads`).
+- **Dedupe:** `canonicalizeArPhone` — 1 teléfono = 1 lead (card más antigua del período).
 - Respuesta: `executive` + `commercial` (counts, percentages, `byDistributor`, `byProvince`, `interestKpis`).
 - Sin `monthlyEvolution` / vs período anterior (el filtro de fechas alcanza).
+
+## Teléfonos
+
+`packages/shared/src/phone.ts` (y helpers duplicados en las functions Kapso):
+
+- Store: `54` + nacional, sin `9` móvil (`3513053755` → `543513053755`).
+- Lookup: `.in(phoneLookupVariants(...))` para no duplicar cards por formato.
+- Pipeline badge y dashboard usan el mismo canon.
 
 ## Comportamiento acordado (producto)
 
 ### Agent (`workflows/coolmeals-leads/workflow.ts`)
 
 1. Primer mensaje → `upsert_conversation` + Beacons + tipificación.
-2. Fasón / representante (SER) → `decide_route` + handoff (sin menú).
+2. Fasón / representante (SER) → `decide_route` + **contacto** + handoff (sin menú).
 3. Quiere ser distribuidor → 4 preguntas; **4 SÍ** → `upsert` columna **sin** handoff → zona/volumen → `decide_route`.
-4. Según `decide_route` (seguir `agentInstruction` / `coolMealsMenu`):
+4. Gates en function: `certainty=high`, provincia/volumen si aplica, `gateContactBeforeClose` en handoff/`sync_derived`.
+5. Según `decide_route` (seguir `agentInstruction` / `coolMealsMenu`):
 
 | action | Comportamiento |
 |--------|----------------|
 | `own_attention` + menú | ≥50 cualquier provincia → muestras o pedido |
-| `own_attention` sin menú | Córdoba &lt;50 → handoff `atencion_representante` |
-| `derive_to_distributor` | `sync_derived` + `handoff_to_human` (sin `request_samples`) |
-| `no_coverage` | `sin_cobertura` → auto **Descartado** ~22h |
-| `quiere_ser_representante` / `fason` | handoff a su columna |
+| `own_attention` sin menú | Córdoba &lt;50 → contacto + handoff `atencion_representante`. Copy: no “asesor de la zona” |
+| `derive_to_distributor` | **mensaje** → `sync_derived` → `handoff_to_human` (sin `request_samples`). `sync_derived` **no** setea Kapso `handoff` |
+| `no_coverage` | contacto → `sin_cobertura` → auto **Descartado** ~22h |
+| `quiere_ser_representante` / `fason` | contacto + handoff a su columna |
+| volumen incerto | handoff `atencion_representante` (remap si el modelo manda `quiere_ser_distribuidor`) |
 
 **Muestras (≥50):** datos envío → `request_samples` → mensaje representante → `handoff_human` `muestras` (**Kapso ended**, sin `handoff_to_human`). Card queda hasta Resultado. Nuevo WA → 2ª card fresca.
 
@@ -234,38 +245,38 @@ node .agents/skills/automate-whatsapp/scripts/update-execution-status.js \
   <execution-id> --status ended
 ```
 
-Reset de un tester (ej. `543513053755`):
+Reset de un tester (ej. `543513053755` / `3513053755` = mismo número):
 
 1. Kapso: `ended` en executions `waiting` / `handoff` / `running`.
-2. Supabase: PATCH conversation → `ia_atendiendo`, limpiar `outcome`, `tags`, `finalize_at`, `human_handoff_at`, `kapso_execution_id`, `distributor_id` (no poner `province` / `ai_summary` / `client_type` en `null` si la columna es NOT NULL).
+2. Supabase: **delete** `conversations` (+ `sample_requests`) de ese teléfono, o PATCH a `ia_atendiendo` limpiando `outcome`, `tags`, `finalize_at`, `human_handoff_at`, `kapso_execution_id`, `distributor_id` (no poner `province` / `ai_summary` / `client_type` en `null` si la columna es NOT NULL).
 
-## Pruebas sandbox validadas (julio 2026)
+## Pruebas sandbox validadas (ago 2026)
 
 | # | Caso | Resultado |
 |---|------|-----------|
-| 1 | Quiere ser distribuidor (4 SÍ) | Columna **sin** handoff → sigue zona/volumen → handoff al rutear |
+| 1 | Quiere ser distribuidor (4 SÍ) | Columna **sin** handoff → zona/volumen → contacto → handoff al rutear |
 | 1b | Quiere ser dist. sin requisitos | Sin columna dist.; tipificar compra o Descartado |
-| 2 | Sin cobertura | Columna + handoff → auto Descartado ~22 h |
-| 3 | Minorista Mendoza &lt;50 | Derivado + handoff |
+| 2 | Sin cobertura | Contacto + columna + handoff → auto Descartado ~22 h |
+| 3 | Minorista Mendoza &lt;50 | Mensaje dist **antes** de `sync_derived` + handoff |
 | 4 | ≥50 cualquier provincia | Menú muestras/pedido |
-| 5 | Córdoba &lt;50 | Atención humana sin menú |
-| 6 | Representante SER | Columna + handoff |
-| 7 | Fasón | Columna + handoff |
+| 5 | Córdoba &lt;50 | Atención humana sin menú; **no** “asesor de la zona”; pide contacto |
+| 6 | Representante SER | Contacto + columna + handoff |
+| 7 | Fasón | Contacto + columna + handoff |
 | 8 | Recontacto &lt;1 año ya calificado | Sin lead nuevo; mensaje corto |
-| 9 | Cards mismo teléfono | Pipeline rojo + badge 1/2 |
+| 9 | Cards mismo teléfono (351 vs 54351) | Pipeline rojo + badge 1/2; KPI = 1 |
+| 10 | Volumen incerto | Operador; no inventar bultos |
 
 ## Gaps conocidos / siguiente polish
 
 1. Cambiar `PHONE_NUMBER_ID` del workflow a producción (Meta) cuando toque.
 2. Confirmar migrations `20260720*` aplicadas en **todos** los entornos (sandbox OK).
-3. Guard de status en **API** `/bot/upsert-conversation` (la function ya protege terminales + `muestras` + interés comercial).
-4. Unificar `decide_route` (function vs `routing.ts`) o llamar siempre a la API.
-5. Confirmar secrets Kapso de los 4 sheets (`GOOGLE_SHEET_*` + webhook) en todos los entornos.
-6. Cron: Hobby no permite `*/20` en Vercel; sandbox reset va por GitHub Actions + `CRON_SECRET` en el repo. `pipeline-timeouts` se puede llamar igual con curl/Actions si hace falta más frecuente que 1×/día.
-7. Auth real (hoy `optionalInternalAuth` / roles stub).
-8. Tras cada `kapso build` + `update-graph`, **siempre** confirmar `function_id` en tools.
-9. No cortar executions `waiting`/`handoff` mid-prueba al desplegar (rompe el hilo del lead).
-10. Dashboard: KPIs opcionales (sin cobertura count, muestras, funnel por columna) si el negocio lo pide.
+3. Unificar `decide_route` (function vs `routing.ts`) o llamar siempre a la API.
+4. Confirmar secrets Kapso de los 4 sheets (`GOOGLE_SHEET_*` + webhook) en todos los entornos.
+5. Auth real (hoy `optionalInternalAuth` / roles stub).
+6. Tras cada `kapso build` + `update-graph`, **siempre** confirmar `function_id` en tools.
+7. No cortar executions `waiting`/`handoff` mid-prueba al desplegar (rompe el hilo del lead).
+8. Deploy Vercel: **siempre** `--project tool-coolmeals-web` o `tool-coolmeals-api` (nunca `vercel deploy` suelto).
+9. Wipe sandbox solo a pedido; no reactivar el cron de 20 min.
 
 ## Convención de cambios
 

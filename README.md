@@ -53,7 +53,8 @@ En SQL Editor, en orden:
 2. `supabase/migrations/20260719000000_phase0_bot_foundation.sql`
 3. `supabase/migrations/20260720000000_derive_handoff_window.sql` (`derived_at` / `finalize_at`)
 4. `supabase/migrations/20260720140000_quiere_ser_representante_fason.sql`
-5. Opcional: `supabase/seed.sql`
+5. `supabase/migrations/20260724120000_sample_request_extra_fields.sql`
+6. Opcional: `supabase/seed.sql`
 
 ## Documentación (bot WhatsApp + Pipeline)
 
@@ -66,8 +67,8 @@ En SQL Editor, en orden:
 | Uso diario Pipeline | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
 | Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
-**Ruteo vigente (jul 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist / sin cobertura (→ Descartado ~22h). Recontacto mismo WA &lt;1 año (ya calificado) no infla métricas.  
-Prod: [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (Vercel team **FEcotech**; deploy CLI).
+**Ruteo vigente (ago 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist / sin cobertura (→ Descartado ~22h). Contacto (nombre+negocio+tel) antes de cerrar. Teléfonos AR canónicos; KPIs = 1ª card. Wipe sandbox **a pedido**.  
+Prod: [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (Vercel team **FEcotech**; deploy CLI con `--project`).
 
 ## Scripts
 
@@ -92,7 +93,7 @@ Dos proyectos del mismo repo:
    Build: `npm run build -w @coolmeals/shared && npm run build:api:handler`  
    Antes de deploy CLI: `npm run build:api:handler`
 
-**Cron / Hobby:** Vercel Hobby solo permite crons **1×/día**. Para frecuencia mayor (ej. sandbox reset cada 20 min) usamos **GitHub Actions** que llama a `/api/cron/*` con `CRON_SECRET`. Ver [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) §7 y [`.github/workflows/sandbox-reset.yml`](.github/workflows/sandbox-reset.yml).
+**Cron / Hobby:** Vercel Hobby solo permite crons **1×/día**. Timeouts de Pipeline van por el cron diario de Vercel. El wipe de sandbox **no** debe quedar en schedule: ver [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) §7.
 
 ## Seguridad
 

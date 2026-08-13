@@ -3,7 +3,7 @@
 Documento para el **operador comercial** (o quien valide el bot).  
 Objetivo: probar **cada flujo** de punta a punta y saber **dónde mirar** si algo no cuadra.
 
-Actualizado: **11 ago 2026**.
+Actualizado: **13 ago 2026**.
 
 Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).
 
@@ -25,13 +25,16 @@ Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-
 | Tipo | Resultado típico |
 |------|------------------|
 | Rep / fasón (SER) | Su columna + handoff; sin menú |
-| Dist 4 SÍ | Columna sin handoff → ruteo por vol/zona |
+| Dist 4 SÍ | Columna sin handoff → zona/volumen → contacto → ruteo |
 | ≥50 cualquier provincia | Menú Cool Meals |
-| Córdoba &lt;50 | Operador sin menú |
+| Córdoba &lt;50 | Operador sin menú (no “asesor de la zona”) |
 | Fuera CBA &lt;50 | Dist o sin cobertura → auto Descartado |
+| Volumen / precios inciertos | Operador; no inventar bultos |
 | Consumidor final | Descartado |
 
-Detalle y casos C01–C21: ver CSV.
+**Cierre comercial:** el bot debe pedir nombre + negocio + tel confirmado **antes** de pausarse (salvo Descartado consumidor / ficha de Muestras).
+
+Detalle y casos C01–C24: ver CSV.
 
 ---
 
@@ -50,17 +53,17 @@ Después del handoff el bot **se pausa** (Atención / Derivado / etc.). En **Mue
 
 ## 4. Reset entre pruebas (importante)
 
-**Semana de pruebas (hasta ~20 ago 2026):** cada ~**20 min** un job automático limpia Kapso + Pipeline  
-(mismo teléfono puede tipificar de nuevo). Ver cheat sheet §7 / Actions → **Sandbox reset**.  
-No hace falta pedir reset a mano salvo que necesites probar **ya** (entonces: Actions → Run workflow, o esperá el próximo ciclo).
+El wipe automático **está apagado**. El mismo WhatsApp **no** se limpia solo.
 
-Si reutilizás el **mismo** WhatsApp **fuera** de esa ventana automática:
+Para reutilizar el **mismo** número:
 
-1. Pedile a quien tenga acceso Kapso que ponga la execution en **`ended`** (si sigue en `waiting` / `handoff` / `running`).  
-2. Pedile que en Supabase / Pipeline deje la conversación “limpia” (o que cree una conversación nueva).  
+1. Pedí wipe a quien tenga acceso: Kapso `ended` en executions `waiting` / `handoff` / `running`.  
+2. Borrar (o pedir que borren) las cards / muestras de ese teléfono en Supabase.  
 3. **No** dejes una conversation a medias y arranques otro caso encima: el bot “recuerda” el hilo.
 
-Si no podés resetear: esperá el auto-reset, usá **otro número**, o pedí un Run workflow manual.
+Si no podés resetear: usá **otro número**, o esperá el lock de 1 año (no sirve para pruebas).
+
+El cron `/api/cron/sandbox-reset` existe para un wipe puntual si alguien lo prende a propósito; **no** dejar `SANDBOX_RESET_ENABLED=true` permanente. Ver cheat sheet §7.
 
 ---
 
@@ -81,6 +84,8 @@ Hacé los casos **en este orden**. Cada uno es independiente; tachá al completa
 | 7 | Fasón / marca propia | §6.8 |
 | Extra | Mayorista ≥50 **fuera** de Córdoba → menú Cool Meals | CSV C11 |
 | Extra | Pedido (opción del menú Cool Meals) | §6.10 |
+| Extra | Contacto obligatorio + Córdoba copy | §6.11 |
+| Extra | Volumen incerto → operador | §6.12 |
 | Cierre | Dashboard / métricas | §7 |
 
 ---
@@ -105,7 +110,7 @@ Hola, quiero ser distribuidor en Mendoza, tengo depósito y logística de congel
 2. Si respondés **sí a las 4**:
    - **Pipeline** → columna **Quiere ser distribuidor**.
    - El bot **sigue** (zona + volumen). **Todavía no** hay handoff Kapso.
-   - Después del ruteo (≥50 / Córdoba &lt;50 / fuera) → ahí sí handoff según el caso.
+   - Después del ruteo (≥50 / Córdoba &lt;50 / fuera) → pide **contacto** (nombre + negocio + tel) → ahí sí handoff según el caso.
 3. Si **falta alguna** de las 4:
    - No va a la columna Quiere ser distribuidor.
    - Tipifica camino de compra o Descartado si rechaza.
@@ -152,9 +157,10 @@ Hola, tengo una rotisería en Salta y quiero productos Cool Meals / Froodie
 **Qué tiene que pasar**
 
 1. Avisa que por ahora no hay cobertura en esa zona.  
-2. **Pipeline** → **Sin cobertura**.  
-3. **Sheet Sin cobertura** → fila nueva (datos para recontactar).  
-4. Handoff.
+2. Pide **contacto** (nombre + negocio + tel confirmado) **antes** de pausarse.  
+3. **Pipeline** → **Sin cobertura**.  
+4. **Sheet Sin cobertura** → fila nueva (datos para recontactar).  
+5. Handoff.
 
 **No debe:** derivar a un dist. inventado ni pedir muestras Cool Meals.
 
@@ -171,12 +177,13 @@ Hola, soy minorista en Mendoza, compro poco volumen, quiero productos
 **Qué tiene que pasar**
 
 1. El bot califica (tipo + zona).  
-2. Deriva al dist. de la zona (ej. Cool Logística Cuyo).  
-3. **Pipeline** → **Derivado a distribuidor** + hashtag naranja `#Nombre_Del_Distribuidor`.  
-4. **Sheet de derivados** → fila nueva.  
-5. Handoff.
+2. Pide **contacto**.  
+3. **Mensaje primero:** “te va a contactar [dist]…” + despedida. Recién después registra.  
+4. **Pipeline** → **Derivado a distribuidor** + hashtag naranja `#Nombre_Del_Distribuidor`.  
+5. **Sheet de derivados** → fila nueva.  
+6. Handoff.
 
-**No debe:** pedir umbral de 50 bultos ni menú Cool Meals.
+**No debe:** pedir umbral de 50 bultos ni menú Cool Meals; ni callar después del contacto (hang).
 
 ---
 
@@ -200,7 +207,7 @@ También vale decir **cajas** (mismo significado). Ej. wraps: 60 cajas ≈ 1440 
 
 **Pará acá** si solo querés validar el menú; seguí con 6.6 (muestras) o 6.10 (pedido).
 
-**No debe:** derivar a un distribuidor de Córdoba por volumen alto.
+**No debe:** derivar a un distribuidor de Córdoba por volumen alto ni decir “asesor/distribuidor de la zona”.
 
 ---
 
@@ -267,11 +274,12 @@ Hola, quiero ser representante comercial de Cool Meals en Buenos Aires
 **Qué tiene que pasar**
 
 1. Confirma el interés (sin formulario largo).  
-2. Avisa que un **asesor comercial te CONTACTA** (teléfono / otro WhatsApp — **no** por el número del bot).  
-3. Se **despide**.  
-4. **Pipeline** → **Quiere ser representante**.  
-5. **Sheet Atención comercial** → `tipo_cliente` representante.  
-6. Handoff.
+2. Pide **contacto** (nombre + negocio + tel).  
+3. Avisa que un **asesor comercial te CONTACTA** (teléfono / otro WhatsApp — **no** por el número del bot).  
+4. Se **despide**.  
+5. **Pipeline** → **Quiere ser representante**.  
+6. **Sheet Atención comercial** → `tipo_cliente` representante.  
+7. Handoff.
 
 **No debe:** dar a entender que “ahora te habla el representante por este mismo número”.
 
@@ -288,10 +296,11 @@ Hola! quiero tener mi marca de alimentos congelados. queria saber si brindaban e
 **Qué tiene que pasar**
 
 1. Reconoce **fasón** / marca propia.  
-2. Cierre similar al representante: asesor contacta por otro canal + despedida (sin formulario eterno).  
-3. **Pipeline** → **Quiere ser fasón**.  
-4. **Sheet Atención comercial** → `tipo_cliente` fasón.  
-5. Handoff.
+2. Pide **contacto**.  
+3. Cierre similar al representante: asesor contacta por otro canal + despedida (sin formulario eterno).  
+4. **Pipeline** → **Quiere ser fasón**.  
+5. **Sheet Atención comercial** → `tipo_cliente` fasón.  
+6. Handoff.
 
 **No debe:** reiniciar la charla preguntando de cero “qué tipo de negocio es…” si ya se entendió fasón.
 
@@ -320,8 +329,46 @@ Partí de **6.4** y elegí **agendar pedido** (no muestras).
 **Qué tiene que pasar**
 
 1. **Pipeline** → **Atención humana**.  
-2. Handoff (asesor comercial sigue por el canal humano / handoff Kapso).  
-3. **No** fila en `/muestras` por este camino.
+2. Pide **contacto** antes de pausarse.  
+3. Handoff (asesor comercial sigue por el canal humano / handoff Kapso).  
+4. **No** fila en `/muestras` por este camino.
+
+---
+
+### 6.11 — Contacto obligatorio + copy Córdoba
+
+**Mensaje de prueba:**
+
+```text
+Hola, soy mayorista en Córdoba, compro unos 20 bultos por mes
+```
+
+Cuando pida datos, respondé nombre + negocio. Si confirma el mismo WA, está bien.
+
+**Qué tiene que pasar**
+
+1. **Atención humana** (Córdoba &lt;50, sin menú).  
+2. Pide nombre completo + negocio + “¿este teléfono te sirve?”.  
+3. **No** dice “asesor/distribuidor de la zona”.  
+4. Mensaje de cierre + handoff. **No** se queda mudo después del nombre.
+
+**No debe:** cerrar solo con el nombre del perfil de WhatsApp.
+
+---
+
+### 6.12 — Volumen incerto → operador
+
+**Mensaje de prueba:**
+
+```text
+Hola, soy mayorista en Mendoza, más o menos 20 pero no sé, quiero ver precios
+```
+
+**Qué tiene que pasar**
+
+1. **Atención humana** (no inventa bultos bajos ni deriva/sin cobertura por eso).  
+2. Contacto + “un asesor te contacta para precios/volumen”.  
+3. **No** columna Quiere ser distribuidor por este camino.
 
 ---
 
@@ -338,7 +385,8 @@ Cuando hayas corrido varios casos:
    - **por provincia**  
    - derivados por distribuidor  
 
-**Fuente de verdad:** lo mismo que ves en el **Pipeline** (conversaciones), no una tabla aparte de “leads viejos”.
+**Fuente de verdad:** conversaciones del Pipeline, **dedupe por teléfono canónico**.  
+Si ves 2 cards rojas del mismo número → Dashboard cuenta **1** (la más antigua).
 
 Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 
@@ -394,7 +442,9 @@ Mandale a soporte / tech:
 | 7 | Fasón | ☐ | ☐ | Atención comercial ☐ | ☐ | |
 | E1 | ≥50 fuera CBA → menú Cool Meals | ☐ | ☐ | Atención ☐ | ☐ | |
 | E2 | Pedido Cool Meals | ☐ | Atención humana ☐ | — | ☐ | |
-| D | Dashboard filtro + provincia | ☐ | — | — | — | |
+| E3 | Contacto + copy CBA | ☐ | Atención humana ☐ | — | ☐ | |
+| E4 | Volumen incerto | ☐ | Atención humana ☐ | — | ☐ | |
+| D | Dashboard: 2 cards mismo tel = 1 KPI | ☐ | — | — | — | |
 
 ---
 

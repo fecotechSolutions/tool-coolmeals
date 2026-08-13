@@ -1,5 +1,6 @@
-# Semana de pruebas sandbox: limpia Kapso + conversations cada ~20 min.
-# Gratis (repo público). Apagar: desactivar este workflow o SANDBOX_RESET_ENABLED=false.
+# Wipe sandbox puntual (Kapso + conversations).
+# NO usar en permanente: el auto-reset cada 20 min está apagado a propósito.
+# Encender solo si alguien pide wipe, y dejar SANDBOX_RESET_ENABLED=false después.
 name: Sandbox reset
 
 on:

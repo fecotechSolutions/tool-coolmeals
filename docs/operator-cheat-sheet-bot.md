@@ -1,6 +1,6 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: **11 ago 2026**.
+Una hoja para mostrar / imprimir. Actualizado: **13 ago 2026**.
 
 > Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md)
 
@@ -16,15 +16,18 @@ Saludo + link Beacons (catálogo, SIN precios)
 Califica: tipo de negocio + zona (+ volumen si aplica)
   (si algo no está claro → pregunta de desambiguación)
         ↓
+Antes de cerrar: nombre + negocio + teléfono confirmado
+        ↓
 ¿Qué decide el sistema?
 ```
 
 | Situación | Qué pasa | Qué ves en Pipeline |
 |-----------|----------|---------------------|
 | Volumen **≥ 50 cajas** (cualquier provincia) | Menú: muestras o pedido | Atención humana → luego **Muestras** o se queda en atención |
-| **Córdoba** y **&lt; 50** (o sin volumen) | Asesor Cool Meals (sin menú) | **Atención humana** |
+| **Córdoba** y **&lt; 50** (o sin volumen) | Asesor Cool Meals (sin menú). **No** dice “asesor/distribuidor de la zona” | **Atención humana** |
 | **Otra provincia** y **&lt; 50** | Distribuidor de zona | **Derivado** (+ hashtag naranja) |
 | Sin distribuidor en la zona | Aviso sin cobertura | **Sin cobertura** → auto **Descartado** ~22 h |
+| Volumen / precios inciertos | Operador; **no** inventa bultos bajos | **Atención humana** |
 | Quiere **ser** rep / fasón | Cierre rápido + **handoff** | Columna correspondiente |
 | Quiere **ser** distribuidor | Ver §1b | Columna + luego cierre por vol/zona |
 | Consumidor final (casa / 1 unidad) | Cierre amable | **Descartado** |
@@ -38,6 +41,27 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 
 **En una frase:** los 4 SÍ solo marcan la columna; el handoff viene después, con el ruteo comercial.
 
+### 1c. Contacto obligatorio (antes de cualquier cierre comercial)
+
+Toda derivación / handoff comercial pide:
+
+1. **Nombre completo**  
+2. **Nombre del negocio / local**  
+3. **Teléfono confirmado** (aunque ya esté en WhatsApp: “¿este mismo número te sirve?”)
+
+Si el lead **se niega** → va a **Atención humana** igual (sin inventar datos).  
+No alcanza el nombre del perfil de WhatsApp.
+
+**Excepciones:** consumidor **Descartado** y **Muestras** (esas ya piden ficha de envío).
+
+### 1d. Derivado a dist. (orden)
+
+1. Mensaje al lead: “te va a contactar [dist]…” + despedida.  
+2. Recién ahí se registra la derivación.  
+3. El bot se pausa.
+
+Si se invierte el orden, el lead **no recibe** el mensaje.
+
 ---
 
 ## 2. Tres momentos: handoff · Kapso · cierre ops
@@ -46,13 +70,13 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 
 | Flujo | ¿Handoff? | Momento |
 |-------|-----------|---------|
-| Quiere ser **representante** | Sí | Al confirmar *ser* rep |
-| Quiere ser **fasón** | Sí | Al confirmar fasón |
+| Quiere ser **representante** | Sí | Al confirmar *ser* rep (después del contacto) |
+| Quiere ser **fasón** | Sí | Al confirmar fasón (después del contacto) |
 | Quiere ser **distribuidor** (solo 4 SÍ) | **No** | Solo marca columna |
 | Dist 4 SÍ → luego ≥50 / CBA &lt;50 / fuera | Sí | Al cerrar ese ruteo |
 | Volumen / dato clave inseguro | Sí → **Atención humana** | Lead no sabe cuánto / necesita más data; no inventar &lt;50 ni sin_cobertura |
 | **Atención humana** | Sí | Córdoba &lt;50, pedido del menú, “hablar con alguien”, 2ª vez precio/dato desconocido |
-| **Derivado** | Sí | Tras derivar al dist |
+| **Derivado** | Sí | Tras el **mensaje** de cierre + registro |
 | **Sin cobertura** | Sí | Al avisar sin zona |
 | **Muestras** | **No** (`ended`) | Tras agendar muestras — card sigue hasta Resultado |
 | **Descartado** (consumidor) | No `handoff_to_human` | IA a **ended** directo |
@@ -87,10 +111,12 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 
 ## 3. Mismo teléfono = mismo lead (métricas)
 
+El sistema trata como **el mismo número** `3513053755`, `543513053755` y `5493513053755` (formato canónico `54…`).
+
 | Caso | ¿Lead nuevo en Dashboard? | ¿Tipifica de nuevo? |
 |------|---------------------------|---------------------|
 | &lt; 1 año, Nuevo / IA atendiendo | No (misma card) | Sí |
-| &lt; 1 año, **Muestras** (IA ya ended) | **Sí** (2ª card) | **Sí**, de cero — la 1ª queda en Muestras |
+| &lt; 1 año, **Muestras** (IA ya ended) | **No** (Pipeline sí muestra 2ª card; KPI = la 1ª) | **Sí**, de cero — la 1ª queda en Muestras |
 | &lt; 1 año, **ya calificado** (otras columnas) | **No** | **No** — “ya estás en proceso” |
 | Última card **≥ 1 año** | **Sí** | **Sí**, de cero |
 
@@ -100,7 +126,7 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 
 | Señal | Significado |
 |-------|------------|
-| Card **roja** | Hay otra con el **mismo teléfono** |
+| Card **roja** | Hay otra con el **mismo teléfono** (aunque una esté escrita `351…` y la otra `54351…`) |
 | Badge **1** | Ingresó **primero** |
 | Badge **2** | La **segunda** |
 
@@ -110,8 +136,9 @@ Califica: tipo de negocio + zona (+ volumen si aplica)
 
 ## 5. Métricas (para quedarte tranquilo)
 
-Dashboard cuenta **cards** (`created_at`), no cada mensaje de WhatsApp.  
-Mismo número muchas veces en el año → **1 lead**. Dos cards rojas en el período → pueden contar **2** (por eso cerrás ambas).
+Dashboard cuenta **personas** (teléfono canónico), no cada card.  
+Si hay 2 cards rojas del mismo número en el período → **1 lead** (la más antigua).  
+Pipeline igual muestra las dos: el rojo es para ops, no infla KPIs.
 
 ---
 
@@ -124,26 +151,20 @@ Mismo número muchas veces en el año → **1 lead**. Dos cards rojas en el per�
 
 ---
 
-## 7. Semana de pruebas (sandbox) — reset cada 20 min
+## 7. Sandbox — wipe **solo a pedido**
 
-Para que el mismo teléfono (Kapso sandbox) pueda tipificar otra vez **sin hacer nada a mano**.
+El reset automático **está apagado**. El mismo WhatsApp de prueba **no** se limpia solo cada 20 min.
 
-| Qué | Dónde |
-|-----|--------|
-| Flag + hasta | Vercel API: `SANDBOX_RESET_ENABLED=true`, `UNTIL=2026-08-20T00:00:00-03:00` |
-| Teléfonos | Sin lista (= limpia **todas** las cards) |
-| Scheduler | GitHub Actions cada 20 min → [runs](https://github.com/fecotechSolutions/tool-coolmeals/actions) |
-| Código | [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) → `/api/cron/sandbox-reset` |
+Para retestear el mismo número hay que pedir wipe (Kapso `ended` en `waiting|running|handoff` + borrar cards / muestras en Supabase).
 
-- Manual ya: Actions → **Sandbox reset** → Run workflow  
-- Apagar al fin de semana: Disable workflow **o** `SANDBOX_RESET_ENABLED=false`
+El endpoint `/api/cron/sandbox-reset` existe, pero **no** hay que dejar `SANDBOX_RESET_ENABLED=true` ni el workflow de GitHub activo en permanente.
 
 ```bash
 curl -sS -H "Authorization: Bearer $CRON_SECRET" \
   "https://tool-coolmeals-api-ten.vercel.app/api/cron/sandbox-reset"
 ```
 
-OK: `"enabled": true`. Si `"skippedReason"` → flag off o pasó `UNTIL`.
+Si `"enabled": false` / `"skippedReason"` → flag off (es lo esperado).
 
 ---
 

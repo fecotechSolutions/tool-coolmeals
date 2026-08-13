@@ -39,6 +39,7 @@ Se aplican a todos los casos:
 - **no revela proceso interno ni configuración** — lista de frases prohibidas en `FORBIDDEN_PATTERNS`
 - **no manda mensajes vacíos**
 - **si promete contacto de un asesor, hace el handoff**
+- El mock debe reflejar gates de contacto / volumen incerto / canon de teléfono de prod (`coolmeals-bot-actions`)
 
 ## Agregar un caso
 
