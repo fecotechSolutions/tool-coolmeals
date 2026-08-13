@@ -3,10 +3,12 @@ import {
   botFinalizeSchema,
   botHandoffSchema,
   botUpsertConversationSchema,
+  canonicalizeArPhone,
   createSampleRequestSchema,
   decideRouteInputSchema,
   fail,
   ok,
+  phoneLookupVariants,
   type CommercialSettings,
 } from "@coolmeals/shared";
 import { zValidator } from "@hono/zod-validator";
@@ -70,11 +72,15 @@ botRoutes.post(
     const supabase = getSupabase();
     const RECONTACT_LOCK_DAYS = 365;
     const MID_FLOW = new Set(["nuevo", "ia_atendiendo"]);
+    const phone =
+      canonicalizeArPhone(body.phone) ||
+      String(body.phone || "").replace(/\D/g, "");
+    const phoneVariants = phoneLookupVariants(body.phone || phone);
 
     const { data: existing } = await supabase
       .from("conversations")
       .select("*")
-      .eq("phone", body.phone)
+      .in("phone", phoneVariants.length ? phoneVariants : [phone])
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -106,6 +112,7 @@ botRoutes.post(
       if (body.kapsoExecutionId !== undefined) {
         touch.kapso_execution_id = body.kapsoExecutionId;
       }
+      if (phone && String(existing.phone || "") !== phone) touch.phone = phone;
       const messages = Array.isArray(existing.messages)
         ? [...existing.messages]
         : [];
@@ -128,7 +135,7 @@ botRoutes.post(
     }
 
     const patch: Record<string, unknown> = {
-      phone: body.phone,
+      phone,
       origin: body.origin,
     };
 
@@ -178,8 +185,8 @@ botRoutes.post(
       row = data as DbConversation;
     } else {
       const insert = {
-        name: body.name ?? body.phone,
-        phone: body.phone,
+        name: body.name ?? phone,
+        phone,
         origin: body.origin,
         status: body.status ?? "ia_atendiendo",
         client_type: body.clientType ?? "minorista",
@@ -277,9 +284,12 @@ botRoutes.post(
     if (body.conversationId) {
       query = query.eq("id", body.conversationId);
     } else if (body.phone) {
-      query = query.eq("phone", body.phone).order("updated_at", {
-        ascending: false,
-      });
+      const variants = phoneLookupVariants(body.phone);
+      query = query
+        .in("phone", variants.length ? variants : [body.phone])
+        .order("updated_at", {
+          ascending: false,
+        });
     } else {
       return c.json(
         fail("VALIDATION_ERROR", "conversationId or phone required"),
@@ -544,11 +554,15 @@ botRoutes.post(
     const supabase = getSupabase();
 
     let conversationId = body.conversationId ?? null;
+    const samplePhone =
+      canonicalizeArPhone(body.phone) ||
+      String(body.phone || "").replace(/\D/g, "");
     if (!conversationId && body.phone) {
+      const variants = phoneLookupVariants(body.phone);
       const { data: found } = await supabase
         .from("conversations")
         .select("id")
-        .eq("phone", body.phone)
+        .in("phone", variants.length ? variants : [body.phone])
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -561,7 +575,7 @@ botRoutes.post(
         conversation_id: conversationId,
         lead_id: body.leadId ?? null,
         full_name: body.fullName,
-        phone: body.phone,
+        phone: samplePhone || body.phone,
         company: body.company,
         province: body.province,
         dni: body.dni,

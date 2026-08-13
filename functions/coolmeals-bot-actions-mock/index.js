@@ -53,6 +53,38 @@ function normalize(value) {
     .toLowerCase();
 }
 
+function phoneDigits(value) {
+  return String(value == null ? "" : value).replace(/\D/g, "");
+}
+
+function canonicalizeArPhone(value) {
+  let d = phoneDigits(value);
+  if (!d) return "";
+  while (d.indexOf("00") === 0) d = d.slice(2);
+  while (d.charAt(0) === "0") d = d.slice(1);
+  if (d.indexOf("549") === 0 && d.length >= 12) d = "54" + d.slice(3);
+  if (d.indexOf("54") !== 0 && (d.length === 10 || d.length === 8)) d = "54" + d;
+  if (d.indexOf("540") === 0) d = "54" + d.slice(3).replace(/^0+/, "");
+  return d;
+}
+
+function phoneLookupVariants(value) {
+  const raw = phoneDigits(value);
+  const canon = canonicalizeArPhone(value);
+  const set = {};
+  if (raw) set[raw] = true;
+  if (canon) {
+    set[canon] = true;
+    if (canon.indexOf("54") === 0 && canon.length > 2) {
+      const national = canon.slice(2);
+      set[national] = true;
+      set["549" + national] = true;
+      set["54" + national] = true;
+    }
+  }
+  return Object.keys(set);
+}
+
 function normalizeCertainty(value) {
   const n = normalize(value);
   if (!n) return null;
@@ -420,8 +452,9 @@ function gateDecideRouteQualification(input) {
 }
 
 function upsertConversation(input, phoneFromCtx) {
-  const phone = String(input.phone || phoneFromCtx || "").trim();
-  if (!phone) return { ok: false, error: "phone required" };
+  const phoneRaw = String(input.phone || phoneFromCtx || "").trim();
+  if (!phoneRaw) return { ok: false, error: "phone required" };
+  const phone = canonicalizeArPhone(phoneRaw) || phoneDigits(phoneRaw);
   const status = input.status || "ia_atendiendo";
   const out = {
     ok: true,

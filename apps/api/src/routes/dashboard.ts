@@ -1,4 +1,4 @@
-import { fail, ok } from "@coolmeals/shared";
+import { canonicalizeArPhone, fail, ok } from "@coolmeals/shared";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -10,6 +10,31 @@ import {
   type DbDistributor,
 } from "../lib/mappers";
 import { requireRole } from "../middleware/auth";
+
+/** Una persona = un teléfono canónico; KPIs cuentan la card más antigua. */
+function dedupeConversationsByPhone<
+  T extends { id: string; phone: string; createdAt: string },
+>(rows: T[]): T[] {
+  const sorted = [...rows].sort((a, b) => {
+    const ta = Date.parse(a.createdAt) || 0;
+    const tb = Date.parse(b.createdAt) || 0;
+    if (ta !== tb) return ta - tb;
+    return a.id.localeCompare(b.id);
+  });
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of sorted) {
+    const key = canonicalizeArPhone(row.phone) || row.phone.replace(/\D/g, "");
+    if (!key) {
+      out.push(row);
+      continue;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+  return out;
+}
 
 type CommercialTypeKey =
   | "mayoristas"
@@ -128,8 +153,9 @@ dashboardRoutes.get(
     const distributors = (distRes.data as DbDistributor[]).map(mapDistributor);
 
     // Fuente única: Pipeline (conversations), no tabla leads.
-    const conversations = allConversations.filter((x) =>
-      inRange(x.createdAt, from, to),
+    // Dedupe por teléfono canónico (351… vs 54351… = misma persona).
+    const conversations = dedupeConversationsByPhone(
+      allConversations.filter((x) => inRange(x.createdAt, from, to)),
     );
 
     const startOfToday = startOfDayUtc(ymd(new Date()));

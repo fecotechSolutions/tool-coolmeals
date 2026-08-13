@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PageHeader } from "@/components/ui";
 import { dataApi } from "@/data/repository";
+import { canonicalizeArPhone } from "@coolmeals/shared";
 import {
   CLIENT_TYPE_LABELS,
   CONVERSATION_STATUS_LABELS,
@@ -188,7 +189,7 @@ export default function PipelinePage() {
   const phoneDupIndex = useMemo(() => {
     const byPhone = new Map<string, Conversation[]>();
     for (const row of conversations) {
-      const key = row.phone.replace(/\D/g, "");
+      const key = canonicalizeArPhone(row.phone) || row.phone.replace(/\D/g, "");
       if (!key) continue;
       const list = byPhone.get(key) ?? [];
       list.push(row);

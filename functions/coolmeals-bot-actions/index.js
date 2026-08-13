@@ -65,6 +65,39 @@ function normalize(value) {
     .toLowerCase();
 }
 
+function phoneDigits(value) {
+  return String(value == null ? "" : value).replace(/\D/g, "");
+}
+
+/** Canon AR: 54 + nacional (sin 9 móvil). 351… y 54351… y 549351… → mismo valor. */
+function canonicalizeArPhone(value) {
+  let d = phoneDigits(value);
+  if (!d) return "";
+  while (d.indexOf("00") === 0) d = d.slice(2);
+  while (d.charAt(0) === "0") d = d.slice(1);
+  if (d.indexOf("549") === 0 && d.length >= 12) d = "54" + d.slice(3);
+  if (d.indexOf("54") !== 0 && (d.length === 10 || d.length === 8)) d = "54" + d;
+  if (d.indexOf("540") === 0) d = "54" + d.slice(3).replace(/^0+/, "");
+  return d;
+}
+
+function phoneLookupVariants(value) {
+  const raw = phoneDigits(value);
+  const canon = canonicalizeArPhone(value);
+  const set = {};
+  if (raw) set[raw] = true;
+  if (canon) {
+    set[canon] = true;
+    if (canon.indexOf("54") === 0 && canon.length > 2) {
+      const national = canon.slice(2);
+      set[national] = true;
+      set["549" + national] = true;
+      set["54" + national] = true;
+    }
+  }
+  return Object.keys(set);
+}
+
 // Postgres enum client_type — cualquier otro valor (ej. "por_calificar") rompe el insert.
 var VALID_CLIENT_TYPES = {
   mayorista: true,
@@ -364,9 +397,11 @@ function isPhoneConfirmed(input) {
 }
 
 function resolveExplicitContactPhone(input) {
-  return sanitizeHumanField(
+  const raw = sanitizeHumanField(
     (input && (input.contactPhone || input.confirmedPhone || input.phoneExplicit)) || "",
   );
+  if (!raw) return "";
+  return canonicalizeArPhone(raw) || phoneDigits(raw);
 }
 
 function resolveExplicitFullName(input) {
@@ -511,8 +546,11 @@ function isWithinRecontactLock(createdAt) {
 }
 
 async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx) {
-  const phone = String(input.phone || phoneFromCtx || "").trim();
+  const phoneRaw = String(input.phone || phoneFromCtx || "").trim();
+  if (!phoneRaw) throw new Error("phone required");
+  const phone = canonicalizeArPhone(phoneRaw) || phoneDigits(phoneRaw);
   if (!phone) throw new Error("phone required");
+  const phoneVariants = phoneLookupVariants(phoneRaw);
 
   const system = (ctx && ctx.system) || {};
   const context = (ctx && ctx.context) || {};
@@ -527,7 +565,9 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
   const existing = await sb(
     supabaseUrl,
     supabaseKey,
-    "conversations?phone=eq." + encodeURIComponent(phone) + "&order=created_at.desc&limit=1",
+    "conversations?phone=in.(" +
+      phoneVariants.map(encodeURIComponent).join(",") +
+      ")&order=created_at.desc&limit=1",
     { method: "GET", prefer: "return=representation" },
   );
 
@@ -554,6 +594,7 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
       }
       if (kapsoConversationId) touch.kapso_conversation_id = kapsoConversationId;
       if (kapsoExecutionId) touch.kapso_execution_id = kapsoExecutionId;
+      if (phone && String(prior.phone || "") !== phone) touch.phone = phone;
       const messages = Array.isArray(prior.messages) ? prior.messages.slice() : [];
       if (input.message) messages.push(input.message);
       touch.messages = messages;
@@ -985,7 +1026,9 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
   if (blocked) return blocked;
 
   const fullName = String(input.fullName || "").trim();
-  const phone = String(input.phone || phoneFromCtx || "").trim();
+  const phoneRaw = String(input.phone || phoneFromCtx || "").trim();
+  const phone = canonicalizeArPhone(phoneRaw) || phoneDigits(phoneRaw);
+  const phoneVariants = phoneLookupVariants(phoneRaw || phone);
   const company = String(input.company || "").trim();
   const province = String(input.province || "").trim();
   const dni = String(input.dni || "").trim();
@@ -1012,9 +1055,9 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
     const found = await sb(
       supabaseUrl,
       supabaseKey,
-      "conversations?phone=eq." +
-        encodeURIComponent(phone) +
-        "&order=updated_at.desc&limit=1",
+      "conversations?phone=in.(" +
+        phoneVariants.map(encodeURIComponent).join(",") +
+        ")&order=updated_at.desc&limit=1",
       { method: "GET" },
     );
     if (Array.isArray(found) && found[0]) conversationId = found[0].id;
@@ -1108,7 +1151,9 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
 }
 
 async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) {
-  const phone = String(input.phone || phoneFromCtx || "").trim();
+  const phoneRaw = String(input.phone || phoneFromCtx || "").trim();
+  const phone = canonicalizeArPhone(phoneRaw) || phoneDigits(phoneRaw);
+  const phoneVariants = phoneLookupVariants(phoneRaw || phone);
   const system = (ctx && ctx.system) || {};
   const context = (ctx && ctx.context) || {};
   const kapsoExecutionId =
@@ -1131,7 +1176,9 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     rows = await sb(
       supabaseUrl,
       supabaseKey,
-      "conversations?phone=eq." + encodeURIComponent(phone) + "&order=updated_at.desc&limit=1",
+      "conversations?phone=in.(" +
+        phoneVariants.map(encodeURIComponent).join(",") +
+        ")&order=updated_at.desc&limit=1",
       { method: "GET" },
     );
   } else {
@@ -1457,11 +1504,15 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     );
     conv = Array.isArray(rows) && rows[0];
   } else {
-    const phone = String(input.phone || phoneFromCtx || "").trim();
+    const phoneRaw = String(input.phone || phoneFromCtx || "").trim();
+    const phone = canonicalizeArPhone(phoneRaw) || phoneDigits(phoneRaw);
+    const phoneVariants = phoneLookupVariants(phoneRaw || phone);
     const rows = await sb(
       supabaseUrl,
       supabaseKey,
-      "conversations?phone=eq." + encodeURIComponent(phone) + "&order=updated_at.desc&limit=1",
+      "conversations?phone=in.(" +
+        phoneVariants.map(encodeURIComponent).join(",") +
+        ")&order=updated_at.desc&limit=1",
       { method: "GET" },
     );
     conv = Array.isArray(rows) && rows[0];
