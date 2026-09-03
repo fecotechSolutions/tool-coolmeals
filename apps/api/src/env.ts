@@ -2,6 +2,13 @@ import { z } from "zod";
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  /**
+   * Entorno de producto (independiente de NODE_ENV de Node/Vercel).
+   * development = local / pruebas · staging = preview · production = clientes reales
+   */
+  APP_ENV: z
+    .enum(["development", "staging", "production"])
+    .default("development"),
   API_PORT: z.coerce.number().int().positive().default(3001),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),

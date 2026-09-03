@@ -37,6 +37,13 @@ export async function runSandboxReset(): Promise<SandboxResetResult> {
     db: { conversationsDeleted: 0, sampleRequestsDeleted: 0 },
   };
 
+  if (env.APP_ENV === "production") {
+    return {
+      ...empty,
+      skippedReason: "Blocked: APP_ENV=production (sandbox reset never runs in prod)",
+    };
+  }
+
   if (!env.SANDBOX_RESET_ENABLED) {
     return { ...empty, skippedReason: "SANDBOX_RESET_ENABLED is not true" };
   }

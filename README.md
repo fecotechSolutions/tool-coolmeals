@@ -32,18 +32,21 @@ Solo existen:
 | Archivo | Rol |
 |---------|-----|
 | `.env.example` | plantilla (commiteada) |
-| `.env` | valores reales locales (gitignored) |
+| `.env` | valores reales **locales = DEV** (gitignored) |
 
-Web y API leen el **mismo** `.env` de la raíz. En Vercel, las mismas keys se configuran en el dashboard de cada proyecto (no hace falta duplicar archivos en el repo).
+Web y API leen el **mismo** `.env` de la raíz. En Vercel, las mismas keys se configuran en el dashboard de cada proyecto (entorno **Production** = PROD).
 
 | Variable | Quién la usa |
 |----------|----------------|
+| `APP_ENV` / `NEXT_PUBLIC_APP_ENV` | API + Web (`development` \| `staging` \| `production`) — badge DEV/PROD |
 | `NEXT_PUBLIC_DEMO_MODE` | Web (`false` = datos reales vía API) |
 | `NEXT_PUBLIC_API_URL` | Web |
 | `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` | Web (cliente) |
 | `SUPABASE_URL` / `SERVICE_ROLE_KEY` | API (servidor) |
 | `CORS_ORIGINS` | API |
 | Kapso / Sheets | API (opcionales según features) |
+
+**DEV vs PROD (gratis):** un solo repo; primero probás en local, después deploy a Vercel. Guía paso a paso: [`docs/environments.md`](docs/environments.md).
 
 ### Schema Supabase
 

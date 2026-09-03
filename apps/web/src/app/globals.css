@@ -139,7 +139,7 @@ textarea {
 
 .demo-pill {
   display: inline-flex;
-  margin-bottom: 0.45rem;
+  margin-bottom: 0;
   padding: 0.22rem 0.55rem;
   border-radius: 999px;
   background: var(--sand);
@@ -148,6 +148,56 @@ textarea {
   font-size: 0.65rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.env-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.env-pill {
+  display: inline-flex;
+  padding: 0.22rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.env-pill--development {
+  background: #f5c542;
+  color: #1a1a1a;
+}
+
+.env-pill--staging {
+  background: #5b8def;
+  color: #fff;
+}
+
+.env-pill--production {
+  background: #2f9e6b;
+  color: #fff;
+}
+
+.chip.env-chip--development {
+  background: #f5c542;
+  color: #1a1a1a;
+  border-color: transparent;
+}
+
+.chip.env-chip--staging {
+  background: #5b8def;
+  color: #fff;
+  border-color: transparent;
+}
+
+.chip.env-chip--production {
+  background: #2f9e6b;
+  color: #fff;
+  border-color: transparent;
 }
 
 .workspace {

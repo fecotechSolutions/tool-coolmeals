@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DEMO_MODE } from "@/data/repository";
+import { APP_ENV, APP_ENV_LABEL } from "@/lib/app-env";
 
 const NAV = [
   { href: "/", label: "Dashboard", id: "dashboard" },
@@ -18,6 +19,13 @@ const NAV = [
 ] as const;
 
 export type NavId = (typeof NAV)[number]["id"];
+
+const ENV_HINT: Record<typeof APP_ENV, string> = {
+  development:
+    "Entorno DEV: probá acá primero (Supabase-dev / sandbox). No es producción.",
+  staging: "Entorno STAGING / preview: pruebas online antes de PROD.",
+  production: "Entorno PROD: clientes reales (WhatsApp …440).",
+};
 
 export function AppShell({
   children,
@@ -52,11 +60,19 @@ export function AppShell({
         </nav>
 
         <div className="sidebar-footer">
-          <span className="demo-pill">{DEMO_MODE ? "Modo demo" : "API + Supabase"}</span>
+          <div className="env-pills">
+            <span className={`env-pill env-pill--${APP_ENV}`}>
+              {APP_ENV_LABEL[APP_ENV]}
+            </span>
+            <span className="demo-pill">
+              {DEMO_MODE ? "Mocks" : "API + Supabase"}
+            </span>
+          </div>
           <p>
+            {ENV_HINT[APP_ENV]}{" "}
             {DEMO_MODE
-              ? "Datos mock locales. Poné NEXT_PUBLIC_DEMO_MODE=false para usar la API."
-              : "Conectado a la API (Supabase)."}{" "}
+              ? "Datos mock locales (NEXT_PUBLIC_DEMO_MODE)."
+              : "Datos vía API."}{" "}
             Estética alineada a{" "}
             <a
               href="https://www.coolmeals.com.ar/"
@@ -78,6 +94,9 @@ export function AppShell({
             <span className="muted"> · MVP visual</span>
           </div>
           <div className="topbar-meta">
+            <span className={`chip env-chip env-chip--${APP_ENV}`}>
+              {APP_ENV_LABEL[APP_ENV]}
+            </span>
             <span className="chip">superadmin</span>
             <span className="chip chip-soft">sin auth aún</span>
           </div>
