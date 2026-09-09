@@ -63,6 +63,7 @@ En SQL Editor, en orden:
 
 | Audiencia | Doc |
 |-----------|-----|
+| **DEV vs PROD (entornos)** | [`docs/environments.md`](docs/environments.md) |
 | **Operador — one-pager** | [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) |
 | **Planilla lógica + casos + prioridades** | [`docs/planilla-flujo-ia-definitiva.csv`](docs/planilla-flujo-ia-definitiva.csv) |
 | Anexo prompt / diagrama | [`docs/planilla-flujo-ia-anexo-prompt.md`](docs/planilla-flujo-ia-anexo-prompt.md) |
@@ -70,8 +71,9 @@ En SQL Editor, en orden:
 | Uso diario Pipeline | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
 | Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
-**Ruteo vigente (ago 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist / sin cobertura (→ Descartado ~22h). Contacto (nombre+negocio+tel) antes de cerrar. Teléfonos AR canónicos; KPIs = 1ª card. Wipe sandbox **a pedido**.  
-Prod: [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (Vercel team **FEcotech**; deploy CLI con `--project`).
+**Ruteo vigente (sep 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist / sin cobertura (→ Descartado ~22h). Contacto (nombre+negocio+tel) antes de cerrar. Teléfonos AR canónicos; KPIs = 1ª card.  
+**WhatsApp:** prod `+54 9 351 549-5440` (…5440); pruebas = Kapso **sandbox** → Supabase DEV.  
+**Prod:** [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (Vercel team **FEcotech**; deploy CLI con `--project`). Detalle entornos: [`docs/environments.md`](docs/environments.md).
 
 ## Scripts
 

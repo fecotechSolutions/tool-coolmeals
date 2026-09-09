@@ -1,8 +1,8 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: **13 ago 2026**.
+Una hoja para mostrar / imprimir. Actualizado: **8 sep 2026**.
 
-> Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md)
+> Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md) · Entornos: [`environments.md`](./environments.md)
 
 ---
 
@@ -23,11 +23,11 @@ Antes de cerrar: nombre + negocio + teléfono confirmado
 
 | Situación | Qué pasa | Qué ves en Pipeline |
 |-----------|----------|---------------------|
-| Volumen **≥ 50 cajas** (cualquier provincia) | Menú: muestras o pedido | Atención humana → luego **Muestras** o se queda en atención |
-| **Córdoba** y **&lt; 50** (o sin volumen) | Asesor Cool Meals (sin menú). **No** dice “asesor/distribuidor de la zona” | **Atención humana** |
+| Volumen **a partir de 50** cajas (cualquier provincia) | Menú: muestras o pedido | Atención humana → luego **Muestras** o se queda en atención |
+| **Córdoba** y **&lt; 50** (o sin volumen tras insistir) | Asesor Cool Meals (sin menú). **No** dice “asesor/distribuidor de la zona” | **Atención humana** |
 | **Otra provincia** y **&lt; 50** | Distribuidor de zona | **Derivado** (+ hashtag naranja) |
 | Sin distribuidor en la zona | Aviso sin cobertura | **Sin cobertura** → auto **Descartado** ~22 h |
-| Volumen / precios inciertos | Operador; **no** inventa bultos bajos | **Atención humana** |
+| Volumen / precios inciertos | **1ª:** volumen normal. **Si no sabe → 2ª:** ¿a partir de 50 o menos? Si tampoco → operador | Según orientación / **Atención humana** |
 | Quiere **ser** rep / fasón | Cierre rápido + **handoff** | Columna correspondiente |
 | Quiere **ser** distribuidor | Ver §1b | Columna + luego cierre por vol/zona |
 | Consumidor final (casa / 1 unidad) | Cierre amable | **Descartado** |
@@ -153,18 +153,25 @@ Pipeline igual muestra las dos: el rojo es para ops, no infla KPIs.
 
 ## 7. Sandbox — wipe **solo a pedido**
 
+**Canales:**
+- **Prod (clientes):** WhatsApp `+54 9 351 549-5440` → panel en https://tool-coolmeals-web.vercel.app (badge **PROD**).
+- **Pruebas:** Kapso **Sandbox** → cards en localhost / Supabase DEV (badge **DEV**). Ver [`environments.md`](./environments.md).
+
 El reset automático **está apagado**. El mismo WhatsApp de prueba **no** se limpia solo cada 20 min.
 
-Para retestear el mismo número hay que pedir wipe (Kapso `ended` en `waiting|running|handoff` + borrar cards / muestras en Supabase).
+Para retestear el mismo número hay que pedir wipe (Kapso `ended` en `waiting|running|handoff` + borrar cards / muestras en Supabase **DEV**, no en prod).
 
-El endpoint `/api/cron/sandbox-reset` existe, pero **no** hay que dejar `SANDBOX_RESET_ENABLED=true` ni el workflow de GitHub activo en permanente.
+El endpoint `/api/cron/sandbox-reset` existe, pero:
+- no dejar `SANDBOX_RESET_ENABLED=true` ni el workflow de GitHub activo en permanente;
+- en **PROD** (`APP_ENV=production`) el wipe está **bloqueado en código**.
 
 ```bash
+# Solo tiene sentido contra API DEV / local, no como hábito en prod
 curl -sS -H "Authorization: Bearer $CRON_SECRET" \
-  "https://tool-coolmeals-api-ten.vercel.app/api/cron/sandbox-reset"
+  "http://localhost:3001/api/cron/sandbox-reset"
 ```
 
-Si `"enabled": false` / `"skippedReason"` → flag off (es lo esperado).
+Si `"enabled": false` / `"skippedReason"` → flag off o entorno prod (es lo esperado).
 
 ---
 

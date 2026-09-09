@@ -1,7 +1,7 @@
 # Anexo: planilla + prompt + Pipeline
 
 Compañero de [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
-Actualizado: **13 ago 2026** (contacto, volumen incerto, teléfonos canónicos, orden derive).
+Actualizado: **8 sep 2026** (volumen incerto: 1 insistencia + umbral a partir de 50).
 
 ---
 
@@ -18,7 +18,7 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | Consumidor final | `descartado` (IA `ended`, **sin** `handoff_to_human`) |
 | “Hablar con un representante” | `atencion_representante` — **no** `quiere_ser_representante` |
 | Quiere ser distribuidor | 4 SÍ → columna con `upsert` **sin handoff** → zona/volumen → `decide_route`. Nunca `handoff` con status `quiere_ser_distribuidor` |
-| Volumen incerto / quiere precios | Operador `atencion_representante`. **PROHIBIDO** inventar bultos bajos o rutear a dist/sin_cobertura |
+| Volumen incerto / quiere precios | **1ª:** pregunta NORMAL de volumen (aviso **a partir de 50**). **Si dice no sé → 2ª:** asistente comercial + ¿**a partir de 50** o **menos**? (CBA sin “de la zona”). Con orientación → `decide_route`. Si tampoco → operador. **PROHIBIDO** inventar bultos |
 | Contacto | Toda derivación/handoff comercial: `fullName` + `company` + `contactPhone` + `phoneConfirmed=true`. Si se niega: `contactRefused=true` → operador. No alcanza el perfil WA |
 | Copy Córdoba | **PROHIBIDO** “asesor/distribuidor de la zona” cuando la provincia ya es Córdoba |
 | Derive | **Orden:** 1) mensaje humano  2) `sync_derived`  3) `handoff_to_human`. `sync_derived` **no** corta Kapso |
@@ -66,7 +66,9 @@ flowchart TD
   C -->|Retail / Mayorista| E[Zona + volumen + aviso 50]
   D --> R[decide_route]
   E --> R
-  R -->|volumen incerto| H2[Operador SIN menú]
+  R -->|volumen incerto 1ª| V1[Insistir aproximado a partir de 50]
+  V1 -->|2ª sin número| H2[Operador SIN menú]
+  R -->|volumen incerto ya insistido| H2
   R -->|≥50 cualquier provincia| M{Muestras o pedido?}
   R -->|<50 Córdoba| CT2[Contacto] --> H2
   R -->|<50 fuera + dist| CT3[Contacto] --> Dist[Mensaje dist → sync_derived → handoff]
@@ -83,11 +85,20 @@ flowchart TD
 > ¡Hola! Gracias por escribir a Froodie / Cool Meals. Catálogo e info: https://beacons.ai/froodie  
 > ¿Qué tipo de negocio tenés y te interesan wraps, platos listos o postres congelados?
 
-**Volumen (si ya es Córdoba)**  
-> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende directo desde 50; si es menos te contacta un asesor Cool Meals.
+**Volumen (1ª pregunta — siempre esta primero)** — Córdoba  
+> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende directo a partir de 50; si es menos te contacta un asesor Cool Meals.
 
-**Volumen (si no es Córdoba / aún no hay zona)**  
-> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende desde 50; si es menos te conectamos con el distribuidor de tu zona (o un asesor Cool Meals si estás en Córdoba).
+**Volumen (1ª pregunta)** — fuera CBA / zona no clara  
+> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende a partir de 50; si es menos te conectamos con el distribuidor de tu zona (o un asesor Cool Meals si estás en Córdoba).
+
+**2ª insistencia — SOLO si dijo que no sabe** — Córdoba  
+> Entiendo. Los precios, mínimos de compra y condiciones comerciales te los detalla un asistente comercial Cool Meals. Para poder derivarte bien, ¿creés que serían a partir de 50 cajas al mes, o menos de 50? Con esa orientación alcanza.
+
+**2ª insistencia — SOLO si dijo que no sabe** — fuera CBA  
+> Entiendo. Los precios, mínimos de compra y condiciones comerciales te los detalla un asistente comercial de tu zona. Para poder derivarte bien, ¿creés que serían a partir de 50 cajas al mes, o menos de 50? Con esa orientación alcanza.
+
+**Sin orientar tampoco (tras la 2ª) → operador**  
+> Perfecto. Un asesor Cool Meals te contacta para precios, mínimos y condiciones. ¿Este mismo número te sirve?
 
 **Contacto**  
 > ¿Me confirmás nombre completo, nombre del negocio y si este mismo número te sirve de contacto?
@@ -112,7 +123,8 @@ flowchart TD
 Menú visible: Dashboard, Pipeline, Distribuidores, Config. comercial.  
 Ocultos (código vivo): `/muestras`, `/conocimiento`, `/prompts`.
 
-Producción: [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (team **FEcotech**). Deploy por CLI (sin Git auto-deploy). Siempre `--project` (web vs API).
+Producción: [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (team **FEcotech**). WhatsApp prod: `+54 9 351 549-5440`. Deploy por CLI (sin Git auto-deploy). Siempre `--project` (web vs API).  
+Entornos DEV/PROD (local + sandbox vs Vercel): [`environments.md`](./environments.md).
 
 ---
 

@@ -10,7 +10,9 @@ npm run test:agent -- --concurrency 2   # bajar la concurrencia si aparecen 429
 ```
 
 Necesita `KAPSO_API_KEY` y `KAPSO_API_BASE_URL` en `.env`, y **créditos** en el proyecto de Kapso
-(cada corrida ejecuta el modelo de verdad).
+(cada corrida ejecuta el modelo de verdad). No escribe a Supabase DEV/PROD (usa function mock).
+
+Entornos de la app: [`docs/environments.md`](../../docs/environments.md).
 
 ## Cómo funciona
 

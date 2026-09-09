@@ -2,9 +2,10 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: **13 ago 2026** (contacto obligatorio, teléfonos canónicos, KPIs = 1ª card, sandbox wipe a pedido).
+Actualizado: **3 sep 2026** (entornos DEV/PROD, WhatsApp …5440 en prod, sandbox → DEV).
 
 > **One-pager para operadores:** [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md)  
+> **Entornos DEV/PROD:** [`environments.md`](./environments.md)  
 > **Planilla de lógica + casos:** [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) + [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md)  
 > **Pruebas E2E:** [`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
 
@@ -15,7 +16,7 @@ Un lead escribe al WhatsApp de Cool Meals / Froodie. Un bot (Kapso) lo atiende, 
 - **≥ 50 cajas** (cualquier provincia) → Cool Meals (menú **muestras / pedido**),
 - **Córdoba + &lt; 50** → operador / atención humana Cool Meals (sin menú; **no** “asesor de la zona”),
 - **fuera de Córdoba + &lt; 50** → **distribuidor** de zona o **sin cobertura**,
-- volumen / precios **inciertos** → operador (no inventar bultos),
+- volumen / precios **inciertos** → **1ª** insistir aproximado (umbral **a partir de 50**); **2ª** sin número → operador (no inventar bultos),
 - interés: **quiere ser distribuidor** (4 SÍ → columna; luego ruteo por vol/zona), **representante** / **fasón** (handoff),
 - **consumidor final** → **Descartado**.
 
@@ -91,7 +92,7 @@ Si hay **2+ cards** con el mismo número canónico:
 | Quiere ser representante / fasón | Sí, al confirmar |
 | Quiere ser distribuidor (solo 4 SÍ) | **No** — solo columna |
 | Dist → ruteo posterior (≥50 / CBA / fuera) | Sí, al cerrar ese camino (después del contacto) |
-| Volumen / precios inciertos | Sí → Atención humana |
+| Volumen / precios inciertos | 1ª insistir (a partir de 50); 2ª → Atención humana |
 | Atención humana / Derivado / Sin cobertura / pedido | Sí |
 | Muestras (agendadas) | **No** — Kapso `ended`; card sigue hasta Resultado |
 | Descartado consumidor | Ended directo (sin handoff humano) |
@@ -225,10 +226,12 @@ Bot (o drag manual + selector de dist.):
 
 ## Tips para probar (sandbox)
 
-La guía completa (mensajes, checklist, reset entre casos, planilla) está en  
-[`operator-flow-test-guide.md`](./operator-flow-test-guide.md).
+Las pruebas de bot van por el **Sandbox de Kapso** y se ven en el Pipeline **local (DEV)**, no en la URL de Vercel.
 
-**Wipe sandbox:** el reset automático **está apagado**. Para reusar el mismo WhatsApp hay que pedir wipe (Kapso `ended` + borrar cards). Detalle: cheat sheet §7.
+La guía completa (mensajes, checklist, reset entre casos, planilla) está en  
+[`operator-flow-test-guide.md`](./operator-flow-test-guide.md). Entornos: [`environments.md`](./environments.md).
+
+**Wipe sandbox:** el reset automático **está apagado**. Para reusar el mismo WhatsApp hay que pedir wipe (Kapso `ended` + borrar cards en Supabase **DEV**). Detalle: cheat sheet §7.
 
 Resumen rápido:
 
@@ -257,9 +260,10 @@ Planilla completa: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-defi
 
 ## Qué no hace (aún)
 
-- Número de **producción** Meta (hoy sandbox).  
 - Reabrir un chat Finalizado automáticamente.  
 - Seguimiento de despacho de muestras (enviado/entregado) en la app.  
-- Auth real de operadores / cron prod verificado end-to-end.
+- Auth real de operadores.
+
+**Ya en prod:** número Meta `+54 9 351 549-5440` (Oficina Ventas Froodie). Las pruebas siguen en Kapso sandbox → entorno DEV.
 
 Si algo no cuadra: hora aprox., teléfono del lead, captura Pipeline + status Kapso.

@@ -3,9 +3,10 @@
 Documento para el **operador comercial** (o quien valide el bot).  
 Objetivo: probar **cada flujo** de punta a punta y saber **dónde mirar** si algo no cuadra.
 
-Actualizado: **13 ago 2026**.
+Actualizado: **3 sep 2026**.
 
-Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).
+Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
+Entornos DEV/PROD: [`environments.md`](./environments.md).
 
 ---
 
@@ -13,11 +14,13 @@ Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-
 
 | Herramienta | Para qué |
 |-------------|----------|
-| **WhatsApp** (sandbox) | Actuar como lead |
-| **Pipeline** | Cards / columnas / Resultado |
+| **WhatsApp Sandbox** (Kapso) | Actuar como lead de **prueba** → data en **DEV** |
+| **WhatsApp …5440** | Solo operación real → data en **PROD** (no uses esto para tipificar casos de test) |
+| **Pipeline local** (`localhost:3000`) | Ver cards de pruebas (badge **DEV**) |
+| **Pipeline prod** (Vercel) | Ver clientes reales (badge **PROD**) |
 | **Distribuidores** | Cobertura |
 | **Dashboard** | Métricas |
-| **Google Sheets** | Derivados / muestras / atención / sin cobertura |
+| **Google Sheets** | Solo ruta **prod** (sandbox no escribe sheets) |
 | **Kapso Executions** | `waiting` / `handoff` / `ended` |
 
 ### Reglas comerciales (resumen)
@@ -29,7 +32,7 @@ Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-
 | ≥50 cualquier provincia | Menú Cool Meals |
 | Córdoba &lt;50 | Operador sin menú (no “asesor de la zona”) |
 | Fuera CBA &lt;50 | Dist o sin cobertura → auto Descartado |
-| Volumen / precios inciertos | Operador; no inventar bultos |
+| Volumen / precios inciertos | 1ª insistir (a partir de 50); 2ª → operador; no inventar bultos |
 | Consumidor final | Descartado |
 
 **Cierre comercial:** el bot debe pedir nombre + negocio + tel confirmado **antes** de pausarse (salvo Descartado consumidor / ficha de Muestras).
@@ -55,15 +58,15 @@ Después del handoff el bot **se pausa** (Atención / Derivado / etc.). En **Mue
 
 El wipe automático **está apagado**. El mismo WhatsApp **no** se limpia solo.
 
-Para reutilizar el **mismo** número:
+Para reutilizar el **mismo** número de prueba (sandbox → DEV):
 
 1. Pedí wipe a quien tenga acceso: Kapso `ended` en executions `waiting` / `handoff` / `running`.  
-2. Borrar (o pedir que borren) las cards / muestras de ese teléfono en Supabase.  
+2. Borrar (o pedir que borren) las cards / muestras de ese teléfono en Supabase **DEV** (no en prod).  
 3. **No** dejes una conversation a medias y arranques otro caso encima: el bot “recuerda” el hilo.
 
 Si no podés resetear: usá **otro número**, o esperá el lock de 1 año (no sirve para pruebas).
 
-El cron `/api/cron/sandbox-reset` existe para un wipe puntual si alguien lo prende a propósito; **no** dejar `SANDBOX_RESET_ENABLED=true` permanente. Ver cheat sheet §7.
+El cron `/api/cron/sandbox-reset` existe para un wipe puntual en DEV; **no** dejar `SANDBOX_RESET_ENABLED=true` permanente. En prod el wipe está bloqueado (`APP_ENV=production`). Ver cheat sheet §7 y [`environments.md`](./environments.md).
 
 ---
 
@@ -366,8 +369,8 @@ Hola, soy mayorista en Mendoza, más o menos 20 pero no sé, quiero ver precios
 
 **Qué tiene que pasar**
 
-1. **Atención humana** (no inventa bultos bajos ni deriva/sin cobertura por eso).  
-2. Contacto + “un asesor te contacta para precios/volumen”.  
+1. **1ª respuesta:** insiste un aproximado con umbral **a partir de 50** (no handoff todavía; no inventa bultos ni dist/sin cobertura).  
+2. Si a la **2ª** sigue sin número → **Atención humana** + contacto + “asesor te contacta para precios/mínimos/volumen”.  
 3. **No** columna Quiere ser distribuidor por este camino.
 
 ---
@@ -407,10 +410,11 @@ Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 
 ### Qué no hace el sistema (aún)
 
-- Número de **producción** Meta (hoy es sandbox).  
 - Reabrir automáticamente un chat ya Finalizado.  
 - Estados de envío de muestras (enviado / entregado) en la UI.  
 - Login de operadores con roles reales (auth stub).
+
+**Prod WhatsApp:** `+54 9 351 549-5440`. **Pruebas:** Kapso Sandbox → Pipeline local (DEV). Ver [`environments.md`](./environments.md).
 
 ---
 

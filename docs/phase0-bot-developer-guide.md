@@ -2,7 +2,9 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: **13 ago 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
+Actualizado: **3 sep 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
+
+**Entornos DEV/PROD:** [`environments.md`](./environments.md).
 
 Planilla: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv) · Anexo: [`planilla-flujo-ia-anexo-prompt.md`](./planilla-flujo-ia-anexo-prompt.md).  
 Operador E2E: [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) · Uso: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
@@ -10,35 +12,41 @@ Operador E2E: [`operator-flow-test-guide.md`](./operator-flow-test-guide.md) · 
 ## Arquitectura (flujo feliz)
 
 ```
-WhatsApp (Meta) 
-  → Kapso inbound trigger
+WhatsApp (Meta / Kapso)
+  → inbound trigger (sandbox O …5440)
   → workflow coolmeals-leads (agent)
-  → function coolmeals-bot-actions  (Supabase REST + Sheets webhook + Kapso PATCH)
+  → function coolmeals-bot-actions
+       · sandbox  → Supabase DEV  (+ skip Sheets)
+       · …5440    → Supabase PROD (+ Sheets)
   → tabla conversations / sample_requests / sheet_sync_log
-  → apps/web Pipeline (+ API Hono para UI y crons)
+  → apps/web Pipeline
+       · localhost = DEV
+       · Vercel    = PROD
 ```
 
 | Pieza | Ubicación |
 |-------|-----------|
+| Entornos DEV/PROD | [`environments.md`](./environments.md) |
 | Workflow (source of truth) | `workflows/coolmeals-leads/workflow.ts` |
 | Definition compilada | `workflows/coolmeals-leads/definition.json` |
-| Function Kapso | `functions/coolmeals-bot-actions/index.js` |
+| Function Kapso | `functions/coolmeals-bot-actions/index.js` (`resolveRuntime`) |
 | Reglas de ruteo (API) | `apps/api/src/lib/routing.ts` |
 | Timeouts / finalize | `apps/api/src/lib/finalize-derived.ts` |
 | Kapso client (API) | `apps/api/src/lib/kapso.ts` |
 | Bot HTTP (UI/ops) | `apps/api/src/routes/bot.ts` |
 | Cron timeouts | `apps/api/src/routes/cron.ts` → `/api/cron/pipeline-timeouts` |
-| Sandbox reset (wipe a pedido) | `/api/cron/sandbox-reset` + `SANDBOX_RESET_*` → `lib/sandbox-reset.ts`. **Default OFF** |
+| Sandbox reset (wipe a pedido) | `/api/cron/sandbox-reset` + `SANDBOX_RESET_*` → `lib/sandbox-reset.ts`. **Default OFF**; **bloqueado** si `APP_ENV=production` |
 | Cron GitHub (no usar en permanente) | `.github/workflows/sandbox-reset.yml` — no dejar schedule activo |
 | Teléfonos AR | `packages/shared/src/phone.ts` (`canonicalizeArPhone`, `phoneLookupVariants`) |
 | Dominio compartido | `packages/shared/src/domain.ts` |
 | Pipeline UI | `apps/web/src/app/pipeline/page.tsx` |
+| Badge DEV/PROD | `apps/web/src/lib/app-env.ts` + `AppShell` |
 | Dashboard | `apps/web/src/app/page.tsx` + `apps/api/src/routes/dashboard.ts` |
 | Sheets Apps Script | `apps/api/scripts/google-sheets-append.gs` |
 
 **Nota:** el path en vivo del bot usa la **function Kapso → Supabase** (no siempre pasa por la API Hono). Las reglas de `decide_route` están **duplicadas** en la function y en `routing.ts`; si cambiás una, actualizá la otra.
 
-## IDs Kapso (proyecto COOLMEALS / sandbox)
+## IDs Kapso (proyecto COOLMEALS)
 
 | Recurso | Valor |
 |---------|--------|
@@ -46,10 +54,15 @@ WhatsApp (Meta)
 | Workflow id | `454904ce-8fba-423f-bf08-32135f694b14` |
 | Function slug | `coolmeals-bot-actions` |
 | Function id | `164dc11a-dc32-4b99-85c9-6d289e15f501` |
-| Phone number id (sandbox) | `597907523413541` (hardcoded en `workflow.ts`) |
-| Modelo agent | `claude-haiku-4-5` (`provider_model_id` + name en nodo `raw`) |
+| Phone sandbox | `597907523413541` → Supabase **DEV** |
+| Phone prod | `729232923604156` (…5440 Oficina Ventas Froodie) → Supabase **PROD** |
+| Trigger sandbox id | `803df1bb-8f2c-4a09-ac29-b5dae4ae7106` |
+| Trigger prod id | `8dc2fd73-1435-4d75-85a2-7e5cbd549883` |
+| Modelo agent | `claude-haiku-4-5` |
 | Function mock (tests) | `coolmeals-bot-actions-mock` / `00bf0b57-5efb-4b90-b008-5aeafc8c4c23` |
 | Workflow test | `Cool Meals — Leads WhatsApp [TEST]` / `306b341b-6bce-4507-8fd5-6a037efe6b10` |
+
+**Nota:** en `workflow.ts` el trigger de source sigue con el phone id del sandbox. En Kapso remoto hay **dos** triggers. No hagas `kapso push` del workflow sin revisar que el de …5440 no se pierda. Ver [`environments.md`](./environments.md).
 
 ### Entrega de mensajes: `tool_only`
 
@@ -104,57 +117,60 @@ node .agents/skills/automate-whatsapp/scripts/update-graph.js \
 
 Tras cada `update-graph`, verificar en el graph remoto que **ninguna** tool tenga `function_id: null`.
 
-Secrets de la function (Platform API; valores en Kapso, no en git):
+Secrets de la function (valores en Kapso, no en git):
 
-- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-- `GOOGLE_SHEETS_WEBHOOK_URL`, `GOOGLE_SHEETS_WEBHOOK_SECRET` (y sheet ids si aplica)
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` → **PROD** (número …5440)
+- `SUPABASE_URL_DEV`, `SUPABASE_SERVICE_ROLE_KEY_DEV` → **DEV** (sandbox)
+- `GOOGLE_SHEETS_WEBHOOK_URL`, `GOOGLE_SHEETS_WEBHOOK_SECRET` (y sheet ids) — solo aplica en ruta prod
 - `KAPSO_API_BASE_URL`, `KAPSO_API_KEY` (ended/handoff **desde tools de cierre**, no desde `sync_derived`)
 - `DERIVE_HANDOFF_HOURS` (default 24; ya no auto-finaliza derivados)
 
 ## Migraciones Supabase
 
-En SQL Editor, en orden:
+Aplicar en **cada** proyecto (DEV y PROD), en SQL Editor, en orden:
 
 1. `supabase/migrations/20260713000000_initial_schema.sql`
 2. `supabase/migrations/20260719000000_phase0_bot_foundation.sql`
 3. `supabase/migrations/20260720000000_derive_handoff_window.sql` ← `derived_at`, `finalize_at`
 4. `supabase/migrations/20260720140000_quiere_ser_representante_fason.sql` ← columnas Pipeline
 5. `supabase/migrations/20260724120000_sample_request_extra_fields.sql` (campos extra muestras)
-6. Opcional: `supabase/seed.sql`
+6. Opcional solo **DEV**: `supabase/seed.sql`  
+   Atajo DEV: `supabase/dev_bootstrap_otbyuvbdajqrcrtwlwvy.sql` (migrations + seed).
 
 Sin (3), el código hace **fallback** a `updated_at` para timeouts; conviene aplicarla igual.
 
 ## Variables de entorno (API)
 
-Ver `.env.example`. Críticas para este módulo:
+Ver `.env.example` y [`environments.md`](./environments.md). Críticas:
 
 | Variable | Uso |
 |----------|-----|
+| `APP_ENV` | `development` \| `staging` \| `production` — bloquea sandbox-reset en prod |
 | `KAPSO_*` | Handoff/ended, send text (nudge), list executions |
 | `DERIVE_HANDOFF_HOURS` | Legacy (ya no auto-finaliza derivados/atención) |
 | `ABANDONED_TO_WAITING_HOURS` | 22h mid-flujo → Esperando respuesta |
 | `ESPERANDO_TO_FINALIZE_HOURS` | 22h: `sin_cobertura` → Descartado+ended; `esperando_respuesta` → Finalizado+ended |
-| `STUCK_RUNNING_MINUTES` | Execution Kapso en `running` sin avanzar → `ended` (+ mensaje de recuperación). Default 3 |
+| `STUCK_RUNNING_MINUTES` | Execution Kapso en `running` sin avanzar → `ended`. Default 3 |
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
-| `SANDBOX_RESET_ENABLED` | Debe quedar **`false`**. `true` solo para un wipe puntual |
+| `SANDBOX_RESET_ENABLED` | **`false`** en prod. `true` solo wipe puntual en DEV |
 | `SANDBOX_RESET_UNTIL` | ISO datetime; pasado ese momento el endpoint no borra |
 | `SANDBOX_RESET_PHONES` | Opcional CSV; vacío = todas las conversations |
-| `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención comercial / sin cobertura |
+| `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención / sin cobertura |
 | `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | Sheet dist / rep / fasón |
 | `GOOGLE_SHEET_NO_COVERAGE_ID` | Sheet sin cobertura |
 
-Web: `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
+Web: `NEXT_PUBLIC_APP_ENV`, `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
 
 ## Sandbox reset (wipe a pedido)
 
 Objetivo: mismo teléfono tipifica de nuevo sin esperar el lock de 1 año. **No** corre solo.
 
-1. Default: `SANDBOX_RESET_ENABLED=false`. No habilitar el workflow de GitHub en permanente.
-2. Wipe puntual: Kapso `ended` en `waiting|running|handoff` + delete `conversations` / `sample_requests` de ese tester. O prender el flag **un rato**, pegarle a `GET|POST /api/cron/sandbox-reset` (auth `CRON_SECRET`) y volver a `false`.
-3. El workflow [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) existe por si hace falta; no es el flujo diario.
+1. Default: `SANDBOX_RESET_ENABLED=false`. Con `APP_ENV=production` el endpoint **no borra** aunque el flag esté true.
+2. Wipe puntual (solo DEV / API local o flag controlado): Kapso `ended` + delete cards, o cron con auth `CRON_SECRET`.
+3. El workflow [`.github/workflows/sandbox-reset.yml`](../.github/workflows/sandbox-reset.yml) no es el flujo diario.
 
-Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7.
+Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7 · entornos: [`environments.md`](./environments.md).
 
 ## Dashboard (API)
 
@@ -268,19 +284,21 @@ Reset de un tester (ej. `543513053755` / `3513053755` = mismo número):
 
 ## Gaps conocidos / siguiente polish
 
-1. Cambiar `PHONE_NUMBER_ID` del workflow a producción (Meta) cuando toque.
-2. Confirmar migrations `20260720*` aplicadas en **todos** los entornos (sandbox OK).
+1. ~~Número Meta prod~~ → **hecho:** …5440 conectado; sandbox → DEV vía `resolveRuntime`.
+2. Confirmar migrations aplicadas en DEV y PROD (DEV bootstrap OK sep 2026).
 3. Unificar `decide_route` (function vs `routing.ts`) o llamar siempre a la API.
-4. Confirmar secrets Kapso de los 4 sheets (`GOOGLE_SHEET_*` + webhook) en todos los entornos.
+4. Confirmar secrets Kapso de los 4 sheets en ruta prod.
 5. Auth real (hoy `optionalInternalAuth` / roles stub).
 6. Tras cada `kapso build` + `update-graph`, **siempre** confirmar `function_id` en tools.
-7. No cortar executions `waiting`/`handoff` mid-prueba al desplegar (rompe el hilo del lead).
-8. Deploy Vercel: **siempre** `--project tool-coolmeals-web` o `tool-coolmeals-api` (nunca `vercel deploy` suelto).
-9. Wipe sandbox solo a pedido; no reactivar el cron de 20 min.
+7. No cortar executions `waiting`/`handoff` mid-prueba al desplegar.
+8. Deploy Vercel: **siempre** `--project tool-coolmeals-web` o `tool-coolmeals-api`.
+9. Wipe sandbox solo a pedido; no reactivar cron 20 min; apagar trigger sandbox cuando no se pruebe.
+10. Cuidado: `workflow.ts` source trigger = sandbox; no pisar trigger prod con `kapso push` ciego.
 
 ## Convención de cambios
 
 - Editar `workflow.ts` (source of truth); `kapso build` → `definition.json` → `update-graph` (o `kapso push` si el remoto no está stale).
 - Si Kapso dice “remote changed”: `kapso pull workflow coolmeals-leads --overwrite`, reaplicar cambios locales, push / update-graph.
-- Function: `update-function` + `deploy-function` (no alcanza solo editar el archivo local).
+- Function: `update-function` + `deploy-function` (no alcanza solo editar el archivo local). Incluye lógica DEV/PROD en `resolveRuntime`.
 - No commitear `.env` ni secrets de Kapso.
+- Separación de entornos: [`environments.md`](./environments.md).

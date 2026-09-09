@@ -305,21 +305,26 @@ function nextStepAfterDistributorColumn(q) {
   if (q.volumeUncertain || q.volume === null) {
     if (q.volumeUncertain) {
       return {
-        nextStep: "handoff_operator",
+        nextStep: "ask_volume_insist",
         agentInstruction:
           "CHECKLIST dist. (gate). Provincia OK pero volumen INCERTO / pide precios o más data. " +
-          "PROHIBIDO inventar bultos y PROHIBIDO status=quiere_ser_distribuidor en handoff. " +
+          "Si AÚN NO insististe 1 vez el aproximado: UNA pregunta con umbral a partir de 50 " +
+          "(copy por zona) + enter_waiting. PROHIBIDO handoff e inventar bultos en este paso. " +
+          "Si YA insististe y sigue sin número: " +
           contactChecklistInstruction() +
-          " Mensaje: un asesor te contacta para precios/volumen/condiciones + despedida. " +
-          "Silencio: handoff_human status=atencion_representante + handoff_to_human.",
+          " Mensaje: un asesor te contacta para precios/mínimos/condiciones + despedida. " +
+          "Silencio: handoff_human status=atencion_representante + handoff_to_human " +
+          "(PROHIBIDO status=quiere_ser_distribuidor).",
       };
     }
     return {
       nextStep: "ask_volume",
       agentInstruction:
         "CHECKLIST dist. (gate). Provincia OK. Falta VOLUMEN. " +
-        "UNA pregunta de bultos/cajas/mes con aviso umbral 50 + enter_waiting. " +
-        "Si responde que no sabe / quiere precios / más data: " +
+        "UNA pregunta de bultos/cajas/mes con aviso umbral a partir de 50 + enter_waiting. " +
+        "Si responde que no sabe / quiere precios / más data: INSISTÍ UNA vez el aproximado " +
+        "(misma regla a partir de 50) + enter_waiting; NO handoff todavía. " +
+        "Si a la 2ª sigue sin número: " +
         contactChecklistInstruction() +
         " Luego handoff_human status=atencion_representante " +
         "(NO quiere_ser_distribuidor) + handoff_to_human. " +
@@ -427,12 +432,15 @@ function gateDecideRouteQualification(input) {
       ok: false,
       gate: "volume_uncertain",
       needData: true,
-      nextStep: "handoff_operator",
-      reason: "Volumen incerto: no rutea; va a operador.",
+      nextStep: "ask_volume_insist",
+      reason: "Volumen incerto: insistir aproximado (a partir de 50); 2ª sin número → operador.",
       agentInstruction:
-        "GATE volumen incerto. PROHIBIDO estimar bultos bajos ni sin_cobertura/dist por eso. " +
-        "handoff_human status=atencion_representante + handoff_to_human. " +
-        "Mensaje: asesor te contacta para definir cantidades/precios/condiciones.",
+        "GATE volumen incerto / dijo que no sabe. PROHIBIDO inventar bultos ni dist/sin_cobertura. " +
+        "2ª insistencia (SOLO tras la pregunta normal de volumen): UN mensaje — precios/mínimos " +
+        "los detalla un asistente comercial (Córdoba: Cool Meals SIN 'de la zona'; resto: de tu zona) + " +
+        "¿creés que serían a partir de 50 cajas/mes o menos de 50? + enter_waiting. NO handoff. " +
+        "Si responde ≥50 o <50: decide_route. Si YA hiciste esa 2ª y sigue sin orientar: " +
+        "handoff_human status=atencion_representante + handoff_to_human.",
     };
   }
   if (q.needsVolume && q.volume === null) {
@@ -443,9 +451,11 @@ function gateDecideRouteQualification(input) {
       missing: ["estimatedVolume"],
       reason: "Falta volumen numérico para tipologías retail/mayorista/distribuidor.",
       agentInstruction:
-        "GATE: falta volumen. UNA pregunta de bultos/cajas/mes (aviso umbral 50) + enter_waiting. " +
-        "Si no sabe / quiere precios: handoff status=atencion_representante. " +
-        "Si da número: decide_route con estimatedVolume + certainty=high.",
+        "GATE: falta volumen. 1ª: pregunta NORMAL de bultos/cajas/mes (aviso a partir de 50) + enter_waiting. " +
+        "Todavía NO uses '¿a partir de 50 o menos de 50?'. " +
+        "Si responde que no sabe / quiere precios sin número: recién ahí la 2ª insistencia " +
+        "(asistente comercial + ¿a partir de 50 o menos?). " +
+        "Con número o ≥50/<50: decide_route. Si tampoco orienta: handoff atencion_representante.",
     };
   }
   return null;
