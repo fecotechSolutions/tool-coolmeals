@@ -191,7 +191,9 @@ Cool Meals **no** agenda muestras; el dist se hace cargo.
 
 ## Cómo pasar a atención humana (manual)
 
-Desplegable o drag a **Atención humana** / **Quiere ser distribuidor** / **Quiere ser representante** / **Quiere ser fasón** / **Sin cobertura** / **Muestras** según corresponda → handoff Kapso. **Sin cobertura** agenda auto-cierre (~22 h → Descartado); el resto queda hasta cierre manual con **Resultado**.
+Desplegable o drag a **Atención humana** / **Quiere ser distribuidor** / **Quiere ser representante** / **Quiere ser fasón** / **Sin cobertura** / **Muestras** según corresponda → handoff Kapso (`POST /bot/handoff`). Eso **pausa o cierra** el bot: el lead deja de ser atendido por la IA en ese hilo. **Sin cobertura** agenda auto-cierre (~22 h → Descartado); el resto queda hasta cierre manual con **Resultado**.
+
+> **Pausa automática (fase E, parcial):** si contestás desde la **app WhatsApp Business** (no Kapso Inbox), el sistema puede pausar solo al detectar el mensaje outbound (`origin=business_app`). Si contestás desde **Kapso Inbox**, mové la card a **Atención humana** antes — ese canal se ve igual que el bot (`cloud_api`) y no se puede distinguir todavía.
 
 Si movés una card a **Muestras** (aunque venga de Quiere ser distribuidor / handoff ya cerrado):
 - Se escribe en el **sheet de muestras** con fecha, nombre, teléfono, **tipo de cliente**, empresa, provincia, DNI, correo, CP y dirección completa (campos vacíos si el operador solo movió la card).

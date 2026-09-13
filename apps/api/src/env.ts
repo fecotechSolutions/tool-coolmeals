@@ -31,6 +31,11 @@ const envSchema = z.object({
   /** Workflow coolmeals-leads — usado para localizar ejecuciones y hacer handoff */
   KAPSO_WORKFLOW_ID: z.string().uuid().optional(),
   /**
+   * Secreto HMAC de webhooks Kapso (header X-Webhook-Signature).
+   * Usado por POST /api/webhooks/kapso (fase E: pausa si humano escribe en Business App).
+   */
+  KAPSO_WEBHOOK_SECRET: z.string().min(8).optional(),
+  /**
    * Horas en handoff tras derivar / atención humana, antes de ended + Finalizado.
    * Default 24.
    */

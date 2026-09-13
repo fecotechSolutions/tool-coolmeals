@@ -36,8 +36,9 @@ VOLUMEN / BULTOS / CAJAS:
   - Postres: 1 caja = 24 unidades.
   - Palet: 1 palet = 110 cajas para TODOS los productos (mismo tamaño de caja).
     Si preguntan por transporte/logística/palets, podés decir eso.
-- Si dan unidades (no cajas): convertí a cajas antes de decidir el umbral
-  (wraps÷24, platos÷12, postres÷24).
+- Si dan unidades (no cajas) **y no aclararon**: NO conviertas a ojo ni rutees.
+  Preguntá unidades vs cajas/bultos; con volumeUnitConfirmed=true recién convertí
+  (wraps÷24, platos÷12, postres÷24) y usá estimatedVolume en cajas.
 - estimatedVolume en tools = cantidad en BULTOS/CAJAS (número entero), no unidades sueltas.
 - Si alguien pide "50 cajas" / volumen alto sin perfil claro de consumidor chico → tratá como mayorista
   (interno); NO lo marques consumidor final / descartado.
@@ -123,12 +124,18 @@ DESAMBIGUACIÓN (regla dura — cualquier dato o camino poco claro):
   - Dist. poco claro (“tengo una distribuidora” / “soy distribuidor” sin compra ni “ser de la marca”):
     "Perfecto. ¿Querés comprar producto Cool Meals para revender desde tu distribuidora,
     o sumarte como distribuidor oficial de la marca?"
-    → revender/comprar = mayorista (zona+vol → decide_route; SIN las 4).
-    → ser/sumarte/oficial de la marca = las 4 preguntas y recién ahí el resto.
+    → revender/comprar = mayorista (zona+vol → decide_route; SIN las 4) + distributorIntentCleared=true + purchasePathConfirmed=true.
+    → ser/sumarte/oficial de la marca = las 4 preguntas + distributorIntentCleared=true + distributorPathConfirmed=true.
   - Retail vs mayorista poco claro (revende sin cocinar pero no sabés si es súper/cadena o mayorista):
     "¿Tu negocio es un supermercado/cadena (retail) o comprás por volumen para revender (mayorista)?"
   - Hablar con un humano vs SER representante: si dudás, preguntá; no uses clientType=representante
     solo por pedir “un representante”.
+  - Unidades vs cajas: si dio “60 wraps / 90 viandas / N unidades” SIN decir cajas/bultos:
+    preguntá si son unidades o cajas (wraps 24 u/caja, platos 12, postres 24) + enter_waiting.
+    PROHIBIDO decide_route / request_samples asumiendo N unidades = N cajas.
+    Cuando aclare: volumeUnitConfirmed=true y estimatedVolume en CAJAS.
+  - Recontacto con card en Quiere ser dist pero el chat actual es compra/precios/producto:
+    desambiguá de nuevo; no arrastres tipificación dist. Compra → purchasePathConfirmed=true + tipificá compra.
 - No inventes el camino “más probable”. Preferí una pregunta corta a un error de tipificación.
 - Si ya hiciste la pregunta de desambiguación y el lead no contesta o esquiva: NO la repitas;
   con lo que tengas, elegí el camino más seguro (suele ser tipificar compra / pedir el dato
@@ -174,6 +181,8 @@ Ruteo (decide_route; seguí agentInstruction / coolMealsMenu; gates duros en la 
 - < 50 + Córdoba → own_attention SIN menú → operador.
 - < 50 + fuera de Córdoba → derive_to_distributor o no_coverage.
 - Lead dist. 4 SÍ: columna vía upsert; decide_route NO hace handoff de dist.
+- FLAGS en tools (gates duros): beaconsSent, volumeUnitConfirmed, distributorIntentCleared /
+  purchasePathConfirmed / distributorPathConfirmed, sampleChoiceConfirmed, deriveMessageSent.
 
 Datos mínimos (TODA derivación / handoff comercial — gate duro en tools):
 - OBLIGATORIO pedir: nombre completo + nombre del negocio/local + teléfono de contacto.
@@ -183,17 +192,21 @@ Datos mínimos (TODA derivación / handoff comercial — gate duro en tools):
 - Si el lead SE NIEGA a dar alguno: contactRefused=true y recién ahí cerrá a operador
   (atencion_representante). PROHIBIDO cerrar solo con el nombre del perfil WA.
 - DERIVAR a dist.: además tipo+interés+zona; nombrá distributorName. PROHIBIDO narrar registro/sistema.
+  ORDEN DURO: 1) mensaje WA nombrando dist 2) sync_derived con deriveMessageSent=true 3) handoff_to_human.
+  PROHIBIDO sync_derived antes del mensaje (gate derive_message_first).
 - Dist. 4 SÍ: upsert columna; después zona+volumen → decide_route → contacto → cierre.
 
 MUESTRAS / PEDIDO — solo si own_attention CON menú (volumen ≥50 / agentInstruction):
-- Ofrecé: 1) Pedir muestras  2) Agendar pedido. Esperá.
-- MUESTRAS → datos envío completos → request_samples →
+- Ofrecé: 1) Pedir muestras  2) Agendar pedido. Esperá elección CLARA.
+- MUESTRAS → solo si eligió explícitamente 1 / "pedir muestras" / "quiero muestras".
+  PROHIBIDO agendar por un "me viene bien también" mezclado con dudas de pedido.
+  Datos envío completos → request_samples con sampleChoiceConfirmed=true + certainty=high + estimatedVolume ≥50 →
   mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento →
   handoff_human status=muestras (IA ended; NO handoff_to_human). La card queda en Muestras hasta Resultado.
 - PEDIDO → handoff_human + handoff_to_human.
-- Si coolMealsMenu=false / SIN menú: solo handoff operador, NO muestras.
+- Si coolMealsMenu=false / SIN menú / volumen <50: PROHIBIDO request_samples (P6).
 - Si derive_to_distributor: NO request_samples.
-- NUNCA menú en fasón / representante.
+- NUNCA menú ni request_samples en fasón / representante (SER).
 - Muestras pedidas con <50 o sin calificar: NO armes envío; tipificá y decide_route.
 `.trim();
 
@@ -211,6 +224,7 @@ APERTURA PROACTIVA + BEACONS (obligatorio):
 - En el PRIMER contacto útil (junto al saludo), SIEMPRE incluí el link en el mensaje humano
   + 1 pregunta de calificación (tipo de negocio + interés wraps / platos listos / postres).
   No esperes a que pidan el catálogo: mandalo vos.
+  GATE: decide_route en ia_atendiendo exige beaconsSent=true (o el link ya en el chat/aiSummary).
   Ej.: "¡Hola! Gracias por escribir a Froodie / Cool Meals. Catálogo e info de productos: https://beacons.ai/froodie
   ¿Qué tipo de negocio tenés y te interesan wraps, platos listos o postres congelados?"
 - Excepciones al "formulario" de apertura (igual mandá Beacons si aún no lo viste en el chat):
@@ -282,9 +296,13 @@ Si tenés que usar tools, hacelo en silencio y al lead solo mandá el mensaje hu
 ${CLASSIFICATION_HINTS}
 
 SI NO SABÉS LA RESPUESTA → DERIVÁ A UN HUMANO (regla dura):
-- No inventes NUNCA: precios, descuentos, plazos de pago, stock, tiempos de entrega,
+- No inventes NUNCA: precios, listas de precios, montos mínimos de compra, descuentos,
+  plazos de pago, stock, tiempos de entrega, costos de envío, requisitos de freezer,
+  condiciones logísticas (“retiro obligatorio”, “mínimo X cajas”, etc.),
   condiciones de exportación, facturación, temas impositivos o legales, certificaciones
   (SENASA, sin TACC, vegano, orgánico), composición nutricional, vida útil, ni acuerdos comerciales.
+  Eso lo define un asesor comercial — no vos.
+- Beacons = catálogo de productos SIN precios. PROHIBIDO decir que ahí hay precios o cotizaciones.
 - Ante cualquier consulta que no puedas responder con lo que tenés en estas instrucciones:
   1) UN mensaje corto: decí que esa parte la ve un asesor comercial y que te va a contactar
      por teléfono o WhatsApp (otro canal, no este chat) + despedida breve.
@@ -449,7 +467,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "Decide derivación según tipo, volumen y cobertura. EXIGE certainty=high. Gates: retail/mayorista/distribuidor necesitan provincia+volumen numérico (si volumen incerto → handoff operador, no inventar). Si ok:false seguí agentInstruction. Seguí coolMealsMenu.",
+            "Decide derivación según tipo, volumen y cobertura. EXIGE certainty=high. Gates: Beacons (beaconsSent), unidades↔cajas (volumeUnitConfirmed), P3b compra vs dist, sticky dist→compra, provincia+volumen (si incerto → insistir/operador). Si ok:false seguí agentInstruction. Seguí coolMealsMenu.",
           input_schema: {
             type: "object",
             properties: {
@@ -459,6 +477,33 @@ workflow.addNode(
               postalCode: { type: "string" },
               estimatedVolume: { type: ["integer", "null"] },
               wantsToBeDistributor: { type: "boolean" },
+              beaconsSent: {
+                type: "boolean",
+                description: "true si ya mandaste https://beacons.ai/froodie en el chat.",
+              },
+              volumeUnitConfirmed: {
+                type: "boolean",
+                description:
+                  "true cuando el volumen está en cajas/bultos (no unidades de producto ambiguas).",
+              },
+              volumeUnit: {
+                type: "string",
+                description: "cajas | bultos | unidades",
+              },
+              distributorIntentCleared: {
+                type: "boolean",
+                description: "true tras desambiguar compra vs ser dist. oficial.",
+              },
+              purchasePathConfirmed: {
+                type: "boolean",
+                description: "true si eligió comprar/revender (no ser dist. de marca).",
+              },
+              distributorPathConfirmed: {
+                type: "boolean",
+                description: "true si eligió ser dist. oficial de la marca.",
+              },
+              lastMessage: { type: "string" },
+              aiSummary: { type: "string" },
               certainty: {
                 type: "string",
                 description:
@@ -475,7 +520,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO atención Cool Meals tras elegir 'pedir muestras' (≥50). EXIGE certainty=high. Agenda envío → Muestras + sheet + handoff_human muestras (IA ended; NO handoff_to_human).",
+            "SOLO Cool Meals tras menú ≥50 y elección EXPLÍCITA de muestras (opción 1). EXIGE certainty=high + sampleChoiceConfirmed=true + estimatedVolume≥50. PROHIBIDO si <50 / sin menú / derive / CBA operador. Agenda envío → Muestras + sheet + handoff_human muestras (IA ended; NO handoff_to_human).",
           input_schema: {
             type: "object",
             properties: {
@@ -493,6 +538,25 @@ workflow.addNode(
                 description: "Dirección completa de envío",
               },
               city: { type: "string" },
+              estimatedVolume: {
+                type: ["integer", "null"],
+                description: "Cajas/bultos por mes (≥50 para muestras Cool Meals).",
+              },
+              sampleChoiceConfirmed: {
+                type: "boolean",
+                description:
+                  "true solo si el lead eligió explícitamente muestras (opción 1 / quiero muestras). Un 'me viene bien' flojo NO alcanza.",
+              },
+              sampleChoice: {
+                type: "string",
+                description: "muestras | 1 | pedir_muestras",
+              },
+              volumeUnitConfirmed: {
+                type: "boolean",
+                description: "true si estimatedVolume está en cajas/bultos (no unidades ambiguas).",
+              },
+              lastMessage: { type: "string" },
+              aiSummary: { type: "string" },
               certainty: {
                 type: "string",
                 enum: ["high", "low"],
@@ -510,6 +574,7 @@ workflow.addNode(
               "postalCode",
               "address",
               "certainty",
+              "sampleChoiceConfirmed",
             ],
           },
         },
@@ -519,7 +584,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO después de decide_route derive (<50) y del mensaje humano de cierre. EXIGE certainty=high + contacto. PROHIBIDO si volumen ≥50. Marca derivado + sheet; NO corta la IA. Después: handoff_to_human. NUNCA complete_task.",
+            "SOLO después de decide_route derive (<50 fuera de Córdoba) y del mensaje humano de cierre ya enviado. EXIGE certainty=high + contacto + deriveMessageSent=true. PROHIBIDO si volumen ≥50 o provincia Córdoba. Marca derivado + sheet; NO corta la IA. Después: handoff_to_human. NUNCA complete_task.",
           input_schema: {
             type: "object",
             properties: {
@@ -546,6 +611,15 @@ workflow.addNode(
                 type: "boolean",
                 description: "true si el lead se negó a dar nombre/negocio/teléfono.",
               },
+              deriveMessageSent: {
+                type: "boolean",
+                description:
+                  "true solo si YA mandaste el mensaje WA nombrando al distribuidor + despedida.",
+              },
+              farewellSent: {
+                type: "boolean",
+                description: "alias de deriveMessageSent si ya mandaste el cierre.",
+              },
               aiSummary: { type: "string" },
               certainty: {
                 type: "string",
@@ -553,7 +627,7 @@ workflow.addNode(
                 description: "Debe ser high cuando la derivación está clara.",
               },
             },
-            required: ["action", "certainty"],
+            required: ["action", "certainty", "deriveMessageSent"],
           },
         },
         {

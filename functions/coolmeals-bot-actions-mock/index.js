@@ -154,6 +154,248 @@ function blockDerivationAtHighVolume(input) {
   };
 }
 
+function blockDerivationInCordoba(input) {
+  const province = resolveProvince(
+    input && input.province,
+    input && input.aiSummary,
+    input && input.reason,
+    input && input.notes,
+  );
+  if (!province || normalize(province) !== "cordoba") return null;
+  return {
+    ok: false,
+    gate: "cordoba_no_distributor",
+    error: "Córdoba no se deriva a distribuidor de zona.",
+    agentInstruction:
+      "GATE Córdoba (P5). PROHIBIDO sync_derived / nombrar distribuidor / 'asesor de la zona'. " +
+      "Si volumen ≥50: menú Cool Meals. Si <50: operador Cool Meals. NUNCA dist. en CBA.",
+  };
+}
+
+function isExplicitSampleChoice(input) {
+  if (!input) return false;
+  if (input.sampleChoiceConfirmed === true || input.samplesChosen === true) return true;
+  const choice = normalize(input.sampleChoice || input.menuChoice || "");
+  if (
+    choice === "1" ||
+    choice === "muestras" ||
+    choice === "pedir_muestras" ||
+    choice === "pedir muestras" ||
+    choice === "samples"
+  ) {
+    return true;
+  }
+  const blob = normalize(
+    [input.lastMessage, input.reason, input.notes, input.aiSummary].filter(Boolean).join(" "),
+  );
+  if (!blob) return false;
+  if (/(^|[^\w])(1|uno)\b/.test(blob) && /(muestra|menu|opcion)/.test(blob)) return true;
+  return (
+    /(quiero|pido|elegi|elijo|opto por|vamos con|me anoto)\s+(las\s+)?muestras/.test(blob) ||
+    /pedir\s+muestras/.test(blob) ||
+    /opcion\s*1/.test(blob)
+  );
+}
+
+function gateRequestSamplesEligibility(input) {
+  const clientType = sanitizeClientType(input && input.clientType) || "";
+  if (clientType === "representante" || clientType === "fason") {
+    return {
+      ok: false,
+      gate: "samples_not_for_rep_fason",
+      reason: "Fasón/representante (SER) no usa menú de muestras Cool Meals.",
+      agentInstruction:
+        "GATE: NO request_samples para fasón/representante. Handoff quiere_ser_* sin menú.",
+    };
+  }
+  const volume = resolveEstimatedVolume(input);
+  if (volume === null || Number.isNaN(volume) || volume < MIN_BUNDLES) {
+    return {
+      ok: false,
+      gate: "samples_requires_high_volume",
+      needData: true,
+      reason: "Muestras solo con volumen ≥ " + MIN_BUNDLES + " (menú).",
+      agentInstruction:
+        "GATE P6/P8: PROHIBIDO request_samples sin menú (≥" +
+        MIN_BUNDLES +
+        "). Calificá volumen o rutear operador/dist. Sin kit Cool Meals si <50.",
+    };
+  }
+  if (!isExplicitSampleChoice(input)) {
+    return {
+      ok: false,
+      gate: "samples_choice_unclear",
+      needData: true,
+      missing: ["sampleChoiceConfirmed"],
+      reason: "Falta elección explícita de muestras.",
+      agentInstruction:
+        "GATE P8: desambiguá menú 1) muestras 2) pedido. sampleChoiceConfirmed=true solo con elección clara.",
+    };
+  }
+  return null;
+}
+
+function looksLikeAskForHumanNotBeRep(input) {
+  const blob = normalize(
+    [input && input.reason, input && input.aiSummary, input && input.lastMessage, input && input.notes]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (!blob) return false;
+  if (/(quiero ser|sumarme como|ser\s+representante|representar la marca|vender a comision)/.test(blob)) {
+    return false;
+  }
+  return /(hablar con|pasar(me)? (con |a )?(un |una )?(humano|persona|asesor|operador|alguien|representante)|atencion humana|quiero (un )?asesor)/.test(
+    blob,
+  );
+}
+
+function gateMisclassifiedRepresentative(input, forAction) {
+  if (!input) return null;
+  const type = sanitizeClientType(input.clientType);
+  const status = normalize(input.status || "");
+  if (type !== "representante" && status !== "quiere_ser_representante") return null;
+  if (!looksLikeAskForHumanNotBeRep(input)) return null;
+  return {
+    ok: false,
+    gate: "ask_human_not_be_representative",
+    needDisambiguation: true,
+    reason: "Pedido de humano/asesor ≠ quiere ser representante.",
+    agentInstruction:
+      "GATE P1/P1b: handoff status=atencion_representante (NO quiere_ser_representante). " +
+      (forAction === "decide_route" ? "No uses clientType=representante solo por pedir una persona. " : ""),
+  };
+}
+
+function conversationBlob(input) {
+  return normalize(
+    [input && input.lastMessage, input && input.aiSummary, input && input.reason, input && input.notes]
+      .filter(Boolean)
+      .join(" \n "),
+  );
+}
+
+function gateVolumeUnitsAmbiguous(input) {
+  if (!input) return null;
+  if (input.volumeUnitConfirmed === true || input.volumeInBoxes === true) return null;
+  const unit = normalize(input.volumeUnit || input.quantityUnit || "");
+  if (unit === "cajas" || unit === "caja" || unit === "bultos" || unit === "bulto") return null;
+  const blob = conversationBlob(input);
+  if (!blob) return null;
+  const hasProductQty =
+    /(\d+)\s*(viandas?|wraps?|postres?|unidades?|uds?|platos?(\s+listos?)?)/.test(blob) ||
+    /(\d+)\s+de\s+cada\s+(una|uno|producto)/.test(blob);
+  const hasBoxes = /(caja|bulto|cajas|bultos)/.test(blob);
+  if (!hasProductQty || hasBoxes) return null;
+  return {
+    ok: false,
+    gate: "volume_units_ambiguous",
+    needDisambiguation: true,
+    missing: ["volumeUnitConfirmed"],
+    reason: "Cantidades sin aclarar unidades vs cajas.",
+    agentInstruction:
+      "GATE unidades↔cajas: preguntá si son unidades o cajas/bultos + enter_waiting. " +
+      "Luego volumeUnitConfirmed=true y estimatedVolume en CAJAS.",
+  };
+}
+
+function looksLikePurchaseIntent(blob) {
+  return /(comprar|compra|precio|precios|minimo|m[ií]nimos|cotiz|delivery|vianda|wrap|postre|muestra|pedido|almacen|minimarket|supermercado|retail|revender|sumar productos|quiero producto)/.test(
+    blob,
+  );
+}
+
+function looksLikeBeDistributorIntent(blob) {
+  return /(quiero ser|sumarme como|ser\s+distribuidor|distribuidor oficial|red de distribuidores|oficial de la marca)/.test(
+    blob,
+  );
+}
+
+function looksLikeAmbiguousDistributorMention(blob) {
+  return /(tengo (una )?distribuidora|soy distribuidor|somos distribuidores|mi distribuidora)/.test(
+    blob,
+  );
+}
+
+function gateAmbiguousDistributorIntent(input) {
+  if (!input) return null;
+  if (
+    input.distributorIntentCleared === true ||
+    input.purchasePathConfirmed === true ||
+    input.distributorPathConfirmed === true
+  ) {
+    return null;
+  }
+  const blob = conversationBlob(input);
+  if (!blob || !looksLikeAmbiguousDistributorMention(blob)) return null;
+  if (looksLikeBeDistributorIntent(blob)) return null;
+  if (/(comprar|revender|sumar (sus |los )?productos)/.test(blob)) return null;
+  return {
+    ok: false,
+    gate: "distributor_intent_ambiguous",
+    needDisambiguation: true,
+    reason: "Compra vs ser dist. poco claro.",
+    agentInstruction:
+      "GATE P3b: ¿comprar/revender o dist. oficial de la marca? + enter_waiting. " +
+      "Luego distributorIntentCleared=true.",
+  };
+}
+
+function gateStickyDistributorPurchase(input) {
+  if (!input) return null;
+  if (
+    input.purchasePathConfirmed === true ||
+    input.distributorPathConfirmed === true ||
+    input.distributorIntentCleared === true
+  ) {
+    return null;
+  }
+  // Mock has no conv; use flags on input simulating sticky
+  if (input.stickyDistributorColumn !== true && normalize(input.priorStatus) !== "quiere_ser_distribuidor") {
+    return null;
+  }
+  const blob = conversationBlob(input);
+  if (!blob || looksLikeBeDistributorIntent(blob) || !looksLikePurchaseIntent(blob)) return null;
+  const inputType = sanitizeClientType(input.clientType);
+  if (inputType && inputType !== "distribuidor") return null;
+  return {
+    ok: false,
+    gate: "sticky_distributor_purchase_recontact",
+    needDisambiguation: true,
+    reason: "Card dist. + mensaje de compra.",
+    agentInstruction:
+      "GATE recontacto dist→compra: desambiguá compra vs ser dist. purchasePathConfirmed o distributorPathConfirmed.",
+  };
+}
+
+function gateDeriveMessageFirst(input) {
+  if (!input) return null;
+  if (input.deriveMessageSent === true || input.farewellSent === true) return null;
+  return {
+    ok: false,
+    gate: "derive_message_first",
+    missing: ["deriveMessageSent"],
+    reason: "Mensaje de cierre antes de sync_derived.",
+    agentInstruction:
+      "GATE orden derive: 1) mensaje WA con dist 2) sync_derived deriveMessageSent=true 3) handoff_to_human.",
+  };
+}
+
+function gateBeaconsBeforeRoute(input) {
+  if (!input) return null;
+  if (input.beaconsSent === true) return null;
+  const blob = conversationBlob(input);
+  if (blob && /beacons\.ai\/froodie/.test(blob)) return null;
+  return {
+    ok: false,
+    gate: "beacons_required",
+    missing: ["beaconsSent"],
+    reason: "Falta Beacons antes de rutear.",
+    agentInstruction:
+      "GATE Beacons: mandá https://beacons.ai/froodie (SIN precios) + beaconsSent=true.",
+  };
+}
+
 var VALID_CLIENT_TYPES = {
   mayorista: true,
   minorista: true,
@@ -414,6 +656,18 @@ function gateDecideRouteQualification(input) {
   const earlyType = sanitizeClientType(input && input.clientType) || "";
   if (earlyType === "representante" || earlyType === "fason") return null;
 
+  const unitsGate = gateVolumeUnitsAmbiguous(input);
+  if (unitsGate) return unitsGate;
+
+  const stickyDist = gateStickyDistributorPurchase(input);
+  if (stickyDist) return stickyDist;
+
+  const ambDist = gateAmbiguousDistributorIntent(input);
+  if (ambDist) return ambDist;
+
+  const beaconsGate = gateBeaconsBeforeRoute(input);
+  if (beaconsGate) return beaconsGate;
+
   const q = buildQualification(input);
   if (!q.province) {
     return {
@@ -509,6 +763,12 @@ function decideRoute(input) {
   const wantsToBeDistributor = Boolean(
     input.wantsToBeDistributor || clientType === "distribuidor",
   );
+
+  const repMisclass = gateMisclassifiedRepresentative(
+    Object.assign({}, input, { clientType: clientType }),
+    "decide_route",
+  );
+  if (repMisclass) return repMisclass;
 
   // Misma prioridad que producción: rep/fasón → ≥50 cualquier zona → Córdoba <50 → dist/<cobertura.
   // Quiere-ser-dist (4 SÍ): la columna va por upsert; decide_route rutea por volumen/zona (sin handoff "quiere ser dist").
@@ -670,6 +930,13 @@ function requestSamples(input, phoneFromCtx) {
   if (missing.length) {
     return { ok: false, error: "Faltan datos: " + missing.join(", "), missing };
   }
+
+  const samplesGate = gateRequestSamplesEligibility(input);
+  if (samplesGate) return samplesGate;
+
+  const unitsGate = gateVolumeUnitsAmbiguous(input);
+  if (unitsGate) return unitsGate;
+
   return {
     ok: true,
     sampleRequestId: "mock-sample-1",
@@ -677,7 +944,7 @@ function requestSamples(input, phoneFromCtx) {
     sheet: { attempted: true, success: true },
     kapsoEnded: { ok: true, skipped: false },
     instruction:
-      "Muestra agendada (Pipeline Muestras + sheet). Avisá que logística contacta para el envío. Luego handoff_human status=muestras. La IA ya quedó en ended — NO hace falta handoff_to_human. NO digas que un asesor comercial arma las muestras.",
+      "Muestra agendada (Pipeline Muestras + sheet). Avisá que un REPRESENTANTE hace el seguimiento. Luego handoff_human status=muestras. La IA ya quedó en ended — NO handoff_to_human.",
   };
 }
 
@@ -687,6 +954,10 @@ function handoff(input) {
   if (status === "quiere_ser_distribuidor") {
     status = "atencion_representante";
     gateRemap = "quiere_ser_distribuidor_to_atencion_representante";
+  }
+  if (status === "quiere_ser_representante" && looksLikeAskForHumanNotBeRep(input)) {
+    status = "atencion_representante";
+    gateRemap = "ask_human_not_be_representative";
   }
   if (status !== "descartado" && status !== "muestras") {
     const contactGate = gateContactBeforeClose(input, "handoff");
@@ -718,7 +989,7 @@ function handoff(input) {
     gateRemap: gateRemap,
     instruction:
       status === "muestras"
-        ? "Muestras: sheet listo e IA en ended. NO uses handoff_to_human (ya cerró). Avisá que logística contacta."
+        ? "Muestras: sheet listo e IA en ended. NO uses handoff_to_human (ya cerró). Avisá que un representante hace el seguimiento."
         : status === "descartado"
           ? "Descartado: IA en ended. NO uses handoff_to_human. Solo mensaje humano breve de cierre (sin decir 'descartado')."
           : "Usá handoff_to_human en el agent. Un asesor comercial responde por otro canal.",
@@ -731,6 +1002,12 @@ function syncDerived(input) {
 
   const volumeBlock = blockDerivationAtHighVolume(input);
   if (volumeBlock) return volumeBlock;
+
+  const cordobaBlock = blockDerivationInCordoba(input);
+  if (cordobaBlock) return cordobaBlock;
+
+  const deriveOrder = gateDeriveMessageFirst(input);
+  if (deriveOrder) return deriveOrder;
 
   const contactGate = gateContactBeforeClose(input, "sync_derived");
   if (contactGate && contactGate.ok === false) return contactGate;

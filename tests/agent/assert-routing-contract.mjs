@@ -59,12 +59,37 @@ function assertSourceAligned() {
     "mock y prod deben tener gateDecideRouteQualification (checklist duro)",
   );
   assert(
+    /gateVolumeUnitsAmbiguous/.test(mock) && /gateVolumeUnitsAmbiguous/.test(prod),
+    "mock y prod deben tener gate unidades↔cajas",
+  );
+  assert(
+    /gateAmbiguousDistributorIntent/.test(mock) && /gateAmbiguousDistributorIntent/.test(prod),
+    "mock y prod deben tener gate P3b compra vs dist",
+  );
+  assert(
+    /gateStickyDistributorPurchase/.test(mock) && /gateStickyDistributorPurchase/.test(prod),
+    "mock y prod deben tener gate sticky dist→compra",
+  );
+  assert(
+    /gateDeriveMessageFirst/.test(mock) && /gateDeriveMessageFirst/.test(prod),
+    "mock y prod deben exigir deriveMessageSent antes de sync_derived",
+  );
+  assert(
+    /gateBeaconsBeforeRoute/.test(mock) && /gateBeaconsBeforeRoute/.test(prod),
+    "mock y prod deben exigir Beacons antes de decide_route",
+  );
+  assert(
     /nextStepAfterDistributorColumn/.test(mock) && /nextStepAfterDistributorColumn/.test(prod),
     "mock y prod deben devolver nextStep tras columna quiere_ser_distribuidor",
   );
 }
 
 async function assertRuntimeContract() {
+  const routeBase = {
+    beaconsSent: true,
+    volumeUnitConfirmed: true,
+  };
+
   // ≥50 Santa Fe → Cool Meals directo (nunca Litoral Fresh)
   const high = await invokeMock({
     action: "decide_route",
@@ -72,6 +97,7 @@ async function assertRuntimeContract() {
     clientType: "retail",
     province: "Santa Fe",
     estimatedVolume: 120,
+    ...routeBase,
   });
   assert(high?.ok === true, `decide_route ≥50 Santa Fe falló: ${JSON.stringify(high)}`);
   assert(
@@ -90,6 +116,7 @@ async function assertRuntimeContract() {
     estimatedVolume: 80,
     province: "Mendoza",
     distributorName: "Cool Logística Cuyo",
+    deriveMessageSent: true,
   });
   assert(
     blocked?.ok === false,
@@ -103,6 +130,7 @@ async function assertRuntimeContract() {
     clientType: "minorista",
     province: "Mendoza",
     estimatedVolume: 20,
+    ...routeBase,
   });
   assert(low?.ok === true, `decide_route <50 Mendoza falló: ${JSON.stringify(low)}`);
   assert(
@@ -117,6 +145,7 @@ async function assertRuntimeContract() {
     clientType: "mayorista",
     province: "Córdoba",
     estimatedVolume: 20,
+    ...routeBase,
   });
   assert(cba?.ok === true, `decide_route <50 Córdoba falló: ${JSON.stringify(cba)}`);
   assert(
@@ -130,6 +159,7 @@ async function assertRuntimeContract() {
     certainty: "high",
     clientType: "retail",
     province: "Mendoza",
+    ...routeBase,
   });
   assert(noVol?.ok === false && noVol.gate === "missing_volume", `retail sin volumen debía missing_volume: ${JSON.stringify(noVol)}`);
 
@@ -140,6 +170,9 @@ async function assertRuntimeContract() {
     clientType: "distribuidor",
     province: "Córdoba",
     volumeUncertain: true,
+    distributorPathConfirmed: true,
+    distributorIntentCleared: true,
+    ...routeBase,
   });
   assert(
     uncertain?.ok === false && uncertain.gate === "volume_uncertain",

@@ -16,6 +16,7 @@ import { leadsRoutes } from "./routes/leads";
 import { promptsRoutes } from "./routes/prompts";
 import { samplesRoutes } from "./routes/samples";
 import { cronRoutes } from "./routes/cron";
+import { kapsoWebhookRoutes } from "./routes/webhooks-kapso";
 
 export function createApp() {
   const env = getEnv();
@@ -28,13 +29,23 @@ export function createApp() {
     cors({
       origin: env.CORS_ORIGINS,
       allowMethods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-      allowHeaders: ["Content-Type", "Authorization", "x-internal-secret", "x-cron-secret"],
+      allowHeaders: [
+        "Content-Type",
+        "Authorization",
+        "x-internal-secret",
+        "x-cron-secret",
+        "x-webhook-signature",
+        "x-webhook-event",
+        "x-idempotency-key",
+      ],
       maxAge: 86400,
     }),
   );
 
   app.route("/health", healthRoutes);
   app.route("/cron", cronRoutes);
+  /** Público: Kapso firma con KAPSO_WEBHOOK_SECRET (HMAC). */
+  app.route("/webhooks/kapso", kapsoWebhookRoutes);
 
   const protectedPaths = [
     "/leads",

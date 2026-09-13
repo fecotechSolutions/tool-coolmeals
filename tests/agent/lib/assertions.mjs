@@ -21,6 +21,9 @@ export const FORBIDDEN_PATTERNS = [
   { label: "narra su proceso de pensamiento", regex: /\b(dejame pensar|voy a pensar|analizando|procesando|estoy evaluando internamente|mi proceso|internamente)\b/ },
   { label: "revela su configuración", regex: /\b(mis instrucciones|mi (prompt|configuracion)|estoy configurad|fui entrenad|modelo de lenguaje|soy una ia|inteligencia artificial|asistente virtual)\b/ },
   { label: "nombra a un asesor concreto en vez del canal", regex: /\bte (paso|conecto) con octavio\b/ },
+  { label: "inventa precio con $", regex: /\$\s?\d/ },
+  { label: "inventa mínimo de compra numérico", regex: /\bminimo(\s+de\s+compra)?\s+(es|de|son)\s+\d+/ },
+  { label: "dice que Beacons tiene precios", regex: /\b(beacons|el link).{0,40}precio/ },
 ];
 
 function toolNames(result) {
@@ -71,8 +74,11 @@ export function tellsUserAnAdvisorWillContact() {
     name: "avisa que un asesor lo va a contactar",
     check(result) {
       const text = normalize(result.userVisible.join(" \n "));
-      const ok = /(asesor|equipo comercial|una persona del equipo)/.test(text) &&
-        /(contact|comunic|escrib|llam)/.test(text);
+      const ok =
+        /(asesor|equipo comercial|una persona del equipo|representante)/.test(text) &&
+        /(te va a contactar|te contacta|te van a contactar|se (va a )?comunic|te (van a )?escrib|te llama|te van a llamar)/.test(
+          text,
+        );
       return ok ? pass() : fail("ningún mensaje avisa que un asesor va a contactar al lead");
     },
   };
@@ -170,6 +176,73 @@ export function asksDisambiguation(description = "pregunta para desambiguar la t
       return distAsk || retailAsk
         ? pass()
         : fail("no aparece una pregunta clara con 2 opciones de tipificación");
+    },
+  };
+}
+
+/** Unidades de producto vs cajas/bultos (Frizzé: 60 wraps ≠ 60 cajas). */
+export function asksUnitsVsBoxes(description = "pregunta si son unidades o cajas/bultos") {
+  return {
+    name: description,
+    check(result) {
+      const text = normalize(result.userVisible.join(" \n "));
+      const ok = /(unidad|unidades|suelt)/.test(text) && /(caja|cajas|bulto|bultos)/.test(text);
+      return ok ? pass() : fail("no pregunta unidades vs cajas/bultos");
+    },
+  };
+}
+
+/** Apertura / catálogo: debe mandar el link Beacons. */
+export function mentionsBeaconsLink(description = "incluye el link Beacons") {
+  return mentions(/beacons\.ai\/froodie/, description);
+}
+
+/**
+ * Si llamó sync_derived, el último intento debe llevar deriveMessageSent/farewellSent.
+ * (Intentos previos bloqueados por el gate están OK.)
+ */
+export function syncDerivedHasMessageFlag() {
+  return {
+    name: "sync_derived con deriveMessageSent (mensaje de cierre primero)",
+    check(result) {
+      const syncs = findTool(result, "sync_derived");
+      if (!syncs.length) return pass();
+      const last = syncs[syncs.length - 1];
+      const input = last.input || {};
+      if (input.deriveMessageSent === true || input.farewellSent === true) return pass();
+      return fail(
+        `último sync_derived sin deriveMessageSent=true: ${JSON.stringify(input).slice(0, 180)}`,
+      );
+    },
+  };
+}
+
+/**
+ * No tratar N wraps/viandas como N cajas: si decide_route lleva cantidades de producto
+ * en el input, debe pasar volumeUnitConfirmed (o volumeInBoxes).
+ */
+export function decideRouteConfirmsUnitsWhenProductQty() {
+  return {
+    name: "decide_route no asume unidades de producto = cajas",
+    check(result) {
+      const calls = findTool(result, "decide_route");
+      for (const call of calls) {
+        const input = call.input || {};
+        const blob = normalize(
+          [input.lastMessage, input.aiSummary, input.notes, input.reason].filter(Boolean).join(" "),
+        );
+        if (!blob) continue;
+        const hasProductQty =
+          /(\d+)\s*(viandas?|wraps?|postres?|unidades?|uds?)/.test(blob) ||
+          /(\d+)\s+de\s+cada\s+(una|uno|producto)/.test(blob);
+        const hasBoxes = /(caja|bulto|cajas|bultos)/.test(blob);
+        if (!hasProductQty || hasBoxes) continue;
+        if (input.volumeUnitConfirmed === true || input.volumeInBoxes === true) continue;
+        return fail(
+          `decide_route con qty de producto sin volumeUnitConfirmed: ${JSON.stringify(input).slice(0, 180)}`,
+        );
+      }
+      return pass();
     },
   };
 }

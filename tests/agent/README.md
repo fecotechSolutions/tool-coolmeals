@@ -6,6 +6,7 @@ y verifica con asserts lo que el lead habría visto.
 ```bash
 npm run test:agent                      # todos los casos
 npm run test:agent -- --case gastro     # solo los que matcheen
+npm run test:agent -- --case gate-      # gates Frizzé-lite (unidades, P3b, derive, Beacons…)
 npm run test:agent -- --concurrency 2   # bajar la concurrencia si aparecen 429
 ```
 
@@ -53,3 +54,16 @@ Se aplican a todos los casos:
   asserts: [routeClientType("minorista"), endsWithHumanHandoff()],
 }
 ```
+
+## Casos `gate-*` (Frizzé-lite)
+
+Cubren los gates duros nuevos. Antes de correrlos: `kapso build`, deploy de `coolmeals-bot-actions-mock` (mismas gates que prod) y sync del workflow **[TEST]** (el runner lo hace solo salvo `--no-sync`).
+
+| id | Qué verifica |
+|----|----------------|
+| `gate-beacons-apertura` | Link Beacons en el primer contacto |
+| `gate-unidades-vs-cajas` | 60 wraps ≠ menú; pregunta unidades vs cajas |
+| `gate-p3b-tengo-distribuidora` | Desambigua compra vs ser dist. |
+| `gate-sticky-dist-luego-compra` | Cambia de “ser dist.” a compra → re-pregunta |
+| `gate-derive-orden-mensaje` | Nombra dist. + `deriveMessageSent` en sync |
+| `gate-promesa-handoff-precios` | Promesa de asesor ⇒ handoff |

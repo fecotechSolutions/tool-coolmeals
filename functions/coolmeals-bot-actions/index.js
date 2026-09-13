@@ -335,6 +335,355 @@ function blockDerivationAtHighVolume(input, conv, minBundles) {
   };
 }
 
+/** P5: Córdoba nunca deriva a dist. (operador Cool Meals si <50; menú si ≥50). */
+function blockDerivationInCordoba(input, conv) {
+  const province = resolveProvince(
+    input && input.province,
+    conv && conv.province,
+    input && input.aiSummary,
+    conv && conv.ai_summary,
+    input && input.reason,
+    input && input.notes,
+  );
+  if (!province || normalize(province) !== "cordoba") return null;
+  return {
+    ok: false,
+    gate: "cordoba_no_distributor",
+    error: "Córdoba no se deriva a distribuidor de zona.",
+    agentInstruction:
+      "GATE Córdoba (P5). PROHIBIDO sync_derived / nombrar distribuidor / 'asesor de la zona'. " +
+      "Si volumen ≥50: menú Cool Meals (muestras/pedido). Si <50 o sin vol: operador Cool Meals " +
+      "(handoff status=atencion_representante). NUNCA Seba ni dist. de CBA.",
+  };
+}
+
+/** True solo si el lead eligió muestras de forma explícita (P8). */
+function isExplicitSampleChoice(input) {
+  if (!input) return false;
+  if (input.sampleChoiceConfirmed === true || input.samplesChosen === true) return true;
+  const choice = normalize(input.sampleChoice || input.menuChoice || "");
+  if (
+    choice === "1" ||
+    choice === "muestras" ||
+    choice === "pedir_muestras" ||
+    choice === "pedir muestras" ||
+    choice === "samples"
+  ) {
+    return true;
+  }
+  const blob = normalize(
+    [input.lastMessage, input.reason, input.notes, input.aiSummary].filter(Boolean).join(" "),
+  );
+  if (!blob) return false;
+  // Elección clara; evita "me viene bien también" flojo.
+  if (
+    /(^|[^\w])(1|uno)\b/.test(blob) &&
+    /(muestra|menu|opcion)/.test(blob)
+  ) {
+    return true;
+  }
+  return (
+    /(quiero|pido|elegi|elijo|opto por|vamos con|me anoto)\s+(las\s+)?muestras/.test(blob) ||
+    /pedir\s+muestras/.test(blob) ||
+    /opcion\s*1/.test(blob)
+  );
+}
+
+/**
+ * P6/P8: request_samples solo con menú Cool Meals (≥50) + elección clara de muestras.
+ * Bloquea <50, sin menú, CBA operador, derive, rep/fasón.
+ */
+function gateRequestSamplesEligibility(input, conv, minBundles) {
+  const threshold = minBundles || 50;
+  const clientType =
+    sanitizeClientType(input && input.clientType) ||
+    sanitizeClientType(conv && conv.client_type) ||
+    "";
+  if (clientType === "representante" || clientType === "fason") {
+    return {
+      ok: false,
+      gate: "samples_not_for_rep_fason",
+      needData: false,
+      reason: "Fasón/representante (SER) no usa menú de muestras Cool Meals.",
+      agentInstruction:
+        "GATE: NO request_samples para fasón/representante. Cierre comercial + handoff_human " +
+        "status=quiere_ser_representante o quiere_ser_fason (sin menú).",
+    };
+  }
+
+  const volume = resolveEstimatedVolume(input, conv);
+  if (volume === null || Number.isNaN(volume) || volume < threshold) {
+    return {
+      ok: false,
+      gate: "samples_requires_high_volume",
+      needData: true,
+      missing: volume === null || Number.isNaN(volume) ? ["estimatedVolume"] : [],
+      reason:
+        "Muestras Cool Meals solo con volumen ≥ " +
+        threshold +
+        " (menú). No agendar kit si <50 / sin menú / derive.",
+      agentInstruction:
+        "GATE P6/P8: PROHIBIDO request_samples sin menú Cool Meals (≥" +
+        threshold +
+        "). " +
+        "Si aún no hay volumen claro: calificá (cajas/bultos). Si <50 Córdoba → operador (sin muestras). " +
+        "Si <50 fuera → dist/sin_cobertura (NO kit Cool Meals). " +
+        "Solo tras decide_route coolMealsMenu=true + eligió 1 muestras → ficha + request_samples.",
+    };
+  }
+
+  if (!isExplicitSampleChoice(input)) {
+    return {
+      ok: false,
+      gate: "samples_choice_unclear",
+      needData: true,
+      missing: ["sampleChoiceConfirmed"],
+      reason: "Falta elección explícita de muestras (menú opción 1).",
+      agentInstruction:
+        "GATE P8: el lead NO eligió muestras de forma clara. PROHIBIDO request_samples. " +
+        "Mandá el menú o desambiguá: 1) Pedir muestras  2) Agendar pedido + enter_waiting. " +
+        "Un 'me viene bien también' / duda mezclada con pedido NO alcanza. " +
+        "Recién con elección explícita: sampleChoiceConfirmed=true (o sampleChoice=muestras) + certainty=high + request_samples.",
+    };
+  }
+
+  return null;
+}
+
+/**
+ * P1/P1b: "hablar con un humano/asesor" ≠ clientType representante / status quiere_ser_representante.
+ * True si el blob parece pedido de atención humana, no intención de SER representante.
+ */
+function looksLikeAskForHumanNotBeRep(input) {
+  const blob = normalize(
+    [
+      input && input.reason,
+      input && input.aiSummary,
+      input && input.lastMessage,
+      input && input.notes,
+      input && input.intent,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (!blob) return false;
+  const wantsToBe =
+    /(quiero ser|sumarme como|ser\s+representante|representar la marca|vender a comision)/.test(
+      blob,
+    );
+  if (wantsToBe) return false;
+  return /(hablar con|pasar(me)? (con |a )?(un |una )?(humano|persona|asesor|operador|alguien|representante)|atencion humana|quiero (un )?asesor)/.test(
+    blob,
+  );
+}
+
+function gateMisclassifiedRepresentative(input, forAction) {
+  if (!input) return null;
+  const type = sanitizeClientType(input.clientType);
+  const status = normalize(input.status || "");
+  const asRepType = type === "representante";
+  const asRepStatus = status === "quiere_ser_representante";
+  if (!asRepType && !asRepStatus) return null;
+  if (!looksLikeAskForHumanNotBeRep(input)) return null;
+  return {
+    ok: false,
+    gate: "ask_human_not_be_representative",
+    needDisambiguation: true,
+    reason:
+      "Pedido de hablar con persona/asesor: NO es 'quiere ser representante'. Va a atención humana.",
+    agentInstruction:
+      "GATE P1/P1b: el lead pide hablar con un humano/asesor — NO uses clientType=representante " +
+      "ni status=quiere_ser_representante. " +
+      (forAction === "decide_route"
+        ? "Tipificá el negocio real (o 'otro') + decide_route, O handoff status=atencion_representante. "
+        : "handoff_human status=atencion_representante + handoff_to_human. ") +
+      "Solo si dice explícitamente QUIERO SER representante de la marca → columna quiere_ser_representante.",
+  };
+}
+
+function conversationBlob(input, conv) {
+  return normalize(
+    [
+      input && input.lastMessage,
+      input && input.aiSummary,
+      input && input.reason,
+      input && input.notes,
+      input && input.intent,
+      conv && conv.ai_summary,
+      conv && conv.last_message,
+      conv && conv.notes,
+    ]
+      .filter(Boolean)
+      .join(" \n "),
+  );
+}
+
+/** Volumen en unidades de producto sin aclarar cajas/bultos → no rutear. */
+function gateVolumeUnitsAmbiguous(input, conv) {
+  if (!input) return null;
+  if (input.volumeUnitConfirmed === true || input.volumeInBoxes === true) return null;
+  const unit = normalize(input.volumeUnit || input.quantityUnit || "");
+  if (unit === "cajas" || unit === "caja" || unit === "bultos" || unit === "bulto") {
+    return null;
+  }
+  const blob = conversationBlob(input, conv);
+  if (!blob) return null;
+  const hasProductQty =
+    /(\d+)\s*(viandas?|wraps?|postres?|unidades?|uds?|platos?(\s+listos?)?)/.test(blob) ||
+    /(viandas?|wraps?|postres?|unidades?)\s*(por\s+mes|aprox|aproximadamente|:)?\s*\d+/.test(blob) ||
+    /(\d+)\s+de\s+cada\s+(una|uno|producto)/.test(blob);
+  const hasBoxes = /(caja|bulto|cajas|bultos)/.test(blob);
+  if (!hasProductQty || hasBoxes) return null;
+  return {
+    ok: false,
+    gate: "volume_units_ambiguous",
+    needData: true,
+    needDisambiguation: true,
+    missing: ["volumeUnitConfirmed"],
+    reason:
+      "Cantidades de producto sin aclarar si son unidades o cajas/bultos. No se puede aplicar el umbral 50.",
+    agentInstruction:
+      "GATE unidades↔cajas: el lead dio cantidades de viandas/wraps/postres/unidades SIN decir cajas/bultos. " +
+      "PROHIBIDO decide_route / request_samples / asumir que N unidades = N cajas. " +
+      "UNA pregunta: ¿son unidades sueltas o cajas/bultos? (recordá: wraps 24 u/caja, platos 12, postres 24). " +
+      "enter_waiting. Cuando aclare: volumeUnitConfirmed=true, estimatedVolume en CAJAS, certainty=high.",
+  };
+}
+
+function looksLikePurchaseIntent(blob) {
+  return /(comprar|compra|precio|precios|minimo|m[ií]nimos|cotiz|delivery|vianda|wrap|postre|muestra|pedido|almacen|minimarket|supermercado|retail|revender|sumar productos|quiero producto)/.test(
+    blob,
+  );
+}
+
+function looksLikeBeDistributorIntent(blob) {
+  return /(quiero ser|sumarme como|ser\s+distribuidor|distribuidor oficial|red de distribuidores|oficial de la marca)/.test(
+    blob,
+  );
+}
+
+function looksLikeAmbiguousDistributorMention(blob) {
+  return /(tengo (una )?distribuidora|soy distribuidor|somos distribuidores|mi distribuidora)/.test(
+    blob,
+  );
+}
+
+/**
+ * P3b: "tengo distribuidora / soy dist" sin aclarar compra vs ser marca.
+ */
+function gateAmbiguousDistributorIntent(input, conv) {
+  if (!input) return null;
+  if (
+    input.distributorIntentCleared === true ||
+    input.purchasePathConfirmed === true ||
+    input.distributorPathConfirmed === true
+  ) {
+    return null;
+  }
+  const blob = conversationBlob(input, conv);
+  if (!blob || !looksLikeAmbiguousDistributorMention(blob)) return null;
+  if (looksLikeBeDistributorIntent(blob)) return null;
+  if (/(comprar|revender|sumar (sus |los )?productos)/.test(blob)) return null;
+  return {
+    ok: false,
+    gate: "distributor_intent_ambiguous",
+    needDisambiguation: true,
+    reason: "No está claro si quiere COMPRAR o SER distribuidor oficial de la marca.",
+    agentInstruction:
+      "GATE P3b: desambiguá ANTES de decide_route / las 4 de dist. UNA pregunta: " +
+      "'¿Querés comprar/revender producto Cool Meals desde tu distribuidora, o sumarte como distribuidor oficial de la marca?' " +
+      "+ enter_waiting. Compra→clientType=mayorista (sin las 4). Ser marca→las 4 preguntas. " +
+      "Cuando aclare: distributorIntentCleared=true (y purchasePathConfirmed o distributorPathConfirmed).",
+  };
+}
+
+/**
+ * Recontacto: card en Quiere ser dist / client_type dist, pero el chat actual es compra.
+ */
+function gateStickyDistributorPurchase(input, conv) {
+  if (!conv) return null;
+  if (
+    input.purchasePathConfirmed === true ||
+    input.distributorPathConfirmed === true ||
+    input.distributorIntentCleared === true
+  ) {
+    return null;
+  }
+  const sticky =
+    normalize(conv.status) === "quiere_ser_distribuidor" ||
+    sanitizeClientType(conv.client_type) === "distribuidor";
+  if (!sticky) return null;
+  const blob = conversationBlob(input, conv);
+  if (!blob) return null;
+  if (looksLikeBeDistributorIntent(blob)) return null;
+  if (!looksLikePurchaseIntent(blob)) return null;
+  const inputType = sanitizeClientType(input.clientType);
+  // Si ya tipificó compra en este turno, OK
+  if (inputType && inputType !== "distribuidor" && input.purchasePathConfirmed !== false) {
+    if (["mayorista", "retail", "minorista", "otro"].indexOf(inputType) >= 0) {
+      return null;
+    }
+  }
+  if (inputType === "distribuidor" || !inputType) {
+    return {
+      ok: false,
+      gate: "sticky_distributor_purchase_recontact",
+      needDisambiguation: true,
+      reason:
+        "Card/columna dist. pero el mensaje actual parece compra. No arrastrar tipificación dist.",
+      agentInstruction:
+        "GATE recontacto dist→compra: la card estaba en Quiere ser distribuidor / clientType dist, " +
+        "pero ahora habla de compra/precios/producto/delivery. PROHIBIDO decide_route como distribuidor automático. " +
+        "Preguntá: ¿seguís queriendo sumarte como dist. oficial de la marca, o querés comprar producto? " +
+        "+ enter_waiting. Compra→tipificá mayorista/retail/minorista + purchasePathConfirmed=true + decide_route. " +
+        "Ser dist→distributorPathConfirmed=true y seguí checklist 4 SÍ si falta.",
+    };
+  }
+  return null;
+}
+
+/** Orden derive: mensaje WA al lead ANTES de sync_derived. */
+function gateDeriveMessageFirst(input) {
+  if (!input) return null;
+  if (input.deriveMessageSent === true || input.farewellSent === true) return null;
+  return {
+    ok: false,
+    gate: "derive_message_first",
+    needData: true,
+    missing: ["deriveMessageSent"],
+    reason: "Orden derive: falta el mensaje humano de cierre antes de sync_derived.",
+    agentInstruction:
+      "GATE orden derive (P6): PROHIBIDO sync_derived antes del mensaje. ORDEN: " +
+      "1) send_notification_to_user nombrando al distribuidor + despedida. " +
+      "2) sync_derived con deriveMessageSent=true, contacto y certainty=high. " +
+      "3) handoff_to_human. Si sync va primero, el lead puede no recibir el WhatsApp.",
+  };
+}
+
+/** Beacons en calificación nueva (soft-hard): no rutear sin haber enviado el link. */
+function gateBeaconsBeforeRoute(input, conv) {
+  if (!input) return null;
+  if (input.beaconsSent === true) return null;
+  // Recontactos ya calificados / mid dist column: no exigir de nuevo
+  if (conv) {
+    const st = normalize(conv.status);
+    if (st && st !== "ia_atendiendo" && st !== "nuevo") return null;
+  }
+  const blob = conversationBlob(input, conv);
+  if (blob && /beacons\.ai\/froodie/.test(blob)) return null;
+  return {
+    ok: false,
+    gate: "beacons_required",
+    needData: true,
+    missing: ["beaconsSent"],
+    reason: "Falta enviar Beacons antes de rutear.",
+    agentInstruction:
+      "GATE Beacons: en el mensaje humano incluí https://beacons.ai/froodie (catálogo SIN precios) " +
+      "si aún no está en el chat. Luego upsert/decide_route con beaconsSent=true. " +
+      "PROHIBIDO decir que Beacons tiene precios.",
+  };
+}
+
 function needsVolumeForClientType(clientType) {
   const t = normalize(clientType);
   return t === "retail" || t === "mayorista" || t === "distribuidor";
@@ -533,6 +882,18 @@ function gateDecideRouteQualification(input, conv) {
     "";
   // Rep / fasón: handoff comercial sin checklist de volumen.
   if (earlyType === "representante" || earlyType === "fason") return null;
+
+  const unitsGate = gateVolumeUnitsAmbiguous(input, conv);
+  if (unitsGate) return unitsGate;
+
+  const stickyDist = gateStickyDistributorPurchase(input, conv);
+  if (stickyDist) return stickyDist;
+
+  const ambDist = gateAmbiguousDistributorIntent(input, conv);
+  if (ambDist) return ambDist;
+
+  const beaconsGate = gateBeaconsBeforeRoute(input, conv);
+  if (beaconsGate) return beaconsGate;
 
   const q = buildQualification(input, conv);
   if (!q.province) {
@@ -873,6 +1234,12 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
     input.wantsToBeDistributor || clientType === "distribuidor",
   );
 
+  const repMisclass = gateMisclassifiedRepresentative(
+    Object.assign({}, input, { clientType: clientType }),
+    "decide_route",
+  );
+  if (repMisclass) return repMisclass;
+
   const settingsRows = await sb(
     supabaseUrl,
     supabaseKey,
@@ -1140,6 +1507,16 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
   }
 
   let conversationId = input.conversationId || null;
+  let conv = null;
+  if (conversationId) {
+    const foundById = await sb(
+      supabaseUrl,
+      supabaseKey,
+      "conversations?id=eq." + conversationId + "&limit=1",
+      { method: "GET" },
+    );
+    conv = Array.isArray(foundById) && foundById[0] ? foundById[0] : null;
+  }
   if (!conversationId && phone) {
     const found = await sb(
       supabaseUrl,
@@ -1149,8 +1526,17 @@ async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env
         ")&order=updated_at.desc&limit=1",
       { method: "GET" },
     );
-    if (Array.isArray(found) && found[0]) conversationId = found[0].id;
+    if (Array.isArray(found) && found[0]) {
+      conv = found[0];
+      conversationId = found[0].id;
+    }
   }
+
+  const samplesGate = gateRequestSamplesEligibility(input, conv, 50);
+  if (samplesGate) return samplesGate;
+
+  const unitsGate = gateVolumeUnitsAmbiguous(input, conv);
+  if (unitsGate) return unitsGate;
 
   const created = await sb(supabaseUrl, supabaseKey, "sample_requests", {
     method: "POST",
@@ -1295,6 +1681,15 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
   if (normalize(input.status) === "quiere_ser_distribuidor") {
     status = "atencion_representante";
     gateRemap = "quiere_ser_distribuidor_to_atencion_representante";
+  }
+
+  // P1/P1b: pedir humano ≠ ser representante
+  if (
+    status === "quiere_ser_representante" &&
+    looksLikeAskForHumanNotBeRep(input)
+  ) {
+    status = "atencion_representante";
+    gateRemap = "ask_human_not_be_representative";
   }
 
   // Descartado / muestras: no exigen checklist de contacto de esta gate
@@ -1610,6 +2005,12 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
 
   const volumeBlock = blockDerivationAtHighVolume(input, conv, 50);
   if (volumeBlock) return volumeBlock;
+
+  const cordobaBlock = blockDerivationInCordoba(input, conv);
+  if (cordobaBlock) return cordobaBlock;
+
+  const deriveOrder = gateDeriveMessageFirst(input);
+  if (deriveOrder) return deriveOrder;
 
   const contactGate = gateContactBeforeClose(input, "sync_derived");
   if (contactGate && contactGate.ok === false) return contactGate;

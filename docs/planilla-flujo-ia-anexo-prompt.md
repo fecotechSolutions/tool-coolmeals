@@ -1,7 +1,7 @@
 # Anexo: planilla + prompt + Pipeline
 
 Compañero de [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
-Actualizado: **8 sep 2026** (volumen incerto: 1 insistencia + umbral a partir de 50).
+Actualizado: **11 sep 2026** (gates: Beacons, unidades↔cajas, P3b/sticky dist, orden derive, promesa=handoff).
 
 ---
 
@@ -11,17 +11,22 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 
 | Tema | Decisión |
 |---|---|
-| Beacons | `https://beacons.ai/froodie` en el **primer mensaje** y si piden catálogo/sabores. **Sin precios** |
+| Beacons | `https://beacons.ai/froodie` en el **primer mensaje** y si piden catálogo/sabores. **Sin precios**. Gate: `decide_route` exige `beaconsSent=true` (o link en chat/aiSummary) mientras status es `ia_atendiendo`/`nuevo` |
 | Orden motor | 1) rep/fasón → 2) **≥50 cualquier provincia** → menú → 3) **Córdoba &lt;50** → operador sin menú → 4) fuera CBA &lt;50 → dist / sin_cobertura |
 | Minorista / gastronómico | Siempre `minorista`. No bloquear por volumen; si da ≥50 → menú |
-| Muestras | Solo si `own_attention` **con** `coolMealsMenu` (≥50). `request_samples` + `handoff_human` `muestras` → **Kapso `ended`** (sin `handoff_to_human`). Card queda hasta Resultado |
+| Muestras | Solo si `own_attention` **con** `coolMealsMenu` (≥50) **y** elección explícita (opción 1). `request_samples` exige `sampleChoiceConfirmed` + vol≥50. Gate bloquea &lt;50 / sin menú / derive / rep-fasón. Luego `handoff_human` `muestras` → **Kapso `ended`**. Card hasta Resultado |
+| Unidades ↔ cajas | Si dio N viandas/wraps/unidades **sin** cajas/bultos → gate `volume_units_ambiguous`. Preguntar; luego `volumeUnitConfirmed=true` y volumen en **cajas** |
 | Consumidor final | `descartado` (IA `ended`, **sin** `handoff_to_human`) |
-| “Hablar con un representante” | `atencion_representante` — **no** `quiere_ser_representante` |
+| “Hablar con un representante” | `atencion_representante` — **no** `quiere_ser_representante` (gate remapea si confunde) |
 | Quiere ser distribuidor | 4 SÍ → columna con `upsert` **sin handoff** → zona/volumen → `decide_route`. Nunca `handoff` con status `quiere_ser_distribuidor` |
+| P3b compra vs ser dist | “tengo distribuidora / soy dist” sin aclarar → gate `distributor_intent_ambiguous`. Flags: `distributorIntentCleared` + `purchasePathConfirmed` o `distributorPathConfirmed` |
+| Sticky dist → compra | Card en `quiere_ser_distribuidor` pero chat actual de compra → gate `sticky_distributor_purchase_recontact` |
 | Volumen incerto / quiere precios | **1ª:** pregunta NORMAL de volumen (aviso **a partir de 50**). **Si dice no sé → 2ª:** asistente comercial + ¿**a partir de 50** o **menos**? (CBA sin “de la zona”). Con orientación → `decide_route`. Si tampoco → operador. **PROHIBIDO** inventar bultos |
 | Contacto | Toda derivación/handoff comercial: `fullName` + `company` + `contactPhone` + `phoneConfirmed=true`. Si se niega: `contactRefused=true` → operador. No alcanza el perfil WA |
-| Copy Córdoba | **PROHIBIDO** “asesor/distribuidor de la zona” cuando la provincia ya es Córdoba |
-| Derive | **Orden:** 1) mensaje humano  2) `sync_derived`  3) `handoff_to_human`. `sync_derived` **no** corta Kapso |
+| Copy Córdoba | **PROHIBIDO** “asesor/distribuidor de la zona” cuando la provincia ya es Córdoba. **`sync_derived` bloqueado en Córdoba** (gate P5) |
+| Derive | **Orden:** 1) mensaje humano  2) `sync_derived` con `deriveMessageSent=true`  3) `handoff_to_human`. Gate `derive_message_first` si falta el mensaje. `sync_derived` **no** corta Kapso |
+| Promesa = handoff | Si prometés que un asesor contacta → mismo turno `handoff_human` + `handoff_to_human` (salvo muestras/descartado) |
+| Pausa bot (humano) | Pipeline → **Atención humana** → `POST /bot/handoff`. **Fase E (parcial):** si el operador escribe desde **WhatsApp Business App**, Kapso manda `whatsapp.message.sent` con `origin=business_app` → `POST /api/webhooks/kapso` pausa el bot y mueve la card. **No** cubre respuestas desde Kapso Inbox (`cloud_api`, igual que el bot) |
 | Desambiguación | Si **cualquier** dato/camino no está claro → **1 pregunta** antes de avanzar. Gate duro: `decide_route` / `request_samples` / `sync_derived` exigen `certainty=high`; si no, `needDisambiguation` |
 | Auto-cierre | `sin_cobertura` ~22h → **Descartado**; `esperando_respuesta` ~22h → **Finalizado** |
 | Teléfono canónico | `351…` / `54351…` / `549351…` = mismo lead (`54` + nacional, sin 9 móvil) |

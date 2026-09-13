@@ -94,6 +94,11 @@ Si se invierte el orden, el lead **no recibe** el mensaje.
 | Solo handoff (Atención, Derivado, Quiere ser rep/fasón…) | **No** — queda en `handoff` hasta Resultado (o auto si aplica) |
 | Execution trabada en `running` ≥3 min | Sí (watchdog) |
 
+**Antes de escribir vos en WhatsApp:**
+- Ideal: mové la card a **Atención humana** (u otra columna con handoff).
+- Si usás la **app WhatsApp Business**, hay auto-pausa (fase E) al detectar tu mensaje.
+- Si usás **Kapso Inbox**, la auto-pausa **no** aplica: mové la card primero.
+
 ### C) Cuándo se **cierra para ustedes** (Pipeline limpio)
 
 | Situación | Columna final | Quién |

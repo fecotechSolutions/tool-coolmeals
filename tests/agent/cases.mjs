@@ -1,15 +1,17 @@
 import {
   answeredEveryTurn,
   asksDisambiguation,
+  asksUnitsVsBoxes,
   calledTool,
+  decideRouteConfirmsUnitsWhenProductQty,
   didNotCallTool,
   doesNotMention,
   endsWithHumanHandoff,
   mentions,
+  mentionsBeaconsLink,
   neverRouteClientType,
-  noEmptyMessages,
-  noInternalNarration,
   routeClientType,
+  syncDerivedHasMessageFlag,
   tellsUserAnAdvisorWillContact,
 } from "./lib/assertions.mjs";
 
@@ -18,6 +20,11 @@ import {
  *
  * `noInternalNarration` y `noEmptyMessages` se agregan a todos los casos en el runner:
  * el criterio "nunca cuentes tu proceso interno" aplica siempre.
+ *
+ * Prefijos útiles:
+ *   --case gate-   → gates nuevos (Frizzé-lite)
+ *   --case tipos-  → tipologías
+ *   --case vivo-   → aperturas “vivas”
  */
 export const cases = [
   {
@@ -340,6 +347,100 @@ export const cases = [
       calledTool("decide_route"),
       mentions(/muestra|pedido/, "≥50 → menú Cool Meals"),
       doesNotMention(/cool logistica cuyo/, "no deriva a dist. con ≥50"),
+    ],
+  },
+
+  // --- Gates Frizzé-lite (correr con --case gate-) ---
+  {
+    id: "gate-beacons-apertura",
+    title: "Primer contacto útil → manda Beacons (sin decir que tiene precios)",
+    turns: [
+      "Hola, quiero info de productos congelados para mi local en Mendoza",
+    ],
+    asserts: [
+      mentionsBeaconsLink(),
+      doesNotMention(
+        /(beacons|el link|catalogo).{0,40}precio|(precio).{0,40}(beacons|el link)/,
+        "no dice que Beacons tiene precios",
+      ),
+    ],
+  },
+  {
+    id: "gate-unidades-vs-cajas",
+    title: "60 wraps / 90 viandas sin aclarar cajas → pregunta unidades vs cajas (no menú)",
+    turns: [
+      "Hola, tengo un delivery en Córdoba y quiero sumar Cool Meals",
+      "Compro unos 60 wraps y 90 viandas por mes",
+    ],
+    asserts: [
+      asksUnitsVsBoxes(),
+      decideRouteConfirmsUnitsWhenProductQty(),
+      didNotCallTool("request_samples"),
+      doesNotMention(
+        /(pedir|agendar)\s+muestras|1\)\s*.{0,30}muestra/,
+        "no ofrece menú de muestras sin aclarar cajas",
+      ),
+    ],
+  },
+  {
+    id: "gate-p3b-tengo-distribuidora",
+    title: "“Tengo una distribuidora” sin aclarar → desambigua compra vs ser marca",
+    turns: [
+      "Hola, tengo una distribuidora en Santa Fe",
+    ],
+    asserts: [
+      asksDisambiguation("pregunta comprar/revender vs dist. oficial de la marca"),
+      didNotCallTool("decide_route"),
+      didNotCallTool("request_samples"),
+    ],
+  },
+  {
+    id: "gate-sticky-dist-luego-compra",
+    title: "Era camino dist. oficial y después solo quiere comprar → re-desambigua / tipifica compra",
+    turns: [
+      "Hola, quiero sumarme como distribuidor oficial de Cool Meals en Mendoza",
+      "Sí: trabajo con congelados, tengo cámara, logística y estructura de distribución",
+      "Pensándolo bien, solo quiero comprar wraps para revender, no ser distribuidor de la marca",
+      "Unos 40 bultos por mes",
+      "Almacén Cambio SA, Fer Test, este número está bien",
+    ],
+    asserts: [
+      asksDisambiguation("reabre compra vs ser dist. cuando cambia la intención"),
+      answeredEveryTurn(),
+      didNotCallTool("request_samples"),
+      doesNotMention(
+        /(pedir|agendar)\s+muestras|1\)\s*.{0,30}muestra/,
+        "40 bultos no debe disparar menú ≥50",
+      ),
+    ],
+  },
+  {
+    id: "gate-derive-orden-mensaje",
+    title: "Derive &lt;50 Mendoza → nombra dist. y sync_derived con deriveMessageSent",
+    turns: [
+      "Hola, tengo un almacén en Mendoza y quiero comprar productos Cool Meals",
+      "Unos 20 bultos por mes de wraps",
+      "Almacén Sur Test, Ana Derive, este WhatsApp sirve",
+    ],
+    asserts: [
+      calledTool("decide_route"),
+      mentions(/cool logistica cuyo/, "mensaje de cierre nombra al distribuidor"),
+      syncDerivedHasMessageFlag(),
+      endsWithHumanHandoff(),
+    ],
+  },
+  {
+    id: "gate-promesa-handoff-precios",
+    title: "Insiste en precios exactos (tras volumen) → asesor + handoff",
+    turns: [
+      "Hola, soy mayorista en Córdoba, necesito la lista de precios y el mínimo de compra exacto",
+      "No sé cuántas cajas, solo quiero el precio unitario ya",
+      "Insisto: necesito el precio exacto escrito ahora. No me sirve orientarme con 50 o menos.",
+    ],
+    asserts: [
+      doesNotMention(/\$\s?\d|\d+\s?(pesos|usd)/, "no inventa precios"),
+      tellsUserAnAdvisorWillContact(),
+      endsWithHumanHandoff(),
     ],
   },
 ];
