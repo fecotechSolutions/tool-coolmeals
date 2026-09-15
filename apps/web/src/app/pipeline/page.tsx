@@ -111,14 +111,33 @@ function isHumanAttentionTag(tag: string) {
   return tag === HASHTAG_ATENCION_HUMANA || tag === "#atendido_por_representante";
 }
 
-/** Cards en Finalizado: visibles 5 días desde updatedAt (cierre); después solo métricas. */
+/** Cards en Finalizado: visibles 5 días desde updatedAt (cierre); después solo métricas.
+ *  Excepción: auto-cierre de Sin cobertura (outcome=sin_cobertura) → no se muestra en Pipeline. */
 const FINALIZADO_VISIBLE_MS = 5 * 24 * 60 * 60 * 1000;
+/** Cards en Descartado: visibles 2 días desde createdAt (alta de la card); después solo métricas. */
+const DESCARTADO_VISIBLE_MS = 2 * 24 * 60 * 60 * 1000;
+/** Sin cobertura: visibles 5 días desde handoff; el cron cierra IA y las saca del tablero. */
+const SIN_COBERTURA_VISIBLE_MS = 5 * 24 * 60 * 60 * 1000;
 
 function isVisibleOnPipeline(row: Conversation): boolean {
-  if (row.status !== "finalizado") return true;
-  const closedAt = Date.parse(row.updatedAt);
-  if (!Number.isFinite(closedAt)) return true;
-  return Date.now() - closedAt < FINALIZADO_VISIBLE_MS;
+  if (row.status === "finalizado") {
+    // Auto Sin cobertura: no pasar por la columna Finalizado en UI.
+    if (row.outcome === "sin_cobertura") return false;
+    const closedAt = Date.parse(row.updatedAt);
+    if (!Number.isFinite(closedAt)) return true;
+    return Date.now() - closedAt < FINALIZADO_VISIBLE_MS;
+  }
+  if (row.status === "descartado") {
+    const createdAt = Date.parse(row.createdAt);
+    if (!Number.isFinite(createdAt)) return true;
+    return Date.now() - createdAt < DESCARTADO_VISIBLE_MS;
+  }
+  if (row.status === "sin_cobertura") {
+    const handoffAt = Date.parse(row.updatedAt);
+    if (!Number.isFinite(handoffAt)) return true;
+    return Date.now() - handoffAt < SIN_COBERTURA_VISIBLE_MS;
+  }
+  return true;
 }
 
 export default function PipelinePage() {

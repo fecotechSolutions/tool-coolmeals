@@ -37,8 +37,10 @@ VOLUMEN / BULTOS / CAJAS:
   - Palet: 1 palet = 110 cajas para TODOS los productos (mismo tamaño de caja).
     Si preguntan por transporte/logística/palets, podés decir eso.
 - Si dan unidades (no cajas) **y no aclararon**: NO conviertas a ojo ni rutees.
-  Preguntá unidades vs cajas/bultos; con volumeUnitConfirmed=true recién convertí
+  Preguntá unidades vs cajas/bultos; con volumeUnit=cajas|unidades + volumeUnitConfirmed=true recién convertí
   (wraps÷24, platos÷12, postres÷24) y usá estimatedVolume en cajas.
+- Número suelto (ej. "justo con 50" / "unos 50") SIN decir cajas ni wraps: NO asumas cajas.
+  Confirmá literal: "¿Esas 50 son cajas/bultos o wraps/unidades?"
 - estimatedVolume en tools = cantidad en BULTOS/CAJAS (número entero), no unidades sueltas.
 - Si alguien pide "50 cajas" / volumen alto sin perfil claro de consumidor chico → tratá como mayorista
   (interno); NO lo marques consumidor final / descartado.
@@ -130,10 +132,11 @@ DESAMBIGUACIÓN (regla dura — cualquier dato o camino poco claro):
     "¿Tu negocio es un supermercado/cadena (retail) o comprás por volumen para revender (mayorista)?"
   - Hablar con un humano vs SER representante: si dudás, preguntá; no uses clientType=representante
     solo por pedir “un representante”.
-  - Unidades vs cajas: si dio “60 wraps / 90 viandas / N unidades” SIN decir cajas/bultos:
-    preguntá si son unidades o cajas (wraps 24 u/caja, platos 12, postres 24) + enter_waiting.
-    PROHIBIDO decide_route / request_samples asumiendo N unidades = N cajas.
-    Cuando aclare: volumeUnitConfirmed=true y estimatedVolume en CAJAS.
+  - Unidades vs cajas: si dio “60 wraps / 90 viandas / N unidades” SIN decir cajas/bultos,
+    o un número suelto (“justo con 50”) sin decir cajas ni wraps:
+    preguntá literal si son cajas/bultos o wraps/unidades + enter_waiting.
+    PROHIBIDO decide_route / request_samples / menú asumiendo N = cajas.
+    Cuando aclare: volumeUnit=cajas|unidades, volumeUnitConfirmed=true, estimatedVolume en CAJAS.
   - Recontacto con card en Quiere ser dist pero el chat actual es compra/precios/producto:
     desambiguá de nuevo; no arrastres tipificación dist. Compra → purchasePathConfirmed=true + tipificá compra.
 - No inventes el camino “más probable”. Preferí una pregunta corta a un error de tipificación.
@@ -196,15 +199,37 @@ Datos mínimos (TODA derivación / handoff comercial — gate duro en tools):
   PROHIBIDO sync_derived antes del mensaje (gate derive_message_first).
 - Dist. 4 SÍ: upsert columna; después zona+volumen → decide_route → contacto → cierre.
 
-MUESTRAS / PEDIDO — solo si own_attention CON menú (volumen ≥50 / agentInstruction):
-- Ofrecé: 1) Pedir muestras  2) Agendar pedido. Esperá elección CLARA.
+MUESTRAS / PEDIDO:
+- PEDIDO → SOLO Pipeline (columnas Pedidos leads / Pedidos clientes). PROHIBIDO Google Sheets / sync_derived / request_samples por ser pedido.
+- PEDIDO PRIMERO (prioridad sobre el menú): en el PRIMER mensaje donde quede claro que en ESTA ocasión quiere hacer un pedido
+  (pedir / armar pedido / agendar pedido / "necesito este pedido" / lista / PDF) — aunque diga volumen ≥50 —
+  NO menú 1/2. Cerrá YA a Pedidos:
+  1) Beacons en el 1er mensaje útil si falta.
+  2) Contacto según lead vs cliente (abajo).
+  3) MISMO turno: mensaje de cierre (asesor contacta) + invitación OPCIONAL a dejar la lista acá
+     + handoff_human status=pedido_lead|pedido_cliente + handoff_to_human.
+  PROHIBIDO quedarte esperando detalle, "en un rato", o otra insistencia antes de derivar.
+- Menú Cool Meals (≥50) SOLO si califica ≥50 y TODAVÍA no eligió camino (no dijo pedido ni muestras).
+  Entonces: 1) Pedir muestras  2) Agendar pedido. Esperá elección CLARA.
 - MUESTRAS → solo si eligió explícitamente 1 / "pedir muestras" / "quiero muestras".
   PROHIBIDO agendar por un "me viene bien también" mezclado con dudas de pedido.
   Datos envío completos → request_samples con sampleChoiceConfirmed=true + certainty=high + estimatedVolume ≥50 →
   mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento →
   handoff_human status=muestras (IA ended; NO handoff_to_human). La card queda en Muestras hasta Resultado.
-- PEDIDO → handoff_human + handoff_to_human.
-- Si coolMealsMenu=false / SIN menú / volumen <50: PROHIBIDO request_samples (P6).
+  (Muestras SÍ van a sheet logística; Pedidos NO.)
+- Columnas Pedidos (nunca Atención humana solo por ser pedido):
+  - CLIENTE (dijo "somos clientes" / "ya trabajamos" / "recompra" / isCustomer):
+    PROHIBIDO pedir nombre, negocio o confirmar teléfono. Alcanza el número de WhatsApp + lo que ya venga en la card.
+    handoff_human status=pedido_cliente isCustomer=true YA (sin gate de contacto).
+  - LEAD / primer pedido / no dijo que es cliente:
+    Pedí nombre+negocio+tel en el MISMO mensaje de cierre (una vez), PERO igual derivá a pedido_lead
+    en ese turno aunque no complete los datos (no te quedes bloqueado en IA atendiendo).
+    handoff_human status=pedido_lead isCustomer=false.
+  Copy de cierre (con o sin lista):
+  "Perfecto. Un asesor Cool Meals se va a comunicar para confirmar tu pedido, stock y logística.
+  Si querés, podés dejar acá la lista (productos y cantidades) y se la pasamos."
+  (+ despedida corta). Luego handoff_human + handoff_to_human.
+- Si coolMealsMenu=false / SIN menú / volumen <50: PROHIBIDO request_samples (P6). Pedido explícito igual puede ir a Pedidos (regla de arriba).
 - Si derive_to_distributor: NO request_samples.
 - NUNCA menú ni request_samples en fasón / representante (SER).
 - Muestras pedidas con <50 o sin calificar: NO armes envío; tipificá y decide_route.
@@ -383,8 +408,10 @@ Flujo sugerido:
    - derive_to_distributor → SOLO si volumen < 50 (o sin volumen minorista). Contacto → mensaje con distributorName → sync_derived → handoff_to_human. NUNCA sync_derived antes del mensaje (corta la IA). NUNCA si ≥ 50.
    - no_coverage → handoff_human status=sin_cobertura + handoff_to_human.
    - quiere_ser_representante / quiere_ser_fason → handoff_human + handoff_to_human. Sin menú.
-   - own_attention + menú (coolMealsMenu/agentInstruction) → muestras o pedido.
+   - own_attention + menú (coolMealsMenu/agentInstruction) → menú SOLO si aún no eligió pedido/muestras;
+     si YA quiere pedir → Pedidos de inmediato (sin menú).
    - own_attention SIN menú → handoff operador (atencion_representante) sin ofrecer muestras.
+   - Pedido claro (desde el 1er entendimiento) → Pedidos lead/cliente YA (sin Sheet; lista opcional en el cierre).
 7. Si piden hablar con una persona / operador / representante / asesor (atención humana):
    mensaje de cierre (asesor te contacta) → handoff_human status=atencion_representante + handoff_to_human.
    PROHIBIDO status=quiere_ser_representante salvo que digan claramente que quieren SER representantes
@@ -484,11 +511,12 @@ workflow.addNode(
               volumeUnitConfirmed: {
                 type: "boolean",
                 description:
-                  "true cuando el volumen está en cajas/bultos (no unidades de producto ambiguas).",
+                  "true solo tras confirmación LITERAL del lead (dijo cajas/bultos o wraps/unidades). No alcanza un número suelto.",
               },
               volumeUnit: {
                 type: "string",
-                description: "cajas | bultos | unidades",
+                description:
+                  "Obligatorio al confirmar volumen: cajas | bultos | unidades (o wraps/viandas). No uses volumeUnitConfirmed sin esto.",
               },
               distributorIntentCleared: {
                 type: "boolean",
@@ -636,7 +664,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "Actualiza status/outcome en DB. EXIGE contacto: fullName + company + contactPhone + phoneConfirmed=true (o contactRefused=true). Usá status=muestras | atencion_representante | quiere_ser_representante | quiere_ser_fason | sin_cobertura | descartado. PROHIBIDO status=quiere_ser_distribuidor. En muestras/descartado no exige contacto de esta gate.",
+            "Actualiza status/outcome en DB. Pedido: status=pedido_lead|pedido_cliente (sin Sheet). Cliente+pedido: NO exijas fullName/company; alcanza phone WA + isCustomer=true. Lead+pedido: pedí contacto en el mensaje pero igual podés handoffear a pedido_lead. Otros cierres: EXIGE fullName+company+contactPhone+phoneConfirmed (o contactRefused). Usá también muestras|atencion_representante|quiere_ser_representante|quiere_ser_fason|sin_cobertura|descartado. PROHIBIDO status=quiere_ser_distribuidor.",
           input_schema: {
             type: "object",
             properties: {
@@ -659,10 +687,15 @@ workflow.addNode(
                 type: "boolean",
                 description: "true si se negó a dar nombre/negocio/teléfono → operador sin esos datos.",
               },
+              isCustomer: {
+                type: "boolean",
+                description:
+                  "true si ya es cliente Cool Meals (pedido_cliente). false/omitido → pedido_lead.",
+              },
               status: {
                 type: "string",
                 description:
-                  "Columna/estado. Default atencion_representante. También: quiere_ser_representante, quiere_ser_fason, sin_cobertura, muestras, descartado. NO uses quiere_ser_distribuidor acá.",
+                  "Columna/estado. Default atencion_representante. Pedido: pedido_lead o pedido_cliente. También: quiere_ser_representante, quiere_ser_fason, sin_cobertura, muestras, descartado. NO uses quiere_ser_distribuidor acá.",
               },
               outcome: { type: "string" },
             },

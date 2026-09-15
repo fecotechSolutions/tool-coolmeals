@@ -22,6 +22,7 @@ import { decideRoute } from "../lib/routing";
 import {
   esperandoFinalizeAt,
   finalizeConversationWithResult,
+  sinCoberturaFinalizeAt,
 } from "../lib/finalize-derived";
 import {
   appendSheetRow,
@@ -308,16 +309,26 @@ botRoutes.post(
 
     const existingRow = existing as DbConversation;
 
-    const status =
+    let status =
       body.status === "quiere_ser_distribuidor" ||
       body.status === "quiere_ser_representante" ||
       body.status === "quiere_ser_fason" ||
       body.status === "sin_cobertura" ||
       body.status === "muestras" ||
       body.status === "esperando_respuesta" ||
-      body.status === "descartado"
+      body.status === "descartado" ||
+      body.status === "pedido_lead" ||
+      body.status === "pedido_cliente"
         ? body.status
-        : "atencion_representante";
+        : body.status === "pedido" || body.status === "pedidos"
+          ? "pedido_lead"
+          : "atencion_representante";
+
+    const wantsCustomer =
+      body.isCustomer === true || existingRow.is_customer === true;
+    if (status === "pedido_lead" && wantsCustomer) {
+      status = "pedido_cliente";
+    }
 
     const closesBot = status === "descartado" || status === "muestras";
 
@@ -384,9 +395,11 @@ botRoutes.post(
               ? "sin_cobertura"
               : status === "muestras"
                 ? "muestras"
-                : status === "descartado"
-                  ? "descartado"
-                  : "handoff_humano");
+                : status === "pedido_lead" || status === "pedido_cliente"
+                  ? "pedido"
+                  : status === "descartado"
+                    ? "descartado"
+                    : "handoff_humano");
 
     const tags = Array.from(
       new Set([
@@ -395,7 +408,9 @@ botRoutes.post(
         ),
         ...(status === "sin_cobertura" ||
         status === "descartado" ||
-        status === "muestras"
+        status === "muestras" ||
+        status === "pedido_lead" ||
+        status === "pedido_cliente"
           ? []
           : [HASHTAG_ATENCION_HUMANA]),
       ]),
@@ -406,7 +421,10 @@ botRoutes.post(
     const schedulesAutoFinalize =
       status === "sin_cobertura" || status === "esperando_respuesta";
     const finalizeAt = schedulesAutoFinalize
-      ? esperandoFinalizeAt(now).toISOString()
+      ? (status === "sin_cobertura"
+          ? sinCoberturaFinalizeAt(now)
+          : esperandoFinalizeAt(now)
+        ).toISOString()
       : null;
 
     const notePrefix =
@@ -414,23 +432,32 @@ botRoutes.post(
         ? "Muestras agendadas + IA cerrada (ended); card queda hasta Resultado"
         : status === "descartado"
           ? "Descartado + IA cerrada (ended)"
-          : "Handoff";
+          : status === "pedido_lead" || status === "pedido_cliente"
+            ? "Pedido + handoff (asesor confirma stock/logística)"
+            : "Handoff";
+
+    const handoffPatch: Record<string, unknown> = {
+      status,
+      outcome,
+      human_handoff_at: now.toISOString(),
+      finalize_at: finalizeAt,
+      ai_summary: body.aiSummary ?? existingRow.ai_summary,
+      notes: [existingRow.notes, `${notePrefix}: ${body.reason}`]
+        .filter(Boolean)
+        .join("\n"),
+      tags,
+      assigned_to: existingRow.assigned_to ?? "admin@coolmeals.com",
+      kapso_execution_id: executionId ?? existingRow.kapso_execution_id,
+    };
+    if (status === "pedido_cliente") {
+      handoffPatch.is_customer = true;
+    } else if (status === "pedido_lead") {
+      handoffPatch.is_customer = false;
+    }
 
     const { data, error } = await supabase
       .from("conversations")
-      .update({
-        status,
-        outcome,
-        human_handoff_at: now.toISOString(),
-        finalize_at: finalizeAt,
-        ai_summary: body.aiSummary ?? existingRow.ai_summary,
-        notes: [existingRow.notes, `${notePrefix}: ${body.reason}`]
-          .filter(Boolean)
-          .join("\n"),
-        tags,
-        assigned_to: existingRow.assigned_to ?? "admin@coolmeals.com",
-        kapso_execution_id: executionId ?? existingRow.kapso_execution_id,
-      })
+      .update(handoffPatch)
       .eq("id", existingRow.id)
       .select("*")
       .single();
@@ -501,7 +528,7 @@ botRoutes.post(
                 ? "Descartado: IA cerrada (Kapso ended). No aparece en columnas activas."
               : schedulesAutoFinalize
                 ? status === "sin_cobertura"
-                  ? "Bot en handoff. Tras ~22h pasa a Descartado y la IA queda cerrada (ended)."
+                  ? "Bot en handoff. Tras ~5 días la card desaparece del Pipeline y la IA queda cerrada (ended). No pasa a Descartado."
                   : "Operador responde en el mismo WhatsApp; el bot no procesa inbound mientras la execution esté en handoff. Tras la ventana (~22h) pasa a Finalizado."
                 : "Operador responde en el mismo WhatsApp; el bot no procesa inbound mientras la execution esté en handoff. Esta columna no auto-finaliza: cerrá con el desplegable de Resultado cuando corresponda.",
         },
@@ -721,6 +748,7 @@ botRoutes.post(
       {
         conversationId: conv.id,
         distributorId: conv.distributor_id,
+        distributorName,
       },
     );
 

@@ -10,18 +10,67 @@ import { getSupabase } from "./supabase";
 import type { DbConversation } from "./mappers";
 
 const DEFAULT_NUDGE =
-  "Hola! ¿Tenés alguna consulta más? Si no recibimos respuesta, vamos a cerrar esta conversación. Quedamos atentos.";
+  "Hola! ¿Seguís por acá? Quedamos atentos a tu respuesta para continuar. Si no recibimos novedades, vamos a cerrar esta conversación.";
 
 const STUCK_RECOVERY_MESSAGE =
   "Disculpá — tuve un problema técnico y no pude responder. ¿Me repetís tu último mensaje?";
 
-/** Solo estos statuses auto-pasan a Finalizado cuando vence la ventana. */
+/** Marker en notes para no reenviar el recontacto 20h. */
+const NUDGE_NOTE_MARKER = "Auto: recontacto 20h enviado";
+
+/**
+ * Formato: `Auto: recontacto 20h enviado|anchor=<iso>|at=<iso>`
+ * - anchor: updated_at previo (última actividad real del lead)
+ * - at: momento del envío del recontacto
+ * Así el UPDATE del nudge no “reinicia” el reloj de 24h (trigger set_updated_at).
+ */
+function nudgeNoteLine(anchorIso: string, atIso: string): string {
+  return `${NUDGE_NOTE_MARKER}|anchor=${anchorIso}|at=${atIso}`;
+}
+
+function parseNudgeMeta(notes: string | null | undefined): {
+  anchor: string;
+  at: string;
+} | null {
+  const text = String(notes || "");
+  const line = text
+    .split("\n")
+    .find((l) => l.includes(NUDGE_NOTE_MARKER));
+  if (!line) return null;
+  const anchor = line.match(/anchor=([^\s|]+)/)?.[1];
+  const at = line.match(/\|at=([^\s|]+)/)?.[1];
+  if (!anchor || !at) return null;
+  return { anchor, at };
+}
+
+function alreadyNudged(row: DbConversation): boolean {
+  return String(row.notes || "").includes(NUDGE_NOTE_MARKER);
+}
+
+/** Ancla de inactividad: ignora el bump de updated_at causado solo por el nudge. */
+function inactivityAnchorIso(row: DbConversation): string {
+  const meta = parseNudgeMeta(row.notes);
+  if (!meta) return row.updated_at;
+  const updatedMs = Date.parse(row.updated_at);
+  const nudgedMs = Date.parse(meta.at);
+  if (
+    Number.isFinite(updatedMs) &&
+    Number.isFinite(nudgedMs) &&
+    updatedMs > nudgedMs + 120_000
+  ) {
+    // Actividad real después del recontacto (lead u operador).
+    return row.updated_at;
+  }
+  return meta.anchor;
+}
+
+/** Solo estos statuses auto-cierran cuando vence la ventana. */
 const HANDOFF_FINALIZE_STATUSES = [
   "sin_cobertura",
   "esperando_respuesta",
 ] as const;
 
-/** Mid-flujo: IA esperando al lead (aún sin handoff). */
+/** Mid-flujo: IA aún calificando / esperando al lead (sin handoff comercial). */
 const MID_FLOW_STATUSES = ["ia_atendiendo", "nuevo"] as const;
 
 export type PipelineTimeoutsResult = {
@@ -33,6 +82,15 @@ export type PipelineTimeoutsResult = {
       whatsappConversationId: string | null;
       ageMinutes: number;
       kapsoEnded: boolean;
+      messageSent: boolean;
+      error?: string;
+    }>;
+  };
+  nudged: {
+    scanned: number;
+    sent: number;
+    items: Array<{
+      conversationId: string;
       messageSent: boolean;
       error?: string;
     }>;
@@ -72,18 +130,20 @@ function cutoffIso(hours: number, from = new Date()): string {
 /**
  * 0) Executions Kapso stuck en `running` ≥ STUCK_RUNNING_MINUTES:
  *    → ended (+ mensaje de recuperación si hay teléfono en DB)
- * 1) Mid-flujo inactivo ≥ ABANDONED_TO_WAITING_HOURS (22):
- *    → Esperando respuesta + mensaje WA + handoff + finalize_at (+22h)
- * 2) Ventana vencida:
- *    - Sin cobertura → Descartado + Kapso ended
- *    - Esperando respuesta → Finalizado + Kapso ended
- *    (resto de columnas: quedan hasta cierre manual con resultado)
+ * 1) Mid-flujo inactivo ≥ ABANDONED_NUDGE_HOURS (20):
+ *    → 1 mensaje WA de recontacto (sin cambiar columna; IA sigue)
+ * 2) Mid-flujo inactivo ≥ ABANDONED_TO_WAITING_HOURS (24):
+ *    → Esperando respuesta + handoff + finalize_at (+24h)
+ * 3) Ventana vencida:
+ *    - Sin cobertura → cerrado (ended + oculto; no Descartado)
+ *    - Esperando respuesta → Descartado + Kapso ended
  */
 export async function runPipelineTimeouts(): Promise<PipelineTimeoutsResult> {
   const stuckRunning = await recoverStuckRunningExecutions();
+  const nudged = await sendAbandonedNudges();
   const escalated = await escalateAbandonedToWaiting();
   const finalized = await finalizeHandoffWindows();
-  return { stuckRunning, escalated, finalized };
+  return { stuckRunning, nudged, escalated, finalized };
 }
 
 /**
@@ -171,16 +231,17 @@ export async function recoverStuckRunningExecutions(): Promise<
   };
 }
 
-export async function escalateAbandonedToWaiting(): Promise<
-  PipelineTimeoutsResult["escalated"]
+/**
+ * Mid-flujo inactivo ≥ ABANDONED_NUDGE_HOURS: un solo WA de recontacto.
+ * No cambia de columna ni hace handoff (la IA sigue atendiendo).
+ */
+export async function sendAbandonedNudges(): Promise<
+  PipelineTimeoutsResult["nudged"]
 > {
   const env = getEnv();
   const supabase = getSupabase();
-  const hours = env.ABANDONED_TO_WAITING_HOURS;
-  const finalizeHours = env.ESPERANDO_TO_FINALIZE_HOURS;
+  const hours = env.ABANDONED_NUDGE_HOURS;
   const cutoff = cutoffIso(hours);
-  const now = new Date();
-  const finalizeAt = hoursFromNow(finalizeHours, now).toISOString();
   const nudge =
     process.env.ABANDONED_NUDGE_MESSAGE?.trim() || DEFAULT_NUDGE;
 
@@ -197,6 +258,111 @@ export async function escalateAbandonedToWaiting(): Promise<
 
     if (error) throw new Error(error.message);
     for (const row of (data ?? []) as DbConversation[]) {
+      if (alreadyNudged(row)) continue;
+      byId.set(row.id, row);
+    }
+  }
+
+  const rows = Array.from(byId.values());
+  const items: PipelineTimeoutsResult["nudged"]["items"] = [];
+  let sent = 0;
+
+  for (const row of rows) {
+    const item: PipelineTimeoutsResult["nudged"]["items"][number] = {
+      conversationId: row.id,
+      messageSent: false,
+    };
+
+    try {
+      const msg = await sendKapsoWhatsAppText({
+        toPhone: row.phone,
+        body: nudge,
+      });
+      item.messageSent = msg.ok;
+      if (!msg.ok) {
+        item.error = msg.error;
+        items.push(item);
+        continue;
+      }
+
+      const nowIso = new Date().toISOString();
+      const notes = [
+        row.notes,
+        nudgeNoteLine(row.updated_at, nowIso),
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const { error: updateError } = await supabase
+        .from("conversations")
+        .update({
+          last_message: nudge,
+          notes,
+        })
+        .eq("id", row.id)
+        .eq("status", row.status);
+
+      if (updateError) {
+        item.error = updateError.message;
+        items.push(item);
+        continue;
+      }
+
+      sent += 1;
+      items.push(item);
+    } catch (error) {
+      item.error = error instanceof Error ? error.message : String(error);
+      items.push(item);
+    }
+  }
+
+  return { scanned: rows.length, sent, items };
+}
+
+/**
+ * Mid-flujo inactivo ≥ ABANDONED_TO_WAITING_HOURS:
+ * → Esperando respuesta + handoff + finalize_at (+ ESPERANDO_TO_FINALIZE_HOURS).
+ * Sin segundo mensaje WA (el recontacto ya fue en sendAbandonedNudges).
+ */
+export async function escalateAbandonedToWaiting(): Promise<
+  PipelineTimeoutsResult["escalated"]
+> {
+  const env = getEnv();
+  const supabase = getSupabase();
+  const hours = env.ABANDONED_TO_WAITING_HOURS;
+  const finalizeHours = env.ESPERANDO_TO_FINALIZE_HOURS;
+  const cutoff = cutoffIso(hours);
+  const now = new Date();
+  const finalizeAt = hoursFromNow(finalizeHours, now).toISOString();
+
+  const byId = new Map<string, DbConversation>();
+
+  for (const status of MID_FLOW_STATUSES) {
+    const inactive = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("status", status)
+      .lte("updated_at", cutoff)
+      .order("updated_at", { ascending: true })
+      .limit(50);
+
+    if (inactive.error) throw new Error(inactive.error.message);
+
+    // Tras el recontacto, updated_at se bumpea: también traemos las ya nudged.
+    const nudgedRows = await supabase
+      .from("conversations")
+      .select("*")
+      .eq("status", status)
+      .ilike("notes", `%${NUDGE_NOTE_MARKER}%`)
+      .order("updated_at", { ascending: true })
+      .limit(50);
+
+    if (nudgedRows.error) throw new Error(nudgedRows.error.message);
+
+    for (const row of [
+      ...((inactive.data ?? []) as DbConversation[]),
+      ...((nudgedRows.data ?? []) as DbConversation[]),
+    ]) {
+      if (inactivityAnchorIso(row) > cutoff) continue;
       byId.set(row.id, row);
     }
   }
@@ -213,13 +379,6 @@ export async function escalateAbandonedToWaiting(): Promise<
     };
 
     try {
-      const msg = await sendKapsoWhatsAppText({
-        toPhone: row.phone,
-        body: nudge,
-      });
-      item.messageSent = msg.ok;
-      if (!msg.ok) item.error = msg.error;
-
       const executionId = await findKapsoExecutionForHandoff({
         executionId: row.kapso_execution_id,
         whatsappConversationId: row.kapso_conversation_id,
@@ -230,7 +389,7 @@ export async function escalateAbandonedToWaiting(): Promise<
         const handoff = await setKapsoExecutionHandoff(endId);
         item.kapsoHandoff = handoff.ok;
         if (!handoff.ok) {
-          item.error = [item.error, handoff.error].filter(Boolean).join(" | ");
+          item.error = handoff.error;
         }
       }
 
@@ -238,16 +397,15 @@ export async function escalateAbandonedToWaiting(): Promise<
         status: "esperando_respuesta",
         outcome: "handoff_humano",
         human_handoff_at: now.toISOString(),
-        last_message: nudge,
         notes: [
           row.notes,
-          "Auto: inactividad mid-flujo → Esperando respuesta + handoff (nudge de cierre)",
+          "Auto: inactividad mid-flujo → Esperando respuesta + handoff",
         ]
           .filter(Boolean)
           .join("\n"),
         kapso_execution_id: endId ?? row.kapso_execution_id,
+        finalize_at: finalizeAt,
       };
-      patch.finalize_at = finalizeAt;
 
       let { error: updateError } = await supabase
         .from("conversations")
@@ -289,13 +447,15 @@ export async function finalizeHandoffWindows(): Promise<
   const supabase = getSupabase();
   const now = new Date();
   const nowIso = now.toISOString();
-  const esperandoHours = env.ESPERANDO_TO_FINALIZE_HOURS;
 
   const byId = new Map<string, DbConversation>();
 
   for (const status of HANDOFF_FINALIZE_STATUSES) {
-    // Sin cobertura / Esperando respuesta: 22h → cierre automático.
-    const fallbackHours = esperandoHours;
+    // Sin cobertura: 5 días → cerrado (oculto). Esperando: +24h → Descartado.
+    const fallbackHours =
+      status === "sin_cobertura"
+        ? env.SIN_COBERTURA_TO_DESCARTADO_HOURS
+        : env.ESPERANDO_TO_FINALIZE_HOURS;
     const fallbackCutoff = cutoffIso(fallbackHours, now);
 
     const dueWithFinalize = await supabase
@@ -384,13 +544,20 @@ export async function finalizeHandoffWindows(): Promise<
       }
     }
 
-    const goesToDescartado = fromStatus === "sin_cobertura";
-    const nextStatus = goesToDescartado ? "descartado" : "finalizado";
-    const nextOutcome = goesToDescartado ? "descartado" : null;
-    const note = goesToDescartado
-      ? "Auto: Sin cobertura → Descartado tras ~22h de handoff + Kapso ended"
-      : fromStatus === "esperando_respuesta"
-        ? "Auto-finalizado tras ventana en Esperando respuesta (post-nudge/handoff)"
+    // Sin cobertura: cerrar IA (ended) y salir del tablero sin pasar a Descartado.
+    // Esperando respuesta: Descartado + ended tras la ventana post-handoff.
+    const closesSinCobertura = fromStatus === "sin_cobertura";
+    const closesEsperando = fromStatus === "esperando_respuesta";
+    const nextStatus = closesEsperando ? "descartado" : "finalizado";
+    const nextOutcome = closesSinCobertura
+      ? "sin_cobertura"
+      : closesEsperando
+        ? "descartado"
+        : null;
+    const note = closesSinCobertura
+      ? "Auto: Sin cobertura cerrado tras ~5 días (Kapso ended; card oculta en Pipeline, no Descartado)"
+      : closesEsperando
+        ? "Auto: Esperando respuesta → Descartado tras ventana post-handoff"
         : "Auto-finalizado tras ventana de handoff";
 
     const patch: Record<string, unknown> = {
@@ -448,6 +615,12 @@ export function deriveFinalizeAt(from = new Date()): Date {
 
 export function esperandoFinalizeAt(from = new Date()): Date {
   const hours = getEnv().ESPERANDO_TO_FINALIZE_HOURS;
+  return hoursFromNow(hours, from);
+}
+
+/** Auto Sin cobertura → cerrado oculto (default 5 días; no Descartado). */
+export function sinCoberturaFinalizeAt(from = new Date()): Date {
+  const hours = getEnv().SIN_COBERTURA_TO_DESCARTADO_HOURS;
   return hoursFromNow(hours, from);
 }
 

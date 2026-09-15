@@ -1,6 +1,6 @@
 # Entornos DEV y PROD (gratis)
 
-Actualizado: **3 sep 2026**.
+Actualizado: **14 sep 2026**.
 
 Un solo repo GitHub. Dos **etapas**: primero probás en DEV, después desplegás a PROD.
 
@@ -19,7 +19,7 @@ PROD = URLs Vercel de siempre.
 | Supabase | `otbyuvbdajqrcrtwlwvy` (`coolmeals-dev`) | `jrsvfyujpuuhnwzjubow` (prod operativo) |
 | App UI / API | http://localhost:3000 · http://localhost:3001 | [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) |
 | Kapso WhatsApp | **Sandbox** `597907523413541` | **Oficina Ventas Froodie** `+54 9 351 549-5440` (`729232923604156`) |
-| Sheets | No escribe desde sandbox (skip en function) | Hojas oficiales vía webhook |
+| Sheets | No escribe desde sandbox (`__skipSheets`) | **1 sheet por dist.** + muestras + atención + sin cobertura (webhook Apps Script) |
 | Badge UI | **DEV** (amarillo) | **PROD** (verde) |
 | `APP_ENV` | `development` | `production` |
 
@@ -43,7 +43,10 @@ En sandbox además **no escribe** Google Sheets de prod (`__skipSheets`).
 
 **PROD (mantener):**
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
-- `GOOGLE_SHEETS_*`, `KAPSO_*`, etc.
+- `GOOGLE_SHEETS_WEBHOOK_URL` / `GOOGLE_SHEETS_WEBHOOK_SECRET`
+- IDs: muestras, atención comercial, sin cobertura
+- Derivados: mapa en código (`derived-distributor-sheets.ts` / function); opcional `GOOGLE_SHEET_DERIVED_BY_DISTRIBUTOR`
+- `KAPSO_*`, etc.
 
 **DEV (agregar):**
 - `SUPABASE_URL_DEV=https://otbyuvbdajqrcrtwlwvy.supabase.co`

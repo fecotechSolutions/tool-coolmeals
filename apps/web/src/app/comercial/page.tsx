@@ -101,7 +101,7 @@ export default function ComercialPage() {
             <h2>Mapa provincia → distribuidor</h2>
             <p className="muted">
               Prioridad: código postal del lead → este mapa → provincias cubiertas del distribuidor.
-              Un solo sheet recibe todos los leads derivados (no hay planilla por distribuidor).
+              Cada lead derivado se escribe en el Google Sheet de ese distribuidor.
             </p>
             <div className="table-wrap">
               <table>

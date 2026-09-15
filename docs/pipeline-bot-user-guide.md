@@ -2,7 +2,7 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: **3 sep 2026** (entornos DEV/PROD, WhatsApp …5440 en prod, sandbox → DEV).
+Actualizado: **15 sep 2026** (Pedidos lead/cliente sin Sheet; abandono 20h→24h→Descartado; sheets **por distribuidor**; sin cobertura 5 días sin Descartado).
 
 > **One-pager para operadores:** [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md)  
 > **Entornos DEV/PROD:** [`environments.md`](./environments.md)  
@@ -13,20 +13,22 @@ Actualizado: **3 sep 2026** (entornos DEV/PROD, WhatsApp …5440 en prod, sandbo
 
 Un lead escribe al WhatsApp de Cool Meals / Froodie. Un bot (Kapso) lo atiende, califica y, según el caso:
 
-- **≥ 50 cajas** (cualquier provincia) → Cool Meals (menú **muestras / pedido**),
+- **≥ 50 cajas** (cualquier provincia) → Cool Meals: menú **muestras / pedido** *solo si aún no eligió*; si ya quiere **pedir** → va directo a **Pedidos**,
 - **Córdoba + &lt; 50** → operador / atención humana Cool Meals (sin menú; **no** “asesor de la zona”),
 - **fuera de Córdoba + &lt; 50** → **distribuidor** de zona o **sin cobertura**,
 - volumen / precios **inciertos** → **1ª** insistir aproximado (umbral **a partir de 50**); **2ª** sin número → operador (no inventar bultos),
 - interés: **quiere ser distribuidor** (4 SÍ → columna; luego ruteo por vol/zona), **representante** / **fasón** (handoff),
 - **consumidor final** → **Descartado**.
 
-Antes de cualquier cierre comercial el bot pide **nombre completo + negocio + teléfono confirmado** (aunque el WA ya tenga número).
+**Contacto:** en cierres comerciales normales el bot pide nombre + negocio + teléfono confirmado. **Excepción Pedidos:**
+- **Cliente** que quiere pedir → **no** pide más datos (alcanza el WhatsApp).
+- **Lead** que quiere pedir → pide datos en el cierre, pero **igual** mueve la card a Pedidos.
 
-En handoffs el bot se pausa. **Auto-cierre (~22 h):** **Sin cobertura** → **Descartado** + ended; **Esperando respuesta** → **Finalizado** + ended. El resto queda hasta el desplegable **Resultado** (`Finalizado con éxito` / `sin éxito` / `Descartado`).
+En handoffs el bot se pausa. **Auto-cierre:** **Sin cobertura** → card desaparece + ended (~**5 días**, **no** Descartado); **Esperando respuesta** → **Descartado** + ended (~**24 h**). El resto queda hasta el desplegable **Resultado** (`Finalizado con éxito` / `sin éxito` / `Descartado`).
 
 Todo se ve en el **Pipeline** (`/pipeline`). Las métricas viven en el **Dashboard** (`/`).
 
-Sheets: derivados, muestras, [atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ), [sin cobertura](https://docs.google.com/spreadsheets/d/10jeiXNXEUlHiOgJKqbwazQBWhOurSJWQBWyTnY6nENY).
+Sheets: **uno por cada distribuidor** (cuando se deriva), más muestras, [atención comercial](https://docs.google.com/spreadsheets/d/1HPiXbvKb6IdRJWqpynHNheQ1bzP-Swqg5xVeiVVsRdQ) y [sin cobertura](https://docs.google.com/spreadsheets/d/10jeiXNXEUlHiOgJKqbwazQBWhOurSJWQBWyTnY6nENY). **Pedidos no escriben Sheet** (solo Pipeline). Ver § Google Sheets abajo.
 
 ## Dónde mirar
 
@@ -45,20 +47,20 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 
 ## Columnas del Pipeline (resumen)
 
-| Columna | Significado | ¿Auto → Finalizado? |
+| Columna | Significado | ¿Cierre automático? |
 |---------|-------------|---------------------|
-| Nuevo / IA atendiendo | El bot conversa / califica | No (salvo abandono → Esperando respuesta) |
-| Esperando respuesta | Abandono mid-flujo + nudge | Sí (~22 h) → Finalizado |
-| Atención humana | Cool Meals comercial (p. ej. eligió **pedido**) | No — cierre manual |
+| Nuevo / IA atendiendo | El bot conversa / califica | Abandono: ~20 h recontacto → ~24 h **Esperando respuesta** |
+| Esperando respuesta | Abandono mid-flujo (post-recontacto) | Sí (~**24 h**) → **Descartado** + ended |
+| Atención humana | Cool Meals comercial (Córdoba &lt;50, “hablar con alguien”, etc.) | No — cierre manual |
 | Quiere ser representante | Interés en representar Cool Meals | No — cierre manual |
 | Quiere ser fasón | Interés en producción a fasón | No — cierre manual |
 | Quiere ser distribuidor | Quiere sumarse a la red | No — cierre manual |
-| Derivado a distribuidor | Pasado a un dist. de la red | No — cierre manual |
-| Sin cobertura | Sin dist. activo en esa provincia | Sí (~22 h) → Descartado + ended |
+| Derivado a distribuidor | Pasado a un dist. de la red (+ fila en **su** sheet) | No — cierre manual |
+| Sin cobertura | Sin dist. activo en esa provincia | Sí (~**5 días**): card **desaparece** + IA **ended** (no Descartado; métricas se conservan) |
 | Muestras | Cool Meals agendó envío de muestras (logística) | No — cierre manual |
-| Pedido lead / Pedido cliente | Pedidos (manual / flujos posteriores) | No — cierre manual |
-| Finalizado | Cerrada (manual con resultado o auto ~22 h). **Visible 5 días** en Pipeline; después solo Dashboard/métricas | Terminal |
-| Descartado | Sin perfil comercial viable | Terminal |
+| Pedido lead / Pedido cliente | Intención clara de pedir (menú 2, lista/PDF, “quiero armar pedido”, cliente existente). **Sin Sheet.** Cliente = no pide datos extra; lead = pide en el cierre pero igual deriva. Asesor confirma stock/logística. | No — cierre manual |
+| Finalizado | Cerrada con **Resultado** (éxito / sin éxito) o cierre oculto de sin cobertura. **Visible 5 días** en Pipeline; después solo Dashboard | Terminal |
+| Descartado | Basura / abandono Esperando / Resultado Descartado. **Visible 2 días** desde alta de la card; después solo Dashboard | Terminal |
 | Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` / `Descartado` | Cierra → Finalizado o Descartado + Kapso ended |
 
 ## Recontacto mismo teléfono (métricas)
@@ -99,7 +101,7 @@ Si hay **2+ cards** con el mismo número canónico:
 
 ### Kapso `ended`
 
-Resultado del operador; auto Sin cobertura / Esperando ~22 h; Descartado basura; **Muestras** al agendar; watchdog si `running` ≥3 min.  
+Resultado del operador; auto Sin cobertura ~**5 días** (desaparece + ended, no Descartado); Esperando respuesta ~**24 h** → **Descartado** + ended; Descartado basura; **Muestras** al agendar; watchdog si `running` ≥3 min.  
 Un handoff **solo** deja la execution en `handoff` hasta ese cierre (Atención / Derivado / etc.).
 
 ### Cierre para el equipo (Pipeline)
@@ -118,7 +120,7 @@ Card en **Finalizado** o **Descartado** (Resultado o auto). Mientras esté en At
 | **Retail / Mayorista / Dist 4 SÍ / quien da vol.** | Sí | **≥50 cualquier provincia** → menú Cool Meals. **&lt;50 Córdoba** → operador. **&lt;50 fuera** → dist / sin cobertura |
 | **Minorista** (locales gastronómicos) | No se exige | Si da ≥50 → menú; si no → Córdoba operador / resto dist |
 
-Cobertura = tabla **Distribuidores**. Sin dist. → **Sin cobertura** → auto **Descartado** ~22 h.
+Cobertura = tabla **Distribuidores**. Sin dist. → **Sin cobertura** → tras ~**5 días** desaparece del Pipeline + ended (no Descartado).
 
 ## Atención Cool Meals (≥50 — cualquier provincia)
 
@@ -172,7 +174,7 @@ Intención clara de **ser** rep/fasón (no “hablar con un representante”):
 
 ### Sin cobertura
 
-Sheet Sin cobertura. Auto ~22 h → **Descartado**.
+Sheet Sin cobertura. Auto ~**5 días** → desaparece + ended (no Descartado).
 
 ### Derivado a dist (fuera CBA + &lt;50)
 
@@ -191,7 +193,7 @@ Cool Meals **no** agenda muestras; el dist se hace cargo.
 
 ## Cómo pasar a atención humana (manual)
 
-Desplegable o drag a **Atención humana** / **Quiere ser distribuidor** / **Quiere ser representante** / **Quiere ser fasón** / **Sin cobertura** / **Muestras** según corresponda → handoff Kapso (`POST /bot/handoff`). Eso **pausa o cierra** el bot: el lead deja de ser atendido por la IA en ese hilo. **Sin cobertura** agenda auto-cierre (~22 h → Descartado); el resto queda hasta cierre manual con **Resultado**.
+Desplegable o drag a **Atención humana** / **Quiere ser distribuidor** / **Quiere ser representante** / **Quiere ser fasón** / **Sin cobertura** / **Muestras** según corresponda → handoff Kapso (`POST /bot/handoff`). Eso **pausa o cierra** el bot: el lead deja de ser atendido por la IA en ese hilo. **Sin cobertura** agenda auto-cierre (~**5 días**: card desaparece + ended, no Descartado); el resto queda hasta cierre manual con **Resultado**.
 
 > **Pausa automática (fase E, parcial):** si contestás desde la **app WhatsApp Business** (no Kapso Inbox), el sistema puede pausar solo al detectar el mensaje outbound (`origin=business_app`). Si contestás desde **Kapso Inbox**, mové la card a **Atención humana** antes — ese canal se ve igual que el bot (`cloud_api`) y no se puede distinguir todavía.
 
@@ -203,28 +205,49 @@ Si movés una card a **Muestras** (aunque venga de Quiere ser distribuidor / han
 
 Bot (o drag manual + selector de dist.):
 
-- fila en el **sheet único de derivados**,
+- fila en el **Google Sheet de ese distribuidor** (no hay un sheet único de “todos los derivados”),
 - hashtag naranja,
 - handoff del bot (queda en la columna; **no** auto-finaliza — cierre manual con Resultado).
 
+Si el bot puso la card en **Derivado**, ya pidió y guardó contacto (nombre + negocio + tel). Igual que **Muestras**: la ficha de envío/contacto ya está completa cuando el bot llega ahí.
+
+## Google Sheets (qué mira cada equipo)
+
+| Sheet | Quién lo usa | Cuándo se escribe |
+|-------|--------------|-------------------|
+| **Sheet de cada distribuidor** (Felipe Avinceta, Gabastou, Nova Era, GudFud, La Corona, Diprom, …) | Ese dist. / comercial | Al derivar un lead a **ese** dist. |
+| **Muestras** | Logística Cool Meals | Al agendar muestras (bot o drag a Muestras) |
+| **Atención comercial** | Cool Meals | Quiere ser dist / rep / fasón |
+| **Sin cobertura** | Comercial (lista de recontacto) | Lead en zona sin dist. |
+| *(ninguno)* | — | **Pedidos (leads/clientes)** solo viven en Pipeline; **no** van a Sheet |
+| Sheet master “Distribuidores” (viejo) | Solo técnico | **No** recibe leads nuevos; puede quedar como casa del webhook Apps Script |
+
+Sandbox Kapso **no escribe** sheets de prod (las pruebas no ensucian las planillas reales).
+
 ## Tiempos automáticos
 
-### Abandono mid-flujo (bot esperaba datos)
+### Abandono mid-flujo (solo **Nuevo** / **IA atendiendo**)
 
-1. ~22 h inactivo → **Esperando respuesta** + mensaje WA  
-2. Handoff  
-3. ~22 h más → **Finalizado** + `ended`
+Si el bot esperaba respuesta del lead y este no contesta:
+
+1. ~**20 h** → 1 mensaje WA de recontacto (sigue en la misma columna; la IA **sigue** activa)  
+2. ~**24 h** desde la última actividad real → **Esperando respuesta** + handoff (bot se pausa)  
+3. ~**24 h** más en Esperando → **Descartado** + Kapso `ended`
+
+**No aplica** a Derivado, Muestras, Atención, Quiere ser…: esas quedan hasta **Resultado** manual.
+
+> En Vercel Hobby el cron puede correr **1×/día**: los umbrales se aplican cuando corre el cron (no al minuto exacto).
 
 ### Post-handoff: solo Sin cobertura
 
-- **Sin cobertura** → ~22 h → **Descartado** + `ended`
-- Derivado, Atención humana, Quiere ser dist/rep/fasón, Muestras, Pedidos → **no** auto-finalizan
+- **Sin cobertura** → ~**5 días** → card desaparece + `ended` (no Descartado)
+- Derivado, Atención humana, Quiere ser dist/rep/fasón, Muestras, Pedidos → **no** auto-cierran
 
 ## Cómo ver que hubo handoff
 
 1. Pipeline: columna correcta.  
 2. Kapso Executions: `handoff`.  
-3. Al cerrar (manual o auto en sin cobertura / esperando): `ended` + **Finalizado**.
+3. Al cerrar (manual o auto en sin cobertura / esperando): `ended` (+ **Descartado** si vino de Esperando respuesta).
 
 ## Tips para probar (sandbox)
 
@@ -241,7 +264,7 @@ Resumen rápido:
 |---|------|---------|----------|
 | 1 | Dist 4 SÍ + vol/zona | 4 sí → zona + volumen | Columna dist + luego menú / operador / derivado según vol |
 | 1b | Dist sin requisitos | Algún NO | Sin columna dist; tipificar compra o Descartado |
-| 2 | Sin cobertura | Rotisería Salta | **Sin cobertura** → auto **Descartado** ~22 h |
+| 2 | Sin cobertura | Rotisería Salta | **Sin cobertura** → ~**5 días** desaparece + ended |
 | 3 | Minorista Mendoza | Rotisería Mendoza poco | **Derivado** |
 | 4 | ≥50 Córdoba | Mayorista CBA ~60 | Menú muestras/pedido |
 | 5 | ≥50 Mendoza | Mayorista Mendoza ~80 | Menú Cool Meals (volumen gana) |

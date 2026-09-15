@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { getEnv } from "../env";
+import { resolveDerivedDistributorSheetId } from "./derived-distributor-sheets";
 import { getSupabase } from "./supabase";
 
 export type SheetKind =
@@ -135,6 +136,7 @@ async function appendViaServiceAccount(
  *
  * Columnas:
  * - derived: fecha | nombre | teléfono | empresa | tipo negocio | client_type | provincia | ciudad | CP | distribuidor | seguimiento
+ *   → spreadsheet por distribuidor (payload.distributorName); sin match = error
  * - samples: fecha | nombre | tel | tipo_cliente | empresa | provincia | dni | correo | CP | dirección completa
  * - commercial_attention: fecha | nombre | teléfono | empresa | tipo_cliente (distribuidor|representante|fason) | provincia | ciudad | motivo | seguimiento
  * - no_coverage: fecha | nombre | teléfono | empresa | provincia | ciudad | client_type | motivo | seguimiento
@@ -147,16 +149,41 @@ export async function appendSheetRow(
   payload: Record<string, unknown>,
 ): Promise<AppendResult> {
   const env = getEnv();
-  const spreadsheetId =
-    kind === "derived_distributors"
-      ? env.GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID
-      : kind === "sample_logistics"
-        ? env.GOOGLE_SHEET_SAMPLE_LOGISTICS_ID
-        : kind === "commercial_attention"
-          ? env.GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID
-          : kind === "no_coverage"
-            ? env.GOOGLE_SHEET_NO_COVERAGE_ID
-            : undefined;
+  let spreadsheetId: string | undefined;
+
+  if (kind === "derived_distributors") {
+    const distName = String(
+      payload.distributorName || payload.distributor || "",
+    ).trim();
+    const resolved = resolveDerivedDistributorSheetId(
+      distName,
+      env.GOOGLE_SHEET_DERIVED_BY_DISTRIBUTOR,
+    );
+    if (!resolved) {
+      const err = distName
+        ? `No hay sheet mapeado para distribuidor "${distName}"`
+        : "Falta distributorName para sheet de derivados";
+      await logSync(kind, "", entityType, entityId, payload, false, err);
+      return {
+        attempted: true,
+        success: false,
+        spreadsheetId: null,
+        error: err,
+      };
+    }
+    spreadsheetId = resolved.spreadsheetId;
+    payload = {
+      ...payload,
+      distributorName: distName,
+      sheetMatchedAs: resolved.matchedAs,
+    };
+  } else if (kind === "sample_logistics") {
+    spreadsheetId = env.GOOGLE_SHEET_SAMPLE_LOGISTICS_ID;
+  } else if (kind === "commercial_attention") {
+    spreadsheetId = env.GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID;
+  } else if (kind === "no_coverage") {
+    spreadsheetId = env.GOOGLE_SHEET_NO_COVERAGE_ID;
+  }
 
   if (!spreadsheetId) {
     await logSync(kind, "", entityType, entityId, payload, false, "Missing spreadsheet id");

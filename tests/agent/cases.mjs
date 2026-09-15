@@ -383,6 +383,23 @@ export const cases = [
     ],
   },
   {
+    id: "gate-numero-suelto-no-asume-cajas",
+    title: "“Justo con 50” sin decir cajas ni wraps → confirma literal antes del menú",
+    turns: [
+      "Hola, tengo minisúper en Buenos Aires y quiero vender wraps congelados",
+      "No estoy segura del volumen",
+      "Yo creo que puedo llegar justo con 50",
+    ],
+    asserts: [
+      asksUnitsVsBoxes(),
+      didNotCallTool("request_samples"),
+      doesNotMention(
+        /(pedir|agendar)\s+muestras|1\)\s*.{0,30}muestra/,
+        "no ofrece menú sin confirmación literal de unidad",
+      ),
+    ],
+  },
+  {
     id: "gate-p3b-tengo-distribuidora",
     title: "“Tengo una distribuidora” sin aclarar → desambigua compra vs ser marca",
     turns: [

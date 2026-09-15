@@ -275,28 +275,80 @@ function conversationBlob(input) {
   );
 }
 
+function leadSaysBoxes(text) {
+  return /(caja|bulto)/.test(text);
+}
+
+function leadSaysProductUnits(text) {
+  return /(wraps?|viandas?|postres?|unidades?|\buds?\b|platos?(\s+listos?)?)/.test(text);
+}
+
+function looksLikeBareVolumeNumber(text) {
+  if (!text) return false;
+  if (leadSaysBoxes(text) || leadSaysProductUnits(text)) return false;
+  return (
+    /^\s*\d{1,4}\s*$/.test(text) ||
+    /\b(justo\s+con|llegar\s+(justo\s+)?(a|con)|unos?|alrededor\s+de|cerca\s+de|tipo|mas\s+o\s+menos|aprox(imadamente)?|a\s+partir\s+de|menos\s+de|mas\s+de|como)\s+\d{1,4}\b/.test(
+      text,
+    ) ||
+    /\b\d{1,4}\s*(al\s+mes|por\s+mes|mensuales?)?\s*$/.test(text)
+  );
+}
+
+function volumeUnitIsBoxes(unit) {
+  return unit === "cajas" || unit === "caja" || unit === "bultos" || unit === "bulto";
+}
+
+function volumeUnitIsProduct(unit) {
+  return (
+    unit === "unidades" ||
+    unit === "unidad" ||
+    unit === "wraps" ||
+    unit === "wrap" ||
+    unit === "viandas" ||
+    unit === "vianda"
+  );
+}
+
 function gateVolumeUnitsAmbiguous(input) {
   if (!input) return null;
-  if (input.volumeUnitConfirmed === true || input.volumeInBoxes === true) return null;
   const unit = normalize(input.volumeUnit || input.quantityUnit || "");
-  if (unit === "cajas" || unit === "caja" || unit === "bultos" || unit === "bulto") return null;
+  const lead = normalize(String(input.lastMessage || ""));
   const blob = conversationBlob(input);
-  if (!blob) return null;
-  const hasProductQty =
-    /(\d+)\s*(viandas?|wraps?|postres?|unidades?|uds?|platos?(\s+listos?)?)/.test(blob) ||
-    /(\d+)\s+de\s+cada\s+(una|uno|producto)/.test(blob);
-  const hasBoxes = /(caja|bulto|cajas|bultos)/.test(blob);
-  if (!hasProductQty || hasBoxes) return null;
-  return {
+
+  const askLiteral = {
     ok: false,
     gate: "volume_units_ambiguous",
     needDisambiguation: true,
-    missing: ["volumeUnitConfirmed"],
-    reason: "Cantidades sin aclarar unidades vs cajas.",
+    missing: ["volumeUnit"],
+    reason: "Falta confirmación literal cajas/bultos vs wraps/unidades.",
     agentInstruction:
-      "GATE unidades↔cajas: preguntá si son unidades o cajas/bultos + enter_waiting. " +
-      "Luego volumeUnitConfirmed=true y estimatedVolume en CAJAS.",
+      "GATE unidades↔cajas (literal): NO asumas un número suelto (ej. 'justo con 50') = cajas. " +
+      "Preguntá: ¿son cajas/bultos o wraps/unidades? + enter_waiting. " +
+      "Luego volumeUnit=cajas|unidades, volumeUnitConfirmed=true, estimatedVolume en CAJAS.",
   };
+
+  const hasProductQty =
+    blob &&
+    (/(\d+)\s*(viandas?|wraps?|postres?|unidades?|uds?|platos?(\s+listos?)?)/.test(blob) ||
+      /(\d+)\s+de\s+cada\s+(una|uno|producto)/.test(blob));
+  if (hasProductQty && !leadSaysBoxes(lead) && !leadSaysBoxes(blob) && !volumeUnitIsBoxes(unit)) {
+    return askLiteral;
+  }
+
+  if (looksLikeBareVolumeNumber(lead) && !volumeUnitIsBoxes(unit) && !volumeUnitIsProduct(unit)) {
+    return askLiteral;
+  }
+
+  if (input.volumeUnitConfirmed === true || input.volumeInBoxes === true) {
+    if (volumeUnitIsBoxes(unit) || volumeUnitIsProduct(unit)) return null;
+    if (leadSaysBoxes(lead) || leadSaysProductUnits(lead)) return null;
+    return askLiteral;
+  }
+
+  if (volumeUnitIsBoxes(unit) || volumeUnitIsProduct(unit)) return null;
+
+  return null;
 }
 
 function looksLikePurchaseIntent(blob) {
@@ -840,9 +892,10 @@ function decideRoute(input) {
       syncDerivedSheet: false,
       coolMealsMenu: true,
       agentInstruction:
-        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras (IA ended; NO handoff_to_human). Si pedido: " +
-        contactChecklistInstruction() +
-        " Luego asesor te contacta; handoff_human + handoff_to_human.",
+        "Cool Meals (≥50). Si YA quiere pedir: NO menú, NO Sheets. " +
+        "Cliente: no pedir datos → pedido_cliente YA. Lead: pedí contacto en el cierre pero igual pedido_lead YA. " +
+        "Aviso asesor + lista opcional. Menú 1/2 SOLO si aún no eligió. Muestras: ficha → request_samples → muestras (ended+sheet). " +
+        "PROHIBIDO dejar pedido en atencion_representante.",
     };
   }
 
@@ -882,7 +935,7 @@ function decideRoute(input) {
       syncDerivedSheet: false,
       agentInstruction:
         contactChecklistInstruction() +
-        " Luego avisá que aún no hay cobertura. Llamá handoff_human con status=sin_cobertura (NO atencion_representante) y reason claro; después handoff_to_human. La card queda en Sin cobertura; en ~22h pasa a Finalizado.",
+        " Luego avisá que aún no hay cobertura. Llamá handoff_human con status=sin_cobertura (NO atencion_representante) y reason claro; después handoff_to_human. La card queda en Sin cobertura; en ~5 días pasa a Descartado.",
     };
   }
 
@@ -959,7 +1012,7 @@ function handoff(input) {
     status = "atencion_representante";
     gateRemap = "ask_human_not_be_representative";
   }
-  if (status !== "descartado" && status !== "muestras") {
+  if (status !== "descartado" && status !== "muestras" && status !== "pedido_lead" && status !== "pedido_cliente") {
     const contactGate = gateContactBeforeClose(input, "handoff");
     if (contactGate && contactGate.ok === false) return contactGate;
   }

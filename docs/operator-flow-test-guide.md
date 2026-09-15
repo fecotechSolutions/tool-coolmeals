@@ -3,7 +3,7 @@
 Documento para el **operador comercial** (o quien valide el bot).  
 Objetivo: probar **cada flujo** de punta a punta y saber **dónde mirar** si algo no cuadra.
 
-Actualizado: **3 sep 2026**.
+Actualizado: **15 sep 2026**.
 
 Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
 Entornos DEV/PROD: [`environments.md`](./environments.md).
@@ -20,7 +20,7 @@ Entornos DEV/PROD: [`environments.md`](./environments.md).
 | **Pipeline prod** (Vercel) | Ver clientes reales (badge **PROD**) |
 | **Distribuidores** | Cobertura |
 | **Dashboard** | Métricas |
-| **Google Sheets** | Solo ruta **prod** (sandbox no escribe sheets) |
+| **Google Sheets** | Solo ruta **prod**: **1 sheet por dist.** + muestras + atención + sin cobertura (sandbox no escribe) |
 | **Kapso Executions** | `waiting` / `handoff` / `ended` |
 
 ### Reglas comerciales (resumen)
@@ -31,7 +31,7 @@ Entornos DEV/PROD: [`environments.md`](./environments.md).
 | Dist 4 SÍ | Columna sin handoff → zona/volumen → contacto → ruteo |
 | ≥50 cualquier provincia | Menú Cool Meals |
 | Córdoba &lt;50 | Operador sin menú (no “asesor de la zona”) |
-| Fuera CBA &lt;50 | Dist o sin cobertura → auto Descartado |
+| Fuera CBA &lt;50 | Dist (→ **sheet de ese dist.**) o sin cobertura → auto cierre ~**5 días** (oculto, no Descartado) |
 | Volumen / precios inciertos | 1ª insistir (a partir de 50); 2ª → operador; no inventar bultos |
 | Consumidor final | Descartado |
 
@@ -50,7 +50,7 @@ Para **cada** caso, marcá estas 3–4 cosas:
 3. **Sheet** (si aplica): apareció una **fila nueva** con datos coherentes.  
 4. **Kapso** (si tenés acceso): en handoffs típicos → `handoff`; en **Muestras** / Descartado → `ended`.
 
-Después del handoff el bot **se pausa** (Atención / Derivado / etc.). En **Muestras** Kapso ya está `ended` y la card **sigue** hasta **Resultado**. Auto: **Sin cobertura** → **Descartado** ~22 h; **Esperando respuesta** → **Finalizado** ~22 h.
+Después del handoff el bot **se pausa** (Atención / Derivado / etc.). En **Muestras** Kapso ya está `ended` y la card **sigue** hasta **Resultado**. Auto: **Sin cobertura** → card oculta + ended ~**5 días** (no Descartado); **Esperando respuesta** → **Descartado** ~**24 h**.
 
 ---
 
@@ -183,7 +183,7 @@ Hola, soy minorista en Mendoza, compro poco volumen, quiero productos
 2. Pide **contacto**.  
 3. **Mensaje primero:** “te va a contactar [dist]…” + despedida. Recién después registra.  
 4. **Pipeline** → **Derivado a distribuidor** + hashtag naranja `#Nombre_Del_Distribuidor`.  
-5. **Sheet de derivados** → fila nueva.  
+5. **Sheet del distribuidor asignado** → fila nueva (no el sheet master viejo).  
 6. Handoff.
 
 **No debe:** pedir umbral de 50 bultos ni menú Cool Meals; ni callar después del contacto (hang).
@@ -321,20 +321,24 @@ Hola, soy mayorista en Mendoza, compro unos 80 bultos por mes
 
 1. **Menú Cool Meals** (muestras / pedido) — el volumen ≥50 **gana** sobre la zona.  
 2. **No** derivado a dist solo por estar en Mendoza.  
-3. Si elige muestras → columna Muestras + sheet + Kapso `ended`; si pedido → Atención humana + handoff.
+3. Si elige muestras → columna Muestras + sheet + Kapso `ended`; si pedido → **Pedidos (lead/cliente)** + handoff (no Atención humana).
 
 ---
 
-### 6.10 — Extra: pedido (menú Cool Meals)
+### 6.10 — Extra: pedido (menú Cool Meals o intención clara)
 
-Partí de **6.4** y elegí **agendar pedido** (no muestras).
+**A) Lead (≥50 o “quiero armar pedido”):**
 
-**Qué tiene que pasar**
+1. **Pipeline** → **Pedidos (leads)** al detectar intención (sin quedarse en menú si ya dijo que quiere pedir).  
+2. En el cierre puede pedir nombre/negocio/tel **una vez**, pero **igual** deriva.  
+3. Copy: asesor contacta para stock/logística + *si querés dejá la lista acá*.  
+4. Handoff Kapso. **No** Sheet. **No** Atención humana.
 
-1. **Pipeline** → **Atención humana**.  
-2. Pide **contacto** antes de pausarse.  
-3. Handoff (asesor comercial sigue por el canal humano / handoff Kapso).  
-4. **No** fila en `/muestras` por este camino.
+**B) Cliente (“somos clientes” / “ya trabajamos la marca” + pedido):**
+
+1. **Pipeline** → **Pedidos (clientes)**.  
+2. **No** pide nombre/negocio/tel (alcanza el WhatsApp).  
+3. Mismo copy de asesor + lista opcional + handoff. **No** Sheet.
 
 ---
 
@@ -399,12 +403,15 @@ Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 
 | Situación | Qué hacer |
 |-----------|-----------|
-| Lead en **Derivado** | El dist. (sheet + hashtag) contacta; vos podés seguir en sheet derivados |
-| Lead en **Atención humana** / **pedido** | Asesor Cool Meals contacta |
+| Lead en **Derivado** | El dist. contacta (fila en **su** sheet + hashtag); vos cerrás con Resultado cuando corresponda |
+| Lead en **Atención humana** | Asesor Cool Meals contacta |
+| Lead/cliente en **Pedidos** | Asesor confirma pedido / stock / logística (sin Sheet) |
 | Lead en **Quiere ser dist. / rep. / fasón** | Revisá sheet **Atención comercial** y contactá por otro canal |
-| Lead en **Sin cobertura** | Sheet **Sin cobertura** → lista de recontacto cuando haya zona |
+| Lead en **Sin cobertura** | Sheet **Sin cobertura** → lista de recontacto cuando haya zona; ~**5 días** la card desaparece sola |
+| Lead en **Esperando respuesta** | Abandono mid-flujo; ~**24 h** → **Descartado** |
 | Lead en **Muestras** | Logística mira `/muestras` + sheet muestras. Si el operador arrastra la card a Muestras desde otra columna (ej. Quiere ser distribuidor), se registra fecha/nombre/teléfono/**tipo de cliente**/empresa/provincia/dni/correo/CP/dirección (vacíos si no hay). |
 | Card en **Finalizado** | Visible **5 días** en la columna Finalizado; después **desaparece del Pipeline** (sigue en DB / Dashboard). |
+| Card en **Descartado** | Visible **2 días** desde que se creó la card; después **desaparece del Pipeline** (sigue en DB / Dashboard; las métricas se conservan). |
 | Desplegable **Resultado** en cualquier card | `Finalizado con éxito` / `Finalizado sin éxito` → status `finalizado` + outcome + Kapso `ended` si el bot estaba activo; la card desaparece. |
 | Querés tomar el caso a mano | Arrastrá / cambiá estado a la columna que corresponda (handoff manual) |
 
@@ -445,7 +452,7 @@ Mandale a soporte / tech:
 | 6 | Representante | ☐ | ☐ | Atención comercial ☐ | ☐ | |
 | 7 | Fasón | ☐ | ☐ | Atención comercial ☐ | ☐ | |
 | E1 | ≥50 fuera CBA → menú Cool Meals | ☐ | ☐ | Atención ☐ | ☐ | |
-| E2 | Pedido Cool Meals | ☐ | Atención humana ☐ | — | ☐ | |
+| E2 | Pedido Cool Meals | ☐ | Pedidos lead/cliente ☐ | — | ☐ | Sin Sheet |
 | E3 | Contacto + copy CBA | ☐ | Atención humana ☐ | — | ☐ | |
 | E4 | Volumen incerto | ☐ | Atención humana ☐ | — | ☐ | |
 | D | Dashboard: 2 cards mismo tel = 1 KPI | ☐ | — | — | — | |

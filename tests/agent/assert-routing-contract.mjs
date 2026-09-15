@@ -85,9 +85,10 @@ function assertSourceAligned() {
 }
 
 async function assertRuntimeContract() {
-  const routeBase = {
+    const routeBase = {
     beaconsSent: true,
     volumeUnitConfirmed: true,
+    volumeUnit: "cajas",
   };
 
   // ≥50 Santa Fe → Cool Meals directo (nunca Litoral Fresh)

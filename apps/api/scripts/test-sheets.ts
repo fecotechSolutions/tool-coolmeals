@@ -1,5 +1,5 @@
 /**
- * Prueba escritura a los Google Sheets (derivados, muestras, atención comercial, sin cobertura).
+ * Prueba escritura a los Google Sheets (derivados por dist, muestras, atención, sin cobertura).
  *
  * Uso:
  *   npm run test:sheets -w @coolmeals/api
@@ -13,7 +13,7 @@ import {
 } from "../src/lib/sheets";
 
 async function main() {
-  console.log("→ Probando sheet de leads derivados…");
+  console.log("→ Probando sheet de leads derivados (Diprom)…");
   const derived = await appendSheetRow(
     "derived_distributors",
     "test",
@@ -27,9 +27,9 @@ async function main() {
       province: "Córdoba",
       city: "Córdoba",
       postalCode: "5000",
-      distributorName: "TEST Dist",
+      distributorName: "Diprom",
     }),
-    { source: "test-sheets.ts" },
+    { source: "test-sheets.ts", distributorName: "Diprom" },
   );
   console.log(derived);
 

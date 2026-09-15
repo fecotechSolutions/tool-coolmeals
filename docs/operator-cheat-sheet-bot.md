@@ -1,6 +1,6 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: **8 sep 2026**.
+Una hoja para mostrar / imprimir. Actualizado: **15 sep 2026**.
 
 > Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md) · Entornos: [`environments.md`](./environments.md)
 
@@ -23,10 +23,10 @@ Antes de cerrar: nombre + negocio + teléfono confirmado
 
 | Situación | Qué pasa | Qué ves en Pipeline |
 |-----------|----------|---------------------|
-| Volumen **a partir de 50** cajas (cualquier provincia) | Menú: muestras o pedido | Atención humana → luego **Muestras** o se queda en atención |
+| Volumen **a partir de 50** cajas (cualquier provincia) | Si aún no eligió: menú muestras/pedido. Si **ya** quiere pedir → Pedidos directo | **Muestras** (opción 1) o **Pedidos** lead/cliente |
 | **Córdoba** y **&lt; 50** (o sin volumen tras insistir) | Asesor Cool Meals (sin menú). **No** dice “asesor/distribuidor de la zona” | **Atención humana** |
 | **Otra provincia** y **&lt; 50** | Distribuidor de zona | **Derivado** (+ hashtag naranja) |
-| Sin distribuidor en la zona | Aviso sin cobertura | **Sin cobertura** → auto **Descartado** ~22 h |
+| Sin distribuidor en la zona | Aviso sin cobertura | **Sin cobertura** → ~**5 días** desaparece + ended (no Descartado) |
 | Volumen / precios inciertos | **1ª:** volumen normal. **Si no sabe → 2ª:** ¿a partir de 50 o menos? Si tampoco → operador | Según orientación / **Atención humana** |
 | Quiere **ser** rep / fasón | Cierre rápido + **handoff** | Columna correspondiente |
 | Quiere **ser** distribuidor | Ver §1b | Columna + luego cierre por vol/zona |
@@ -52,15 +52,34 @@ Toda derivación / handoff comercial pide:
 Si el lead **se niega** → va a **Atención humana** igual (sin inventar datos).  
 No alcanza el nombre del perfil de WhatsApp.
 
-**Excepciones:** consumidor **Descartado** y **Muestras** (esas ya piden ficha de envío).
+**Excepciones:** consumidor **Descartado**; **Muestras** (ficha de envío); **Pedidos**:
+- **Cliente** + pedido → **no** pedir nombre/negocio (alcanza el WA) → **Pedidos (clientes)**.
+- **Lead** + pedido → pedir en el cierre, pero **igual** → **Pedidos (leads)**.
 
 ### 1d. Derivado a dist. (orden)
 
 1. Mensaje al lead: “te va a contactar [dist]…” + despedida.  
-2. Recién ahí se registra la derivación.  
+2. Recién ahí se registra la derivación → **fila en el Google Sheet de ese dist.**  
 3. El bot se pausa.
 
 Si se invierte el orden, el lead **no recibe** el mensaje.
+
+### 1e. Si el lead deja de responder (Nuevo / IA atendiendo)
+
+1. ~**20 h** → un WhatsApp de recontacto (sigue en la misma columna).  
+2. ~**24 h** → **Esperando respuesta** (bot pausado).  
+3. ~**24 h** más → **Descartado**.
+
+Derivado / Muestras / Atención / Quiere ser… **no** se auto-descartan: cierran con **Resultado**.
+
+### 1f. Sheets (resumen)
+
+| Destino | Sheet |
+|---------|--------|
+| Derivado a un dist. | Planilla **de ese** distribuidor |
+| Muestras | Sheet muestras |
+| Quiere ser dist/rep/fasón | Sheet atención comercial |
+| Sin cobertura | Sheet sin cobertura |
 
 ---
 
@@ -75,7 +94,8 @@ Si se invierte el orden, el lead **no recibe** el mensaje.
 | Quiere ser **distribuidor** (solo 4 SÍ) | **No** | Solo marca columna |
 | Dist 4 SÍ → luego ≥50 / CBA &lt;50 / fuera | Sí | Al cerrar ese ruteo |
 | Volumen / dato clave inseguro | Sí → **Atención humana** | Lead no sabe cuánto / necesita más data; no inventar &lt;50 ni sin_cobertura |
-| **Atención humana** | Sí | Córdoba &lt;50, pedido del menú, “hablar con alguien”, 2ª vez precio/dato desconocido |
+| **Atención humana** | Sí | Córdoba &lt;50, “hablar con alguien”, 2ª vez precio/dato desconocido |
+| **Pedidos (lead / cliente)** | Sí | Intención de pedir (menú 2 / lista / “quiero pedido” / cliente). **Sin Sheet.** Cliente: solo WA. Lead: pide datos en cierre pero igual deriva. Copy: asesor confirma stock/logística + lista opcional |
 | **Derivado** | Sí | Tras el **mensaje** de cierre + registro |
 | **Sin cobertura** | Sí | Al avisar sin zona |
 | **Muestras** | **No** (`ended`) | Tras agendar muestras — card sigue hasta Resultado |
@@ -87,8 +107,8 @@ Si se invierte el orden, el lead **no recibe** el mensaje.
 | Situación | ¿Kapso `ended`? |
 |-----------|-----------------|
 | Operador elige **Resultado** | Sí |
-| Auto Sin cobertura ~22 h | Sí (+ Descartado) |
-| Auto Esperando respuesta ~22 h | Sí (+ Finalizado) |
+| Auto Sin cobertura ~**5 días** | Sí (`ended`) + card oculta; **no** Descartado |
+| Auto Esperando respuesta ~**24 h** | Sí (+ **Descartado**) |
 | Bot Descartado (consumidor) | Sí |
 | Bot **Muestras** (agendadas) | Sí — card sigue en **Muestras** hasta Resultado |
 | Solo handoff (Atención, Derivado, Quiere ser rep/fasón…) | **No** — queda en `handoff` hasta Resultado (o auto si aplica) |
@@ -105,12 +125,14 @@ Si se invierte el orden, el lead **no recibe** el mensaje.
 |-----------|---------------|-------|
 | Resultado éxito / sin éxito | **Finalizado** | Operador |
 | Resultado Descartado | **Descartado** | Operador |
-| Auto Sin cobertura | **Descartado** | Sistema ~22 h |
-| Auto Esperando respuesta | **Finalizado** | Sistema ~22 h |
+| Auto Sin cobertura | Card oculta + ended | Sistema ~**5 días** (no Descartado) |
+| Auto Esperando respuesta | **Descartado** | Sistema ~**24 h** |
 | Bot consumidor | **Descartado** | Bot |
 | Card en Atención / Derivado / Muestras / Quiere ser… | Sigue **abierta** | Ustedes con Resultado |
 
 **Resumen:** handoff = bot pausado · Kapso `ended` = hilo técnico muerto · cierre ops = Finalizado o Descartado.
+
+**Visibilidad Pipeline:** Finalizado ~5 días desde el cierre; Descartado ~2 días desde el alta de la card. Después desaparecen del tablero pero **siguen en Dashboard/métricas** (no se borran).
 
 ---
 
@@ -151,7 +173,9 @@ Pipeline igual muestra las dos: el rojo es para ops, no infla KPIs.
 
 - [ ] Revisar columnas de handoff  
 - [ ] Cards **rojas**: cerrar 1 y 2  
-- [ ] Sin cobertura / Esperando: auto ~22 h  
+- [ ] Sin cobertura: auto ~**5 días** → desaparece + ended (no Descartado)  
+- [ ] Esperando respuesta: auto ~**24 h** → **Descartado**  
+- [ ] Derivados: mirar el **sheet del dist.** (no el master viejo)  
 - [ ] Dashboard con filtro de fecha  
 
 ---

@@ -556,8 +556,14 @@ export const botHandoffSchema = z.object({
       "muestras",
       "esperando_respuesta",
       "descartado",
+      "pedido_lead",
+      "pedido_cliente",
+      "pedido",
+      "pedidos",
     ])
     .optional(),
+  /** Solo relevante para Pedidos: fuerza pedido_cliente si true. */
+  isCustomer: z.boolean().optional(),
   outcome: conversationOutcomeSchema.optional(),
 });
 export type BotHandoffInput = z.infer<typeof botHandoffSchema>;
@@ -597,8 +603,8 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   mayorista: "Mayorista",
   minorista: "Minorista",
   retail: "Retail",
-  representante: "Quiere ser representante",
-  distribuidor: "Quiere ser distribuidor",
+  representante: "Representante",
+  distribuidor: "Distribuidor",
   fason: "Fasón",
   otro: "Otro",
 };

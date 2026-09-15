@@ -71,7 +71,7 @@ En SQL Editor, en orden:
 | Uso diario Pipeline | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
 | Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
-**Ruteo vigente (sep 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist / sin cobertura (→ Descartado ~22h). Contacto (nombre+negocio+tel) antes de cerrar. Teléfonos AR canónicos; KPIs = 1ª card.  
+**Ruteo vigente (sep 2026):** ≥50 cualquier provincia → menú Cool Meals; Córdoba &lt;50 → operador; fuera CBA &lt;50 → dist (**sheet por dist.**) / sin cobertura (→ oculto ~5 días, no Descartado). Abandono mid-flujo: ~20 h recontacto → ~24 h Esperando → +24 h **Descartado**. Contacto (nombre+negocio+tel) antes de cerrar. Teléfonos AR canónicos; KPIs = 1ª card.  
 **WhatsApp:** prod `+54 9 351 549-5440` (…5440); pruebas = Kapso **sandbox** → Supabase DEV.  
 **Prod:** [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (Vercel team **FEcotech**; deploy CLI con `--project`). Detalle entornos: [`docs/environments.md`](docs/environments.md).
 

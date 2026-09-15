@@ -310,8 +310,8 @@ export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
   mayorista: "Mayorista",
   minorista: "Minorista",
   retail: "Retail",
-  representante: "Quiere ser representante",
-  distribuidor: "Quiere ser distribuidor",
+  representante: "Representante",
+  distribuidor: "Distribuidor",
   fason: "Fasón",
   otro: "Otro",
 };

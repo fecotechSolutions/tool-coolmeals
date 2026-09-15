@@ -518,36 +518,93 @@ function conversationBlob(input, conv) {
   );
 }
 
-/** Volumen en unidades de producto sin aclarar cajas/bultos → no rutear. */
+/**
+ * Volumen: exige confirmación LITERAL de unidad (cajas/bultos vs wraps/unidades).
+ * No alcanza volumeUnitConfirmed solo ni un "50" suelto tras preguntar por cajas.
+ */
+function leadSaysBoxes(text) {
+  return /(caja|bulto)/.test(text);
+}
+
+function leadSaysProductUnits(text) {
+  return /(wraps?|viandas?|postres?|unidades?|\buds?\b|platos?(\s+listos?)?)/.test(text);
+}
+
+function looksLikeBareVolumeNumber(text) {
+  if (!text) return false;
+  if (leadSaysBoxes(text) || leadSaysProductUnits(text)) return false;
+  return (
+    /^\s*\d{1,4}\s*$/.test(text) ||
+    /\b(justo\s+con|llegar\s+(justo\s+)?(a|con)|unos?|alrededor\s+de|cerca\s+de|tipo|mas\s+o\s+menos|aprox(imadamente)?|a\s+partir\s+de|menos\s+de|mas\s+de|como)\s+\d{1,4}\b/.test(
+      text,
+    ) ||
+    /\b\d{1,4}\s*(al\s+mes|por\s+mes|mensuales?)?\s*$/.test(text)
+  );
+}
+
+function volumeUnitIsBoxes(unit) {
+  return unit === "cajas" || unit === "caja" || unit === "bultos" || unit === "bulto";
+}
+
+function volumeUnitIsProduct(unit) {
+  return (
+    unit === "unidades" ||
+    unit === "unidad" ||
+    unit === "wraps" ||
+    unit === "wrap" ||
+    unit === "viandas" ||
+    unit === "vianda"
+  );
+}
+
 function gateVolumeUnitsAmbiguous(input, conv) {
   if (!input) return null;
-  if (input.volumeUnitConfirmed === true || input.volumeInBoxes === true) return null;
   const unit = normalize(input.volumeUnit || input.quantityUnit || "");
-  if (unit === "cajas" || unit === "caja" || unit === "bultos" || unit === "bulto") {
-    return null;
-  }
+  const lead = normalize(String(input.lastMessage || ""));
   const blob = conversationBlob(input, conv);
-  if (!blob) return null;
-  const hasProductQty =
-    /(\d+)\s*(viandas?|wraps?|postres?|unidades?|uds?|platos?(\s+listos?)?)/.test(blob) ||
-    /(viandas?|wraps?|postres?|unidades?)\s*(por\s+mes|aprox|aproximadamente|:)?\s*\d+/.test(blob) ||
-    /(\d+)\s+de\s+cada\s+(una|uno|producto)/.test(blob);
-  const hasBoxes = /(caja|bulto|cajas|bultos)/.test(blob);
-  if (!hasProductQty || hasBoxes) return null;
-  return {
+
+  const askLiteral = {
     ok: false,
     gate: "volume_units_ambiguous",
     needData: true,
     needDisambiguation: true,
-    missing: ["volumeUnitConfirmed"],
+    missing: ["volumeUnit"],
     reason:
-      "Cantidades de producto sin aclarar si son unidades o cajas/bultos. No se puede aplicar el umbral 50.",
+      "Falta confirmación literal: el número de volumen ¿son cajas/bultos o wraps/unidades?",
     agentInstruction:
-      "GATE unidades↔cajas: el lead dio cantidades de viandas/wraps/postres/unidades SIN decir cajas/bultos. " +
-      "PROHIBIDO decide_route / request_samples / asumir que N unidades = N cajas. " +
-      "UNA pregunta: ¿son unidades sueltas o cajas/bultos? (recordá: wraps 24 u/caja, platos 12, postres 24). " +
-      "enter_waiting. Cuando aclare: volumeUnitConfirmed=true, estimatedVolume en CAJAS, certainty=high.",
+      "GATE unidades↔cajas (literal): NO asumas que un número suelto (ej. 'justo con 50') son cajas. " +
+      "UNA pregunta: '¿Esas 50 son cajas/bultos o wraps/unidades sueltas?' " +
+      "(wraps 24 u/caja, platos 12, postres 24). enter_waiting. " +
+      "Cuando el lead diga cajas/bultos o wraps/unidades: volumeUnit=cajas|unidades, " +
+      "volumeUnitConfirmed=true, estimatedVolume en CAJAS (convirtiendo si hace falta), certainty=high. " +
+      "PROHIBIDO decide_route / request_samples / menú sin esa palabra literal del lead.",
   };
+
+  // Product qty explícita sin cajas (60 wraps / 90 viandas)
+  const hasProductQty =
+    blob &&
+    (/(\d+)\s*(viandas?|wraps?|postres?|unidades?|uds?|platos?(\s+listos?)?)/.test(blob) ||
+      /(viandas?|wraps?|postres?|unidades?)\s*(por\s+mes|aprox|aproximadamente|:)?\s*\d+/.test(blob) ||
+      /(\d+)\s+de\s+cada\s+(una|uno|producto)/.test(blob));
+  if (hasProductQty && !leadSaysBoxes(lead) && !leadSaysBoxes(blob) && !volumeUnitIsBoxes(unit)) {
+    return askLiteral;
+  }
+
+  // Número suelto en el mensaje del lead ("justo con 50") sin decir cajas ni wraps
+  if (looksLikeBareVolumeNumber(lead) && !volumeUnitIsBoxes(unit) && !volumeUnitIsProduct(unit)) {
+    return askLiteral;
+  }
+
+  // volumeUnitConfirmed solo NO alcanza: hace falta volumeUnit o palabra literal del lead
+  if (input.volumeUnitConfirmed === true || input.volumeInBoxes === true) {
+    if (volumeUnitIsBoxes(unit) || volumeUnitIsProduct(unit)) return null;
+    if (leadSaysBoxes(lead) || leadSaysProductUnits(lead)) return null;
+    return askLiteral;
+  }
+
+  if (volumeUnitIsBoxes(unit) || volumeUnitIsProduct(unit)) return null;
+
+  return null;
 }
 
 function looksLikePurchaseIntent(blob) {
@@ -1362,11 +1419,14 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       syncDerivedSheet: false,
       coolMealsMenu: true,
       agentInstruction:
-        "Cool Meals (≥50, cualquier provincia). Menú: 1) Pedir muestras 2) Agendar pedido. Esperá. " +
-        "Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → handoff_human status=muestras (IA ended; NO handoff_to_human). " +
-        "Si pedido: " +
-        contactChecklistInstruction() +
-        " Luego asesor te contacta; handoff_human + handoff_to_human.",
+        "Cool Meals (≥50, cualquier provincia). " +
+        "Si YA quiere pedir: NO menú. NO Sheets. Solo Pipeline Pedidos. " +
+        "CLIENTE (dijo que ya es cliente / trabaja la marca): PROHIBIDO pedir nombre/negocio/tel. " +
+        "Alcanza el WA. Mensaje asesor contacta + lista opcional → handoff_human status=pedido_cliente isCustomer=true + handoff_to_human YA. " +
+        "LEAD: en el mismo cierre pedí nombre+negocio+tel UNA vez, PERO igual handoff status=pedido_lead aunque falten datos. " +
+        "Copy: 'Un asesor Cool Meals se va a comunicar para confirmar tu pedido, stock y logística. Si querés, dejá la lista acá.' " +
+        "Menú 1/2 SOLO si ≥50 y todavía NO eligió camino. Muestras: ficha → request_samples → status=muestras (ended+sheet). " +
+        "PROHIBIDO dejar un pedido en atencion_representante.",
     };
   }
 
@@ -1443,6 +1503,13 @@ async function appendSheet(env, kind, spreadsheetId, values) {
       kind: kind,
     };
   }
+  if (!spreadsheetId) {
+    return {
+      attempted: true,
+      success: false,
+      error: "spreadsheetId missing for " + kind,
+    };
+  }
   const url = env.GOOGLE_SHEETS_WEBHOOK_URL;
   const secret = env.GOOGLE_SHEETS_WEBHOOK_SECRET;
   if (!url || !secret) {
@@ -1471,7 +1538,65 @@ async function appendSheet(env, kind, spreadsheetId, values) {
       error: body.error || text.slice(0, 200),
     };
   }
-  return { attempted: true, success: true };
+  return { attempted: true, success: true, spreadsheetId: spreadsheetId };
+}
+
+/** Sheet de derivados por distribuidor (misma estructura). */
+var DEFAULT_DERIVED_DISTRIBUTOR_SHEETS = {
+  "FELIPE AVINCETA": "19kty71fNjLCJVSUx8ZaQ67YGqHa5ZAlbCqnM-7qobYI",
+  "GABASTOU JORGE ALBERTO": "1-iaH3jwslDUSl65SsNv6qB_dtD5Mt-D6ISoeUOD4Mgs",
+  "NOVA ERA SA": "18MCF06P4rQyst8Nm7W3aR-IhPq3G_25JyKvruqZMfX0",
+  "GudFud Distribuidora": "1wBk4t9JuXX64zaCUCMm7YX1MFVtRoyj94YJr3kt9W9E",
+  "La Corona Alimentos": "1Q0KDRW2um-Ukl7ex6uXIjx_c8cY1Z-DD-DoE3y1ZRMU",
+  Diprom: "1ESCf5fcXjf0CqHfv2vcgtlktuOL4DXDEvgQT0NWc50Q",
+};
+
+function normalizeDistributorSheetKey(name) {
+  return String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\b(distribuidora|distribuidor|alimentos|sa|s\.?a\.?|srl|sas)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function resolveDerivedDistributorSheetId(env, distributorName) {
+  var merged = Object.assign({}, DEFAULT_DERIVED_DISTRIBUTOR_SHEETS);
+  var raw = env && env.GOOGLE_SHEET_DERIVED_BY_DISTRIBUTOR;
+  if (raw && String(raw).trim()) {
+    try {
+      var parsed = JSON.parse(String(raw));
+      Object.keys(parsed || {}).forEach(function (k) {
+        if (parsed[k]) merged[k] = String(parsed[k]).trim();
+      });
+    } catch (_) {}
+  }
+  var want = normalizeDistributorSheetKey(distributorName);
+  if (!want) return null;
+  var entries = Object.keys(merged).map(function (name) {
+    return {
+      name: name,
+      id: merged[name],
+      key: normalizeDistributorSheetKey(name),
+    };
+  });
+  var exact = entries.find(function (e) {
+    return e.key === want;
+  });
+  if (exact) return { spreadsheetId: exact.id, matchedAs: exact.name };
+  var fuzzy = entries.filter(function (e) {
+    return (
+      e.key.length >= 4 &&
+      want.length >= 4 &&
+      (e.key.indexOf(want) !== -1 || want.indexOf(e.key) !== -1)
+    );
+  });
+  if (fuzzy.length === 1) {
+    return { spreadsheetId: fuzzy[0].id, matchedAs: fuzzy[0].name };
+  }
+  return null;
 }
 
 async function requestSamples(input, phoneFromCtx, supabaseUrl, supabaseKey, env, ctx) {
@@ -1670,6 +1795,8 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     muestras: true,
     esperando_respuesta: true,
     descartado: true,
+    pedido_lead: true,
+    pedido_cliente: true,
   };
   // Quiere ser distribuidor = SOLO columna vía upsert. Nunca handoff con ese status:
   // si el modelo lo manda (precios / volumen inseguro / cierre), va a operador.
@@ -1683,6 +1810,45 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     gateRemap = "quiere_ser_distribuidor_to_atencion_representante";
   }
 
+  // Alias genérico "pedido" / "pedidos"
+  const statusNorm = normalize(input.status);
+  if (statusNorm === "pedido" || statusNorm === "pedidos") {
+    status = "pedido_lead";
+    gateRemap = "pedido_alias";
+  }
+
+  // Pedidos: lead vs cliente
+  const customerSignals = normalize(
+    [
+      input.reason,
+      input.aiSummary,
+      existing.ai_summary,
+      existing.notes,
+      input.lastMessage,
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  const looksLikeCustomer =
+    /(somos\s+clientes|ya\s+(somos\s+)?clientes|ya\s+es\s+cliente|cliente\s+existente|ya\s+trabajamos(\s+la\s+marca)?|recompra|cuenta\s+existente|ya\s+compramos)/.test(
+      customerSignals,
+    );
+  const wantsCustomer =
+    input.isCustomer === true ||
+    input.isCustomer === "true" ||
+    input.isCustomer === 1 ||
+    normalize(input.isCustomer) === "true" ||
+    normalize(input.isCustomer) === "si" ||
+    normalize(input.isCustomer) === "yes" ||
+    existing.is_customer === true ||
+    looksLikeCustomer;
+  if (
+    (status === "pedido_lead" || status === "pedido_cliente") &&
+    wantsCustomer
+  ) {
+    status = "pedido_cliente";
+  }
+
   // P1/P1b: pedir humano ≠ ser representante
   if (
     status === "quiere_ser_representante" &&
@@ -1692,9 +1858,15 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     gateRemap = "ask_human_not_be_representative";
   }
 
-  // Descartado / muestras: no exigen checklist de contacto de esta gate
-  // (muestras ya pasó por request_samples; descartado es rechazo).
-  if (status !== "descartado" && status !== "muestras") {
+  // Descartado / muestras / pedidos: no bloquean por checklist de contacto.
+  // - pedido_cliente: alcanza el WA (no pedir nombre/negocio).
+  // - pedido_lead: el agent pide datos en el mensaje, pero igual deriva.
+  if (
+    status !== "descartado" &&
+    status !== "muestras" &&
+    status !== "pedido_lead" &&
+    status !== "pedido_cliente"
+  ) {
     const contactGate = gateContactBeforeClose(input, "handoff");
     if (contactGate && contactGate.ok === false) return contactGate;
     if (contactGate && contactGate.contactRefused) {
@@ -1736,9 +1908,11 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
           ? "sin_cobertura"
           : status === "muestras"
             ? "muestras"
-            : status === "descartado"
-              ? "descartado"
-              : "handoff_humano");
+            : status === "pedido_lead" || status === "pedido_cliente"
+              ? "pedido"
+              : status === "descartado"
+                ? "descartado"
+                : "handoff_humano");
 
   const handoffCompany = resolveExplicitCompany(input);
   const notes = [
@@ -1755,7 +1929,11 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
       : status === "muestras"
         ? "Muestras agendadas + IA cerrada (ended); card queda hasta Resultado: " +
           (input.reason || "muestras")
-        : "Handoff: " + (input.reason || "atención humana"),
+        : status === "pedido_lead" || status === "pedido_cliente"
+          ? "Pedido + handoff (asesor confirma stock/logística): " +
+            (input.reason ||
+              (status === "pedido_cliente" ? "pedido cliente" : "pedido lead"))
+          : "Handoff: " + (input.reason || "atención humana"),
   ]
     .filter(Boolean)
     .join("\n");
@@ -1765,12 +1943,14 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
   ).filter(function (t) {
     return t !== "#atendido_por_representante";
   });
-  // Sin cobertura / descartado / muestras (IA ended): sin forzar hashtag de handoff.
+  // Sin cobertura / descartado / muestras / pedidos: sin forzar hashtag de atención humana.
   const tags = Array.from(
     new Set(
       status === "sin_cobertura" ||
         status === "descartado" ||
-        status === "muestras"
+        status === "muestras" ||
+        status === "pedido_lead" ||
+        status === "pedido_cliente"
         ? tagsBase
         : tagsBase.concat(["#atencion_humana"]),
     ),
@@ -1778,14 +1958,20 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
 
   const now = new Date();
   const esperandoHoursRaw = Number(env && env.ESPERANDO_TO_FINALIZE_HOURS);
-  const autoFinalizeHours =
+  const sinCoberturaHoursRaw = Number(env && env.SIN_COBERTURA_TO_DESCARTADO_HOURS);
+  const esperandoHours =
     Number.isFinite(esperandoHoursRaw) && esperandoHoursRaw > 0
       ? esperandoHoursRaw
       : 22;
-  // Solo sin cobertura / esperando respuesta programan auto-cierre (~22h).
-  // sin_cobertura → Descartado; esperando_respuesta → Finalizado (lo hace el cron API).
+  const sinCoberturaHours =
+    Number.isFinite(sinCoberturaHoursRaw) && sinCoberturaHoursRaw > 0
+      ? sinCoberturaHoursRaw
+      : 120;
+  // sin_cobertura → Descartado (~5 días); esperando_respuesta → Finalizado (~22h).
   const schedulesAutoFinalize =
     status === "sin_cobertura" || status === "esperando_respuesta";
+  const autoFinalizeHours =
+    status === "sin_cobertura" ? sinCoberturaHours : esperandoHours;
   const finalizeAt = schedulesAutoFinalize
     ? new Date(now.getTime() + autoFinalizeHours * 60 * 60 * 1000).toISOString()
     : null;
@@ -1801,6 +1987,11 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     kapso_execution_id: kapsoExecutionId || existing.kapso_execution_id || null,
     kapso_conversation_id: kapsoConversationId || existing.kapso_conversation_id || null,
   };
+  if (status === "pedido_cliente") {
+    patchBody.is_customer = true;
+  } else if (status === "pedido_lead") {
+    patchBody.is_customer = false;
+  }
 
   const handoffProvince = resolveProvince(
     input.province,
@@ -1878,11 +2069,22 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
         ? "Muestras: sheet/Pipeline listos e IA en ended. NO uses handoff_to_human. Avisá que un representante hace el seguimiento. La card queda en Muestras hasta Resultado."
         : status === "descartado"
           ? "Descartado: IA en ended. NO uses handoff_to_human. Solo mensaje humano breve de cierre (sin decir 'descartado')."
-          : "Usá handoff_to_human en el agent. Octavio responde en el mismo WhatsApp.",
+          : status === "pedido_lead" || status === "pedido_cliente"
+            ? "Pedido: card en Pipeline Pedidos (sin Sheet). Usá handoff_to_human. Asesor sigue en el mismo WhatsApp."
+            : "Usá handoff_to_human en el agent. Octavio responde en el mismo WhatsApp.",
   };
 }
 
 async function syncHandoffInterestSheets(env, row, status, reason) {
+  // Pedidos: solo Pipeline (lead/cliente). Nunca Sheets.
+  if (status === "pedido_lead" || status === "pedido_cliente") {
+    return {
+      attempted: false,
+      success: true,
+      spreadsheetId: null,
+      skipped: "pedido_pipeline_only",
+    };
+  }
   const date = new Date().toISOString().slice(0, 10);
   if (
     status === "quiere_ser_distribuidor" ||
@@ -2123,21 +2325,30 @@ async function syncDerived(input, phoneFromCtx, supabaseUrl, supabaseKey, env, c
     }
   }
 
-  const sheetId = env.GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID;
+  const sheetResolved = resolveDerivedDistributorSheetId(env, distributorName);
+  const sheetId = sheetResolved ? sheetResolved.spreadsheetId : null;
   const today = new Date().toISOString().slice(0, 10);
-  const sheet = await appendSheet(env, "derived_distributors", sheetId, [
-    today,
-    derivedName || conv.name || "",
-    derivedPhone || conv.phone || "",
-    derivedCompany || input.company || "",
-    input.businessType || "",
-    input.clientType || conv.client_type || "",
-    input.province || conv.province || "",
-    input.city || "",
-    input.postalCode || "",
-    distributorName,
-    "",
-  ]);
+  const sheet = sheetId
+    ? await appendSheet(env, "derived_distributors", sheetId, [
+        today,
+        derivedName || conv.name || "",
+        derivedPhone || conv.phone || "",
+        derivedCompany || input.company || "",
+        input.businessType || "",
+        input.clientType || conv.client_type || "",
+        input.province || conv.province || "",
+        input.city || "",
+        input.postalCode || "",
+        distributorName,
+        "",
+      ])
+    : {
+        attempted: true,
+        success: false,
+        error: distributorName
+          ? 'No hay sheet mapeado para distribuidor "' + distributorName + '"'
+          : "Falta distributorName para sheet de derivados",
+      };
 
   // NO forzar handoff Kapso acá: si lo hacemos, la IA muere antes del mensaje de cierre.
   // El agent debe: 1) send_notification  2) sync_derived  3) handoff_to_human.

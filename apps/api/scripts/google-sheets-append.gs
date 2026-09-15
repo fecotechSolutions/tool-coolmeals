@@ -2,7 +2,7 @@
  * Cool Meals — append rows to Google Sheets without service account keys.
  *
  * SETUP (≈5 min):
- * 1. Abrí cualquiera de los sheets (derivados, muestras, atención comercial, sin cobertura)
+ * 1. Abrí cualquiera de los sheets (muestras, atención, sin cobertura, o un sheet por dist)
  *    con la misma cuenta Google que va a desplegar el Apps Script.
  * 2. Extensiones → Apps Script
  * 3. Borrá el código default y pegá TODO este archivo
@@ -15,11 +15,12 @@
  * 7. En apps/api/.env (y secrets Kapso de coolmeals-bot-actions):
  *      GOOGLE_SHEETS_WEBHOOK_URL=https://script.google.com/macros/s/.../exec
  *      GOOGLE_SHEETS_WEBHOOK_SECRET=la-misma-frase-del-paso-4
- *      (+ IDs de los 4 sheets)
- * 8. Compartí TODOS los sheets como Editor con esa misma cuenta Google.
+ *      (+ IDs muestras / atención / sin cobertura)
+ * 8. Compartí TODOS los sheets como Editor con esa misma cuenta Google
+ *    (muestras, atención, sin cobertura + cada sheet por distribuidor).
  * 9. npm run test:sheets -w @coolmeals/api
  *
- * El script escribe en el spreadsheetId que manda la API (los 4 sheets).
+ * El script escribe en el spreadsheetId que manda la API (por dist o por kind).
  */
 
 function jsonResponse_(obj) {

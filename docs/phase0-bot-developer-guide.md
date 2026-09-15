@@ -2,7 +2,7 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: **3 sep 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
+Actualizado: **15 sep 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
 
 **Entornos DEV/PROD:** [`environments.md`](./environments.md).
 
@@ -17,7 +17,7 @@ WhatsApp (Meta / Kapso)
   → workflow coolmeals-leads (agent)
   → function coolmeals-bot-actions
        · sandbox  → Supabase DEV  (+ skip Sheets)
-       · …5440    → Supabase PROD (+ Sheets)
+       · …5440    → Supabase PROD (+ Sheets por dist / muestras / …)
   → tabla conversations / sample_requests / sheet_sync_log
   → apps/web Pipeline
        · localhost = DEV
@@ -31,7 +31,8 @@ WhatsApp (Meta / Kapso)
 | Definition compilada | `workflows/coolmeals-leads/definition.json` |
 | Function Kapso | `functions/coolmeals-bot-actions/index.js` (`resolveRuntime`) |
 | Reglas de ruteo (API) | `apps/api/src/lib/routing.ts` |
-| Timeouts / finalize | `apps/api/src/lib/finalize-derived.ts` |
+| Timeouts / finalize / nudge | `apps/api/src/lib/finalize-derived.ts` |
+| Mapa sheet por dist. | `apps/api/src/lib/derived-distributor-sheets.ts` (+ mismo mapa en la function) |
 | Kapso client (API) | `apps/api/src/lib/kapso.ts` |
 | Bot HTTP (UI/ops) | `apps/api/src/routes/bot.ts` |
 | Cron timeouts | `apps/api/src/routes/cron.ts` → `/api/cron/pipeline-timeouts` |
@@ -148,17 +149,22 @@ Ver `.env.example` y [`environments.md`](./environments.md). Críticas:
 | `APP_ENV` | `development` \| `staging` \| `production` — bloquea sandbox-reset en prod |
 | `KAPSO_*` | Handoff/ended, send text (nudge), list executions |
 | `DERIVE_HANDOFF_HOURS` | Legacy (ya no auto-finaliza derivados/atención) |
-| `ABANDONED_TO_WAITING_HOURS` | 22h mid-flujo → Esperando respuesta |
-| `ESPERANDO_TO_FINALIZE_HOURS` | 22h: `sin_cobertura` → Descartado+ended; `esperando_respuesta` → Finalizado+ended |
+| `ABANDONED_NUDGE_HOURS` | 20h mid-flujo (`nuevo`/`ia_atendiendo`) → 1 recontacto WA (sin cambiar columna) |
+| `ABANDONED_TO_WAITING_HOURS` | 24h mid-flujo → Esperando respuesta + handoff |
+| `ESPERANDO_TO_FINALIZE_HOURS` | 24h: `esperando_respuesta` → **Descartado** + ended |
+| `SIN_COBERTURA_TO_DESCARTADO_HOURS` | 120h (5 días): `sin_cobertura` → cerrado oculto (ended; **no** Descartado; status `finalizado` + outcome `sin_cobertura`) |
 | `STUCK_RUNNING_MINUTES` | Execution Kapso en `running` sin avanzar → `ended`. Default 3 |
 | `ABANDONED_NUDGE_MESSAGE` | Texto del recordatorio WA |
 | `CRON_SECRET` / `INTERNAL_API_SECRET` | Auth de `/api/cron/*` |
 | `SANDBOX_RESET_ENABLED` | **`false`** en prod. `true` solo wipe puntual en DEV |
 | `SANDBOX_RESET_UNTIL` | ISO datetime; pasado ese momento el endpoint no borra |
 | `SANDBOX_RESET_PHONES` | Opcional CSV; vacío = todas las conversations |
-| `GOOGLE_SHEETS_WEBHOOK_*` | Append derivados / muestras / atención / sin cobertura |
+| `GOOGLE_SHEETS_WEBHOOK_*` | Append muestras / atención / sin cobertura / **sheet del dist.** |
+| `GOOGLE_SHEET_DERIVED_BY_DISTRIBUTOR` | JSON opcional `{"Nombre Dist":"spreadsheetId"}` merge sobre el mapa default |
+| `GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID` | **Legacy** — ya no se usa si hay match por nombre de dist. |
 | `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | Sheet dist / rep / fasón |
 | `GOOGLE_SHEET_NO_COVERAGE_ID` | Sheet sin cobertura |
+| `GOOGLE_SHEET_SAMPLE_LOGISTICS_ID` | Sheet muestras |
 
 Web: `NEXT_PUBLIC_APP_ENV`, `NEXT_PUBLIC_DEMO_MODE=false`, `NEXT_PUBLIC_API_URL`.
 
@@ -196,25 +202,26 @@ Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7 · entor
 1. Primer mensaje → `upsert_conversation` + Beacons + tipificación.
 2. Fasón / representante (SER) → `decide_route` + **contacto** + handoff (sin menú).
 3. Quiere ser distribuidor → 4 preguntas; **4 SÍ** → `upsert` columna **sin** handoff → zona/volumen → `decide_route`.
-4. Gates en function: `certainty=high`, provincia/volumen si aplica, `gateContactBeforeClose` en handoff/`sync_derived`.
+4. Gates en function: `certainty=high`, provincia/volumen si aplica, `gateContactBeforeClose` en handoff/`sync_derived` (**excepto** `pedido_lead` / `pedido_cliente` y muestras/descartado).
 5. Según `decide_route` (seguir `agentInstruction` / `coolMealsMenu`):
 
 | action | Comportamiento |
 |--------|----------------|
-| `own_attention` + menú | ≥50 cualquier provincia → muestras o pedido |
+| `own_attention` + menú | ≥50: menú **solo** si aún no eligió. Si ya quiere **pedir** → Pedidos directo (sin menú) |
 | `own_attention` sin menú | Córdoba &lt;50 → contacto + handoff `atencion_representante`. Copy: no “asesor de la zona” |
 | `derive_to_distributor` | **mensaje** → `sync_derived` → `handoff_to_human` (sin `request_samples`). `sync_derived` **no** setea Kapso `handoff` |
-| `no_coverage` | contacto → `sin_cobertura` → auto **Descartado** ~22h |
+| `no_coverage` | contacto → `sin_cobertura` → ~**5 días** oculto + ended (**no** Descartado) |
 | `quiere_ser_representante` / `fason` | contacto + handoff a su columna |
 | volumen incerto | handoff `atencion_representante` (remap si el modelo manda `quiere_ser_distribuidor`) |
 
+**Pedidos (Pipeline only, sin Sheet):**
+- Intención clara de pedir → `handoff_human` `pedido_lead` o `pedido_cliente` + `handoff_to_human` (Kapso `handoff`).
+- **Cliente** (`isCustomer` / “somos clientes” / “ya trabajamos”): **skip** gate de contacto; alcanza phone WA.
+- **Lead:** el agent puede pedir contacto en el mensaje de cierre, pero el gate **no bloquea** el handoff.
+- Outcome `pedido`. Copy: asesor confirma stock/logística + lista opcional.
+- `syncHandoffInterestSheets` / API sheets: **no** escriben fila por pedidos.
+
 **Muestras (≥50):** datos envío → `request_samples` → mensaje representante → `handoff_human` `muestras` (**Kapso ended**, sin `handoff_to_human`). Card queda hasta Resultado. Nuevo WA → 2ª card fresca.
-
-### Timeouts
-
-- `sin_cobertura` vencido → **Descartado** + ended  
-- `esperando_respuesta` vencido → **Finalizado** + ended  
-- resto: Resultado manual (`éxito` / `sin éxito` / `Descartado`)
 
 ## Ruteo comercial
 
@@ -228,22 +235,40 @@ Orden en `decide_route`:
 
 Umbral en **cajas** (bulto = caja). Embalaje: wraps 24 / platos 12 / postres 24 / palet 110.
 
+## Timeouts de Pipeline (`/api/cron/pipeline-timeouts`)
+
+Implementación: `apps/api/src/lib/finalize-derived.ts`. Cron diario (Hobby = 1×/día).
+
+| Paso | Condición | Efecto |
+|------|-----------|--------|
+| 0 | Kapso `running` ≥ `STUCK_RUNNING_MINUTES` | `ended` (+ mensaje de recovery si mid-flujo) |
+| 1 | `nuevo` / `ia_atendiendo` inactivo ≥ **20 h** | 1 WA recontacto; marker en `notes` (no cambia columna) |
+| 2 | mismos statuses, ancla de inactividad ≥ **24 h** | → `esperando_respuesta` + handoff + `finalize_at` |
+| 3a | `esperando_respuesta` ventana vencida | → `descartado` + ended |
+| 3b | `sin_cobertura` ventana (~5 días) | → `finalizado` + outcome `sin_cobertura` + ended (card oculta; **no** Descartado) |
+
+El recontacto bumpea `updated_at` (trigger Supabase); por eso el escalate usa ancla `notes` (`Auto: recontacto 20h enviado|anchor=…|at=…`).
+
 ## Sheets
 
-- Un sheet de **derivados**, un sheet de **muestras** (logística).
-- Un sheet de **atención comercial** (tercer feedback): quiere ser **distribuidor / representante / fasón** — mismos sheet, columna `tipo_cliente`.
-- Un sheet de **sin cobertura**: datos mínimos para recontactar cuando haya zona.
-- Preferido: Apps Script webhook (`GOOGLE_SHEETS_WEBHOOK_URL` + secret). La cuenta del script debe ser **Editor** en los 4 sheets.
+- **Derivados:** **1 Google Sheet por distribuidor**. Mapa canónico en `derived-distributor-sheets.ts` y duplicado en `coolmeals-bot-actions` (`DEFAULT_DERIVED_DISTRIBUTOR_SHEETS`). Match por nombre (normalizado; fuzzy suave). Sin match → error de sheet (no escribe al master).
+- Dist. actuales mapeados: FELIPE AVINCETA, GABASTOU JORGE ALBERTO, NOVA ERA SA, GudFud Distribuidora, La Corona Alimentos, Diprom.
+- Alta de un dist nuevo: agregar ID al mapa (API + function) **o** `GOOGLE_SHEET_DERIVED_BY_DISTRIBUTOR` JSON; el nombre en tabla `distributors` debe matchear.
+- Sheet master viejo “Distribuidores”: **no** recibe leads nuevos; puede quedar como **casa del Apps Script** webhook.
+- Un sheet de **muestras** (logística).
+- Un sheet de **atención comercial**: quiere ser **distribuidor / representante / fasón** — columna `tipo_cliente`.
+- Un sheet de **sin cobertura**: datos para recontactar cuando haya zona.
+- Preferido: Apps Script webhook (`GOOGLE_SHEETS_WEBHOOK_URL` + secret). La cuenta del script debe ser **Editor** en muestras / atención / sin cobertura **y en cada sheet por distribuidor**.
+- El webhook **no** cambia por dist.: recibe `spreadsheetId` en el body y hace `appendRow`.
 - Script: `apps/api/scripts/google-sheets-append.gs`
-- Test: `npm run test:sheets -w @coolmeals/api`
+- Test: `npm run test:sheets -w @coolmeals/api` (prueba derivados con nombre real, ej. Diprom)
 
-| Sheet | Env | Columnas |
-|-------|-----|----------|
-| Derivados | `GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID` | fecha, nombre, tel, empresa, tipo negocio, client_type, provincia, ciudad, CP, dist, seguimiento |
+| Sheet | Cómo se elige el ID | Columnas |
+|-------|---------------------|----------|
+| Derivados (por dist.) | `resolveDerivedDistributorSheetId(distributorName)` | fecha, nombre, tel, empresa, tipo negocio, client_type, provincia, ciudad, CP, dist, seguimiento |
 | Muestras | `GOOGLE_SHEET_SAMPLE_LOGISTICS_ID` | fecha, nombre, tel, **tipo_cliente**, empresa, provincia, dni, correo, CP, dirección completa |
 | Atención comercial | `GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID` | fecha, nombre, tel, empresa, **tipo_cliente**, provincia, ciudad, motivo, seguimiento |
 | Sin cobertura | `GOOGLE_SHEET_NO_COVERAGE_ID` | fecha, nombre, tel, empresa, provincia, ciudad, client_type, motivo, seguimiento |
-- Test: `npm run test:sheets -w @coolmeals/api`
 
 ## Cómo depurar
 
@@ -272,9 +297,10 @@ Reset de un tester (ej. `543513053755` / `3513053755` = mismo número):
 |---|------|-----------|
 | 1 | Quiere ser distribuidor (4 SÍ) | Columna **sin** handoff → zona/volumen → contacto → handoff al rutear |
 | 1b | Quiere ser dist. sin requisitos | Sin columna dist.; tipificar compra o Descartado |
-| 2 | Sin cobertura | Contacto + columna + handoff → auto Descartado ~22 h |
-| 3 | Minorista Mendoza &lt;50 | Mensaje dist **antes** de `sync_derived` + handoff |
-| 4 | ≥50 cualquier provincia | Menú muestras/pedido |
+| 2 | Sin cobertura | Contacto + columna + handoff → ~**5 días** card oculta + ended (**no** Descartado) |
+| 3 | Minorista Mendoza &lt;50 | Mensaje dist **antes** de `sync_derived` + fila en **sheet de ese dist.** + handoff |
+| 4 | ≥50 cualquier provincia | Menú si no eligió; si ya quiere pedir → `pedido_lead`/`pedido_cliente` (sin Sheet) |
+| 4b | Cliente + pedido | `pedido_cliente` sin pedir nombre/negocio |
 | 5 | Córdoba &lt;50 | Atención humana sin menú; **no** “asesor de la zona”; pide contacto |
 | 6 | Representante SER | Contacto + columna + handoff |
 | 7 | Fasón | Contacto + columna + handoff |
@@ -287,7 +313,7 @@ Reset de un tester (ej. `543513053755` / `3513053755` = mismo número):
 1. ~~Número Meta prod~~ → **hecho:** …5440 conectado; sandbox → DEV vía `resolveRuntime`.
 2. Confirmar migrations aplicadas en DEV y PROD (DEV bootstrap OK sep 2026).
 3. Unificar `decide_route` (function vs `routing.ts`) o llamar siempre a la API.
-4. Confirmar secrets Kapso de los 4 sheets en ruta prod.
+4. Confirmar webhook Apps Script + Editor en **cada** sheet por dist. + muestras/atención/sin cobertura.
 5. Auth real (hoy `optionalInternalAuth` / roles stub).
 6. Tras cada `kapso build` + `update-graph`, **siempre** confirmar `function_id` en tools.
 7. No cortar executions `waiting`/`handoff` mid-prueba al desplegar.

@@ -41,15 +41,25 @@ const envSchema = z.object({
    */
   DERIVE_HANDOFF_HOURS: z.coerce.number().positive().default(24),
   /**
-   * Inactividad mid-flujo (IA esperando al lead) → columna Esperando respuesta + mensaje + handoff.
-   * Default 22.
+   * Inactividad mid-flujo → 1er recontacto WA (sin cambiar de columna).
+   * Default 20.
    */
-  ABANDONED_TO_WAITING_HOURS: z.coerce.number().positive().default(22),
+  ABANDONED_NUDGE_HOURS: z.coerce.number().positive().default(20),
   /**
-   * Tras ese handoff en Esperando respuesta → Finalizado + ended.
-   * Default 22.
+   * Inactividad mid-flujo → columna Esperando respuesta + handoff.
+   * Default 24.
    */
-  ESPERANDO_TO_FINALIZE_HOURS: z.coerce.number().positive().default(22),
+  ABANDONED_TO_WAITING_HOURS: z.coerce.number().positive().default(24),
+  /**
+   * Tras handoff en Esperando respuesta → Descartado + ended.
+   * Default 24.
+   */
+  ESPERANDO_TO_FINALIZE_HOURS: z.coerce.number().positive().default(24),
+  /**
+   * Tras handoff en Sin cobertura → cerrado (ended + oculto; no Descartado).
+   * Default 120 (5 días).
+   */
+  SIN_COBERTURA_TO_DESCARTADO_HOURS: z.coerce.number().positive().default(120),
   /** Bearer/token para /api/cron/* (Vercel Cron o curl local). */
   CRON_SECRET: z.string().min(8).optional(),
 
@@ -85,9 +95,15 @@ const envSchema = z.object({
     ),
 
   /**
-   * Google Sheets — set in `.env`. No production IDs hardcoded in source.
+   * Google Sheets — set in `.env`. Sample/attention/no-coverage IDs via env.
+   * Derivados: un sheet por distribuidor (ver derived-distributor-sheets.ts);
+   * opcional JSON override GOOGLE_SHEET_DERIVED_BY_DISTRIBUTOR.
+   * GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID queda solo como legacy (ya no se usa
+   * si hay match por nombre).
    */
   GOOGLE_SHEET_DERIVED_DISTRIBUTORS_ID: z.string().min(1).optional(),
+  /** JSON {"Nombre Dist":"spreadsheetId",...} — merge sobre el mapa default. */
+  GOOGLE_SHEET_DERIVED_BY_DISTRIBUTOR: z.string().optional(),
   GOOGLE_SHEET_SAMPLE_LOGISTICS_ID: z.string().min(1).optional(),
   /** Interés comercial: quiere ser dist / rep / fasón (columna tipo_cliente). */
   GOOGLE_SHEET_COMMERCIAL_ATTENTION_ID: z.string().min(1).optional(),

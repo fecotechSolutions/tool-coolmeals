@@ -47,11 +47,11 @@ function findDistributorForProvince(
 }
 
 const OWN_ATTENTION_MENU_INSTRUCTION =
-  "Cool Meals (≥50, cualquier provincia). Menú corto: 1) Pedir muestras 2) Agendar pedido. Esperá. " +
-  "Si muestras: pedí Nombre, Tel, Empresa, Provincia, DNI, Correo, CP y Dirección completa → request_samples → " +
-  "mensaje: se acuerdan/envían las muestras y un REPRESENTANTE se comunica para el seguimiento → " +
-  "handoff_human status=muestras + handoff_to_human. " +
-  "Si pedido: un asesor te contacta; handoff_human + handoff_to_human. Sin narrar sistema.";
+  "Cool Meals (≥50). Si YA quiere pedir: NO menú, NO Sheets. " +
+  "Cliente: no pedir datos (alcanza WA) → pedido_cliente YA. " +
+  "Lead: pedí contacto en el cierre PERO igual pedido_lead YA. " +
+  "Aviso asesor + lista opcional. Menú 1/2 SOLO si aún no eligió. " +
+  "Muestras: ficha → request_samples → muestras (ended+sheet). Sin narrar sistema.";
 
 const COOLMEALS_OPERATOR_HANDOFF_INSTRUCTION =
   "Cool Meals operador/representante (Córdoba o handoff comercial). SIN menú muestras. " +
