@@ -14,11 +14,11 @@ Actualizado: **15 sep 2026** (Pedidos lead/cliente sin Sheet; abandono 20h→24h
 Un lead escribe al WhatsApp de Cool Meals / Froodie. Un bot (Kapso) lo atiende, califica y, según el caso:
 
 - **≥ 50 cajas** (cualquier provincia) → Cool Meals: menú **muestras / pedido** *solo si aún no eligió*; si ya quiere **pedir** → va directo a **Pedidos**,
-- **Córdoba + &lt; 50** → operador / atención humana Cool Meals (sin menú; **no** “asesor de la zona”),
-- **fuera de Córdoba + &lt; 50** → **distribuidor** de zona o **sin cobertura**,
+- **&lt; 50** (cualquier provincia, **incluye Córdoba**) → **distribuidor** de zona; si no hay gestión en la zona → **sin cobertura**,
 - volumen / precios **inciertos** → **1ª** insistir aproximado (umbral **a partir de 50**); **2ª** sin número → operador (no inventar bultos),
 - interés: **quiere ser distribuidor** (4 SÍ → columna; luego ruteo por vol/zona), **representante** / **fasón** (handoff),
-- **consumidor final** → **Descartado**.
+- **consumidor final** → **Descartado**,
+- **proveedor** (ya provee o quiere proveer insumos a Cool Meals) → mensaje con **Compras@coolmeals.com.ar** → **Descartado**.
 
 **Contacto:** en cierres comerciales normales el bot pide nombre + negocio + teléfono confirmado. **Excepción Pedidos:**
 - **Cliente** que quiere pedir → **no** pide más datos (alcanza el WhatsApp).
@@ -51,7 +51,7 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 |---------|-------------|---------------------|
 | Nuevo / IA atendiendo | El bot conversa / califica | Abandono: ~20 h recontacto → ~24 h **Esperando respuesta** |
 | Esperando respuesta | Abandono mid-flujo (post-recontacto) | Sí (~**24 h**) → **Descartado** + ended |
-| Atención humana | Cool Meals comercial (Córdoba &lt;50, “hablar con alguien”, etc.) | No — cierre manual |
+| Atención humana | Cool Meals comercial (“hablar con alguien”, 2ª precio, etc.) | No — cierre manual |
 | Quiere ser representante | Interés en representar Cool Meals | No — cierre manual |
 | Quiere ser fasón | Interés en producción a fasón | No — cierre manual |
 | Quiere ser distribuidor | Quiere sumarse a la red | No — cierre manual |
@@ -60,7 +60,7 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 | Muestras | Cool Meals agendó envío de muestras (logística) | No — cierre manual |
 | Pedido lead / Pedido cliente | Intención clara de pedir (menú 2, lista/PDF, “quiero armar pedido”, cliente existente). **Sin Sheet.** Cliente = no pide datos extra; lead = pide en el cierre pero igual deriva. Asesor confirma stock/logística. | No — cierre manual |
 | Finalizado | Cerrada con **Resultado** (éxito / sin éxito) o cierre oculto de sin cobertura. **Visible 5 días** en Pipeline; después solo Dashboard | Terminal |
-| Descartado | Basura / abandono Esperando / Resultado Descartado. **Visible 2 días** desde alta de la card; después solo Dashboard | Terminal |
+| Descartado | Basura / consumidor / **proveedor** (mail Compras) / abandono Esperando / Resultado Descartado. **Visible 2 días** desde alta de la card; después solo Dashboard | Terminal |
 | Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` / `Descartado` | Cierra → Finalizado o Descartado + Kapso ended |
 
 ## Recontacto mismo teléfono (métricas)
@@ -117,8 +117,8 @@ Card en **Finalizado** o **Descartado** (Resultado o auto). Mientras esté en At
 |------|-------------|----------|
 | **Representante** / **Fasón** (SER) | No (ignoran vol.) | Su columna + handoff; **nunca** menú |
 | **Quiere ser distribuidor** | Tras 4 SÍ, sí | 4 SÍ → columna **sin** handoff → luego mismo ruteo por vol/zona |
-| **Retail / Mayorista / Dist 4 SÍ / quien da vol.** | Sí | **≥50 cualquier provincia** → menú Cool Meals. **&lt;50 Córdoba** → operador. **&lt;50 fuera** → dist / sin cobertura |
-| **Minorista** (locales gastronómicos) | No se exige | Si da ≥50 → menú; si no → Córdoba operador / resto dist |
+| **Retail / Mayorista / Dist 4 SÍ / quien da vol.** | Sí | **≥50 cualquier provincia** → menú Cool Meals. **&lt;50 cualquier provincia (incl. CBA)** → dist / sin cobertura |
+| **Minorista** (locales gastronómicos) | No se exige | Si da ≥50 → menú; si no → dist / sin cobertura (también Córdoba) |
 
 Cobertura = tabla **Distribuidores**. Sin dist. → **Sin cobertura** → tras ~**5 días** desaparece del Pipeline + ended (no Descartado).
 
@@ -167,7 +167,7 @@ Intención clara de **ser** rep/fasón (no “hablar con un representante”):
 
 1. **4 preguntas** (congelados, depósito/cámara, logística, estructura).  
 2. **4 SÍ** → columna **Quiere ser distribuidor** vía upsert — **sin handoff** (el bot sigue).  
-3. Zona + volumen → mismo ruteo que cualquier lead (≥50 menú / Córdoba &lt;50 operador / fuera dist o sin cobertura) → contacto → **ahí sí** handoff.  
+3. Zona + volumen → mismo ruteo que cualquier lead (≥50 menú / &lt;50 dist o sin cobertura, también Córdoba) → contacto → **ahí sí** handoff.  
 4. **Falta alguna** → no queda en esa columna; tipificar compra o Descartado.
 
 > Los 4 SÍ solo marcan interés en la columna. El handoff no es en ese momento.
@@ -176,7 +176,7 @@ Intención clara de **ser** rep/fasón (no “hablar con un representante”):
 
 Sheet Sin cobertura. Auto ~**5 días** → desaparece + ended (no Descartado).
 
-### Derivado a dist (fuera CBA + &lt;50)
+### Derivado a dist (&lt;50 con cobertura, cualquier provincia)
 
 Cool Meals **no** agenda muestras; el dist se hace cargo.
 

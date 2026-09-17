@@ -335,26 +335,9 @@ function blockDerivationAtHighVolume(input, conv, minBundles) {
   };
 }
 
-/** P5: Córdoba nunca deriva a dist. (operador Cool Meals si <50; menú si ≥50). */
-function blockDerivationInCordoba(input, conv) {
-  const province = resolveProvince(
-    input && input.province,
-    conv && conv.province,
-    input && input.aiSummary,
-    conv && conv.ai_summary,
-    input && input.reason,
-    input && input.notes,
-  );
-  if (!province || normalize(province) !== "cordoba") return null;
-  return {
-    ok: false,
-    gate: "cordoba_no_distributor",
-    error: "Córdoba no se deriva a distribuidor de zona.",
-    agentInstruction:
-      "GATE Córdoba (P5). PROHIBIDO sync_derived / nombrar distribuidor / 'asesor de la zona'. " +
-      "Si volumen ≥50: menú Cool Meals (muestras/pedido). Si <50 o sin vol: operador Cool Meals " +
-      "(handoff status=atencion_representante). NUNCA Seba ni dist. de CBA.",
-  };
+/** (histórico P5) Córdoba ya puede derivar a dist. si <50; no bloquear. */
+function blockDerivationInCordoba(_input, _conv) {
+  return null;
 }
 
 /** True solo si el lead eligió muestras de forma explícita (P8). */
@@ -391,7 +374,7 @@ function isExplicitSampleChoice(input) {
 
 /**
  * P6/P8: request_samples solo con menú Cool Meals (≥50) + elección clara de muestras.
- * Bloquea <50, sin menú, CBA operador, derive, rep/fasón.
+ * Bloquea <50, sin menú, derive, rep/fasón.
  */
 function gateRequestSamplesEligibility(input, conv, minBundles) {
   const threshold = minBundles || 50;
@@ -426,8 +409,8 @@ function gateRequestSamplesEligibility(input, conv, minBundles) {
         "GATE P6/P8: PROHIBIDO request_samples sin menú Cool Meals (≥" +
         threshold +
         "). " +
-        "Si aún no hay volumen claro: calificá (cajas/bultos). Si <50 Córdoba → operador (sin muestras). " +
-        "Si <50 fuera → dist/sin_cobertura (NO kit Cool Meals). " +
+        "Si aún no hay volumen claro: calificá (cajas/bultos). Si <50 → dist/sin_cobertura (también Córdoba; NO kit). " +
+        "Si ≥50 → menú Cool Meals. " +
         "Solo tras decide_route coolMealsMenu=true + eligió 1 muestras → ficha + request_samples.",
     };
   }
@@ -975,9 +958,10 @@ function gateDecideRouteQualification(input, conv) {
       agentInstruction:
         "GATE volumen incerto / dijo que no sabe. PROHIBIDO inventar bultos ni dist/sin_cobertura. " +
         "2ª insistencia (SOLO tras la pregunta normal de volumen): UN mensaje — precios/mínimos " +
-        "los detalla un asistente comercial (Córdoba: Cool Meals SIN 'de la zona'; resto: de tu zona) + " +
+        "los detalla un asistente comercial de tu zona + " +
         "¿creés que serían a partir de 50 cajas/mes o menos de 50? + enter_waiting. NO handoff. " +
-        "Si responde ≥50 o <50: decide_route. Si YA hiciste esa 2ª y sigue sin orientar: " +
+        "Si responde ≥50 → Cool Meals (menú/Pedidos). Si <50 → dist/sin_cobertura. " +
+        "Si YA hiciste esa 2ª y sigue sin orientar: " +
         "handoff_human status=atencion_representante + handoff_to_human.",
     };
   }
@@ -1391,7 +1375,6 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
       null;
   }
 
-  const isCordoba = normalize(province) === "cordoba";
   const highVolume =
     estimatedVolume !== null && estimatedVolume >= minBundles;
   const distNote = wantsToBeDistributor
@@ -1430,30 +1413,7 @@ async function decideRoute(input, supabaseUrl, supabaseKey) {
     };
   }
 
-  // <50 (o sin volumen): Córdoba → operador
-  if (isCordoba) {
-    return {
-      ok: true,
-      action: "own_attention",
-      conversationStatus: "atencion_representante",
-      outcome: "handoff_humano",
-      distributorId: null,
-      distributorName: null,
-      reason:
-        clientType +
-        " en Córdoba con volumen < " +
-        minBundles +
-        " (o sin volumen) — operador Cool Meals." +
-        distNote,
-      syncDerivedSheet: false,
-      coolMealsMenu: false,
-      agentInstruction:
-        "Cool Meals operador (Córdoba <50). SIN menú muestras. PROHIBIDO decir 'asesor/distribuidor de la zona'. " +
-        contactChecklistInstruction() +
-        " Luego mensaje: un asesor Cool Meals te contacta + despedida. Silencio: handoff_human status=atencion_representante + handoff_to_human.",
-    };
-  }
-
+  // <50 (o sin volumen): dist. de zona o sin cobertura (incluye Córdoba)
   if (!distributor) {
     return {
       ok: true,
@@ -1925,7 +1885,9 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
       ? "Handoff operador (no usar columna Quiere ser distribuidor para handoff): " +
         (input.reason || "faltan precios/volumen u otro dato comercial")
       : status === "descartado"
-      ? "Descartado + IA cerrada (ended): " + (input.reason || "sin perfil comercial")
+      ? (/proveedor|compras@coolmeals/i.test(String(input.reason || ""))
+          ? "Descartado (proveedor → Compras): " + (input.reason || "Compras@coolmeals.com.ar")
+          : "Descartado + IA cerrada (ended): " + (input.reason || "sin perfil comercial"))
       : status === "muestras"
         ? "Muestras agendadas + IA cerrada (ended); card queda hasta Resultado: " +
           (input.reason || "muestras")

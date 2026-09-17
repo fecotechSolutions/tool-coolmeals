@@ -208,7 +208,7 @@ Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7 · entor
 | action | Comportamiento |
 |--------|----------------|
 | `own_attention` + menú | ≥50: menú **solo** si aún no eligió. Si ya quiere **pedir** → Pedidos directo (sin menú) |
-| `own_attention` sin menú | Córdoba &lt;50 → contacto + handoff `atencion_representante`. Copy: no “asesor de la zona” |
+| `own_attention` sin menú | Pedidos / operador (hablar con alguien, 2ª precio, etc.). Copy humano. |
 | `derive_to_distributor` | **mensaje** → `sync_derived` → `handoff_to_human` (sin `request_samples`). `sync_derived` **no** setea Kapso `handoff` |
 | `no_coverage` | contacto → `sin_cobertura` → ~**5 días** oculto + ended (**no** Descartado) |
 | `quiere_ser_representante` / `fason` | contacto + handoff a su columna |
@@ -221,6 +221,8 @@ Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7 · entor
 - Outcome `pedido`. Copy: asesor confirma stock/logística + lista opcional.
 - `syncHandoffInterestSheets` / API sheets: **no** escriben fila por pedidos.
 
+**Proveedor de insumos:** mensaje con `Compras@coolmeals.com.ar` → `handoff_human` `descartado` (Kapso **ended**). No menú / Pedidos / dist. Distinto de cliente que compra producto.
+
 **Muestras (≥50):** datos envío → `request_samples` → mensaje representante → `handoff_human` `muestras` (**Kapso ended**, sin `handoff_to_human`). Card queda hasta Resultado. Nuevo WA → 2ª card fresca.
 
 ## Ruteo comercial
@@ -229,9 +231,8 @@ Orden en `decide_route`:
 
 1. `representante` / `fason`  
 2. volumen ≥ `minBundlesDefault` (50) → `own_attention` + `coolMealsMenu`  
-3. Córdoba → operador sin menú  
-4. sin dist → `no_coverage`  
-5. con dist → `derive_to_distributor`
+3. sin dist → `no_coverage` (`sin_cobertura`)  
+4. con dist → `derive_to_distributor` (incluye Córdoba &lt;50)
 
 Umbral en **cajas** (bulto = caja). Embalaje: wraps 24 / platos 12 / postres 24 / palet 110.
 
@@ -301,7 +302,7 @@ Reset de un tester (ej. `543513053755` / `3513053755` = mismo número):
 | 3 | Minorista Mendoza &lt;50 | Mensaje dist **antes** de `sync_derived` + fila en **sheet de ese dist.** + handoff |
 | 4 | ≥50 cualquier provincia | Menú si no eligió; si ya quiere pedir → `pedido_lead`/`pedido_cliente` (sin Sheet) |
 | 4b | Cliente + pedido | `pedido_cliente` sin pedir nombre/negocio |
-| 5 | Córdoba &lt;50 | Atención humana sin menú; **no** “asesor de la zona”; pide contacto |
+| 5 | &lt;50 cualquier provincia | Dist de zona; sin gestión → `sin_cobertura` |
 | 6 | Representante SER | Contacto + columna + handoff |
 | 7 | Fasón | Contacto + columna + handoff |
 | 8 | Recontacto &lt;1 año ya calificado | Sin lead nuevo; mensaje corto |

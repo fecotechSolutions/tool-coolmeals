@@ -54,18 +54,18 @@ const OWN_ATTENTION_MENU_INSTRUCTION =
   "Muestras: ficha → request_samples → muestras (ended+sheet). Sin narrar sistema.";
 
 const COOLMEALS_OPERATOR_HANDOFF_INSTRUCTION =
-  "Cool Meals operador/representante (Córdoba o handoff comercial). SIN menú muestras. " +
+  "Cool Meals operador/representante (handoff comercial: pedir humano, volumen incerto, etc.). SIN menú muestras. " +
   "Mensaje: un asesor/representante te contacta (otro canal) + despedida. " +
   "Silencio: handoff_human status=atencion_representante + handoff_to_human.";
 
 /**
- * Motor comercial — prioridad volumen ≥50, luego Córdoba vs resto.
+ * Motor comercial — prioridad volumen ≥50, luego cobertura de dist.
  *
  * Orden:
  * 1. representante / fasón → handoff a su columna (sin mirar volumen).
- * 2. Volumen ≥ umbral (cualquier tipo/provincia, incl. lead dist. con 4 SÍ) → menú muestras/pedido.
- * 3. Volumen < umbral (o sin volumen en minorista/otro) + Córdoba → operador Cool Meals.
- * 4. Volumen < umbral + fuera de Córdoba → dist. de zona o sin_cobertura.
+ * 2. Volumen ≥ umbral (cualquier tipo/provincia) → menú muestras/pedido Cool Meals.
+ * 3. Volumen < umbral (o sin volumen en minorista/otro) → dist. de zona o sin_cobertura
+ *    (incluye Córdoba; ya no hay operador Cool Meals solo por CBA <50).
  *
  * Quiere ser distribuidor (4 SÍ): el agent marca la columna con upsert (sin handoff).
  * Después llama decide_route con volumen/zona como cualquier lead comercial.
@@ -117,7 +117,6 @@ export function decideRoute(
     settings,
   );
 
-  const isCordoba = normalize(input.province) === "cordoba";
   const highVolume = volume !== null && volume >= minBundles;
   const distNote =
     input.wantsToBeDistributor || input.clientType === "distribuidor"
@@ -139,22 +138,7 @@ export function decideRoute(
     };
   }
 
-  // <50 (o sin volumen): Córdoba → operador
-  if (isCordoba) {
-    return {
-      action: "own_attention",
-      conversationStatus: "atencion_representante",
-      outcome: "handoff_humano",
-      distributorId: null,
-      distributorName: null,
-      reason: `${input.clientType} en Córdoba con volumen < ${minBundles} (o sin volumen) — operador/representante Cool Meals.${distNote}`,
-      syncDerivedSheet: false,
-      coolMealsMenu: false,
-      agentInstruction: COOLMEALS_OPERATOR_HANDOFF_INSTRUCTION,
-    };
-  }
-
-  // Fuera de Córdoba + <50 → red de dist.
+  // <50 (o sin volumen): dist. de zona o sin cobertura (incluye Córdoba)
   if (!distributor) {
     return {
       action: "no_coverage",

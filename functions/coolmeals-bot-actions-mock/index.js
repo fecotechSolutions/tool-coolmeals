@@ -154,22 +154,9 @@ function blockDerivationAtHighVolume(input) {
   };
 }
 
-function blockDerivationInCordoba(input) {
-  const province = resolveProvince(
-    input && input.province,
-    input && input.aiSummary,
-    input && input.reason,
-    input && input.notes,
-  );
-  if (!province || normalize(province) !== "cordoba") return null;
-  return {
-    ok: false,
-    gate: "cordoba_no_distributor",
-    error: "Córdoba no se deriva a distribuidor de zona.",
-    agentInstruction:
-      "GATE Córdoba (P5). PROHIBIDO sync_derived / nombrar distribuidor / 'asesor de la zona'. " +
-      "Si volumen ≥50: menú Cool Meals. Si <50: operador Cool Meals. NUNCA dist. en CBA.",
-  };
+function blockDerivationInCordoba(_input) {
+  // Córdoba <50 ya deriva a dist. (o sin_cobertura). No bloquear.
+  return null;
 }
 
 function isExplicitSampleChoice(input) {
@@ -743,9 +730,10 @@ function gateDecideRouteQualification(input) {
       agentInstruction:
         "GATE volumen incerto / dijo que no sabe. PROHIBIDO inventar bultos ni dist/sin_cobertura. " +
         "2ª insistencia (SOLO tras la pregunta normal de volumen): UN mensaje — precios/mínimos " +
-        "los detalla un asistente comercial (Córdoba: Cool Meals SIN 'de la zona'; resto: de tu zona) + " +
+        "los detalla un asistente comercial de tu zona + " +
         "¿creés que serían a partir de 50 cajas/mes o menos de 50? + enter_waiting. NO handoff. " +
-        "Si responde ≥50 o <50: decide_route. Si YA hiciste esa 2ª y sigue sin orientar: " +
+        "Si responde ≥50 → Cool Meals (menú/Pedidos). Si <50 → dist/sin_cobertura. " +
+        "Si YA hiciste esa 2ª y sigue sin orientar: " +
         "handoff_human status=atencion_representante + handoff_to_human.",
     };
   }
@@ -822,7 +810,7 @@ function decideRoute(input) {
   );
   if (repMisclass) return repMisclass;
 
-  // Misma prioridad que producción: rep/fasón → ≥50 cualquier zona → Córdoba <50 → dist/<cobertura.
+  // Misma prioridad que producción: rep/fasón → ≥50 Cool Meals → <50 dist / sin cobertura (incluye Córdoba).
   // Quiere-ser-dist (4 SÍ): la columna va por upsert; decide_route rutea por volumen/zona (sin handoff "quiere ser dist").
   if (clientType === "representante") {
     return {
@@ -865,7 +853,6 @@ function decideRoute(input) {
   const distributor =
     DISTRIBUTORS.find((d) => d.provinces.some((p) => p === normalize(province))) || null;
 
-  const isCordoba = normalize(province) === "cordoba";
   const highVolume = estimatedVolume !== null && estimatedVolume >= MIN_BUNDLES;
   const distNote = wantsToBeDistributor
     ? " (lead dist.; columna Quiere ser distribuidor vía upsert, sin handoff)"
@@ -899,30 +886,7 @@ function decideRoute(input) {
     };
   }
 
-  // <50 (o sin volumen): Córdoba → operador Cool Meals (sin menú)
-  if (isCordoba) {
-    return {
-      ok: true,
-      action: "own_attention",
-      conversationStatus: "atencion_representante",
-      outcome: "handoff_humano",
-      distributorId: null,
-      distributorName: null,
-      reason:
-        clientType +
-        " en Córdoba con volumen < " +
-        MIN_BUNDLES +
-        " (o sin volumen) — operador Cool Meals." +
-        distNote,
-      syncDerivedSheet: false,
-      coolMealsMenu: false,
-      agentInstruction:
-        "Cool Meals operador (Córdoba <50). SIN menú muestras. PROHIBIDO decir 'asesor/distribuidor de la zona'. " +
-        contactChecklistInstruction() +
-        " Luego mensaje: un asesor Cool Meals te contacta + despedida. Silencio: handoff_human status=atencion_representante + handoff_to_human.",
-    };
-  }
-
+  // <50 (o sin volumen): dist. de zona o sin cobertura (incluye Córdoba)
   if (!distributor) {
     return {
       ok: true,

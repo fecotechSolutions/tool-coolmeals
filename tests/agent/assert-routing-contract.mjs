@@ -5,7 +5,7 @@
  * las pruebas mienten. Este check corre ANTES de los casos del agente.
  *
  * Regla ≥50: Cool Meals directo en CUALQUIER provincia.
- * <50 Córdoba → operador; <50 fuera → dist / sin cobertura.
+ * <50 cualquier provincia (incluye Córdoba) → dist / sin cobertura.
  */
 
 import { readFileSync } from "node:fs";
@@ -139,7 +139,7 @@ async function assertRuntimeContract() {
     `<50 Mendoza debía derive_to_distributor, fue ${low.action}`,
   );
 
-  // <50 Córdoba → operador sin menú
+  // <50 Córdoba → dist (mock tiene cobertura Norte SA) — ya no operador Cool Meals
   const cba = await invokeMock({
     action: "decide_route",
     certainty: "high",
@@ -150,8 +150,8 @@ async function assertRuntimeContract() {
   });
   assert(cba?.ok === true, `decide_route <50 Córdoba falló: ${JSON.stringify(cba)}`);
   assert(
-    cba.action === "own_attention" && cba.coolMealsMenu === false,
-    `<50 Córdoba debía own_attention sin menú; action=${cba.action} menu=${cba.coolMealsMenu}`,
+    cba.action === "derive_to_distributor",
+    `<50 Córdoba debía derive_to_distributor; action=${cba.action} menu=${cba.coolMealsMenu}`,
   );
 
   // Checklist: retail sin volumen → bloquea

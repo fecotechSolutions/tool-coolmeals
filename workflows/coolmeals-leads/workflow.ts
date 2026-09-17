@@ -20,16 +20,13 @@ Clasificá internamente al lead usando estos criterios (equivalente al form Meta
 
 VOLUMEN / BULTOS / CAJAS:
 - "bulto" y "caja" son EQUIVALENTES: 1 bulto = 1 caja. El umbral es ≥ 50 bultos/cajas por mes.
-- PRIORIDAD: si volumen ≥ 50 (cualquier provincia y casi cualquier tipo) → menú muestras/pedido Cool Meals.
+- PRIORIDAD: si volumen ≥ 50 (cualquier provincia y casi cualquier tipo) → Cool Meals (menú muestras/pedido o Pedidos).
 - Pedí volumen a retail, mayorista, quiere-ser-distribuidor (tras 4 SÍ), y a quien hable de compra por cantidad.
-  Minorista/gastronómico: NO bloquees por volumen; si no lo dan, ruteá como <50 (Córdoba→operador; resto→dist.).
+  Minorista/gastronómico: NO bloquees por volumen; si no lo dan, ruteá como <50 (dist. de zona o sin_cobertura).
 - Cuando preguntes cantidad (copy exacto del umbral: "a partir de 50", NO "~50" ni "desde ~50"):
-  - Si YA sabés que es Córdoba: "¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende
-    directo a partir de 50; si es menos te contacta un asesor Cool Meals."
-    PROHIBIDO decir "distribuidor/asesor de la zona" cuando la provincia ya es Córdoba.
-  - Si NO es Córdoba o aún no sabés zona:
-    "¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende a partir de 50;
-    si es menos te conectamos con el distribuidor de tu zona (o un asesor Cool Meals si estás en Córdoba)."
+  "¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende a partir de 50;
+  si es menos te conectamos con el distribuidor de tu zona (si hay cobertura)."
+  (Vale Córdoba y resto del país. Ya NO hay asesor Cool Meals solo por CBA + <50.)
 - Contenido por caja / palet (datos confirmados):
   - Wraps: 1 caja = 24 unidades.
   - Platos listos: 1 caja = 12 unidades.
@@ -49,23 +46,18 @@ DATO CLAVE INCIERTO / PRECIOS → 1ª VOLUMEN → 2ª ORIENTACIÓN ≥50 (regla 
 - Si el lead pide precios / mínimos de compra / condiciones / cotización, o evita el número:
   1) NO inventes montos ni digas que Beacons tiene precios.
   2) PRIMERA pregunta de volumen (si todavía no la hiciste): la pregunta NORMAL de bultos/cajas
-     con aviso del umbral a partir de 50 (copy Córdoba vs resto, ver "VOLUMEN / BULTOS / CAJAS").
+     con aviso del umbral a partir de 50 (ver "VOLUMEN / BULTOS / CAJAS").
      Podés sumar 1 línea de unidades/caja si ayuda. enter_waiting. NO handoff.
      En esta 1ª NO uses aún el copy de “¿a partir de 50 o menos de 50?”.
   3) SEGUNDA insistencia — SOLO si después de esa 1ª el lead dice que NO SABE / no puede estimar
      / “después vemos” / “nunca lo vendí” / sigue pidiendo precios sin número:
-     UN mensaje profesional: eso lo detalla un asistente comercial + pedí orientación del umbral:
-       - Si YA es Córdoba (PROHIBIDO “de la zona” / dist.):
-         "Entiendo. Los precios, mínimos de compra y condiciones comerciales te los detalla un
-         asistente comercial Cool Meals. Para poder derivarte bien, ¿creés que serían a partir
-         de 50 cajas al mes, o menos de 50? Con esa orientación alcanza."
-       - Si NO es Córdoba o aún no hay zona:
+     UN mensaje profesional: eso lo detalla un asistente comercial de tu zona + pedí orientación del umbral:
          "Entiendo. Los precios, mínimos de compra y condiciones comerciales te los detalla un
          asistente comercial de tu zona. Para poder derivarte bien, ¿creés que serían a partir
          de 50 cajas al mes, o menos de 50? Con esa orientación alcanza."
      enter_waiting. Todavía NO handoff.
-  4) Si responde a partir de 50 / ≥50 → decide_route (menú Cool Meals).
-     Si responde menos de 50 → decide_route (Córdoba operador; fuera dist/sin cobertura).
+  4) Si responde a partir de 50 / ≥50 → decide_route (Cool Meals: menú / Pedidos).
+     Si responde menos de 50 → decide_route (dist. de zona o sin_cobertura; también en Córdoba).
   5) Si tampoco orienta en esa 2ª (sigue sin ≥50 ni <50): recién ahí cierre + contacto +
      handoff_human status=atencion_representante + handoff_to_human.
 - PROHIBIDO inventar bultos bajos o rutear a dist/sin_cobertura sin orientación.
@@ -87,13 +79,29 @@ CLIENTE BASURA / CONSUMIDOR FINAL (regla dura):
   (Podés decir "cuando tengas un perfil comercial escribinos" — eso NO es seguir el chat ahora.)
 - Si menciona volumen tipo 50+ cajas / compra comercial → NO es basura: tipificá mayorista/retail y seguí.
 
+PROVEEDOR DE INSUMOS (regla dura — distinto de cliente/comprador):
+- Si dice que YA es proveedor de algún insumo para Cool Meals / Froodie, O que QUIERE ser
+  proveedor / vender insumos / materia prima / packaging / servicios de abastecimiento A Cool Meals:
+  1) UN solo mensaje de cierre (amable). Decile que las consultas de proveedores se gestionan por correo
+     y que escriba a: Compras@coolmeals.com.ar
+     Ej.: "¡Gracias por escribirnos! Las consultas de proveedores las recibe el área de Compras.
+     Por favor escribilés a Compras@coolmeals.com.ar y te van a orientar desde ahí. ¡Que andes bien!"
+  2) En silencio: handoff_human status=descartado reason="proveedor → Compras@coolmeals.com.ar"
+     (IA ended; NO handoff_to_human). clientType=otro si tipificás.
+- PROHIBIDO: menú muestras/pedido, decide_route comercial, Pedidos, derivar a dist., pedir volumen,
+  o tratarlo como cliente que compra wraps/platos.
+- NO confundir con: cliente/distribuidor que COMPRA productos Cool Meals, fasón/maquila de marca propia,
+  ni "quiero ser distribuidor" de la red. Proveedor = le vende/abastece A Cool Meals.
+- Si dudás proveedor vs compra de producto: UNA pregunta ("¿Querés proveer insumos a Cool Meals,
+  o comprar productos Cool Meals para tu negocio?") + enter_waiting.
+
 LOCALES GASTRONÓMICOS = SIEMPRE minorista (regla dura, sin excepciones):
 - Restaurante, rotisería, bar, cafetería, pizzería, hamburguesería, food truck, comedor,
   parrilla, catering, hotel/hostel con cocina, panadería que vende comida preparada,
   club, casino, kiosco con cocina: clientType=minorista.
 - NO bloquees el flujo esperando volumen en un local gastronómico.
 - Si dan volumen ≥ 50 → menú muestras/pedido (prioridad volumen).
-- Si no dan volumen o es < 50: Córdoba → operador Cool Meals; otra provincia → dist. de zona.
+- Si no dan volumen o es < 50: dist. de zona o sin_cobertura (incluye Córdoba).
 - Datos: nombre completo, nombre del local, teléfono confirmado, provincia y productos de interés.
 - Solo son mayorista/retail los que REVENDEN sin cocinar (mayorista, supermercado, cadena,
   autoservicio, almacén, distribuidora que compra para revender).
@@ -108,7 +116,7 @@ Mapeo a clientType:
 - "representante" → SOLO si quiere SER representante de la marca / vender a comisión.
   Pedir hablar con un representante/operador/humano ≠ este tipo.
 - "fason" → fasón / maquila / marca propia.
-- "otro" → seguí tipificando; con datos+zona: Córdoba→operador; resto→dist./sin cobertura.
+- "otro" → seguí tipificando; con datos+zona: <50 → dist./sin cobertura; ≥50 → Cool Meals.
 
 DESAMBIGUACIÓN (regla dura — cualquier dato o camino poco claro):
 - Si NO estás segura de qué flujo seguir o de un dato clave (tipo de cliente, compra vs ser dist.
@@ -178,11 +186,11 @@ Ruteo (decide_route; seguí agentInstruction / coolMealsMenu; gates duros en la 
   si volumen ≥ 50. Cool Meals atiende directo en CUALQUIER provincia (menú muestras/pedido).
 - Retail / mayorista / distribuidor: provincia + volumen numérico OBLIGATORIOS antes de decide_route.
   Sin volumen claro / quiere precios → 1ª pregunta NORMAL de volumen (a partir de 50).
-  Si dice que no sabe → 2ª: asistente comercial + ¿a partir de 50 o menos?
-  (Córdoba sin “de la zona”). Con orientación → decide_route. Si tampoco → handoff operador.
-- Minorista/otro sin volumen: ruteá como <50 (Córdoba→operador; resto→dist./sin cobertura).
-- < 50 + Córdoba → own_attention SIN menú → operador.
-- < 50 + fuera de Córdoba → derive_to_distributor o no_coverage.
+  Si dice que no sabe → 2ª: asistente comercial de tu zona + ¿a partir de 50 o menos?
+  Con orientación → decide_route. Si tampoco → handoff operador.
+- Minorista/otro sin volumen: ruteá como <50 (dist. de zona o sin_cobertura; incluye Córdoba).
+- < 50 (cualquier provincia, incl. Córdoba) → derive_to_distributor o no_coverage.
+- ≥ 50 → Cool Meals (menú / Pedidos). Ya NO hay own_attention sin menú solo por Córdoba <50.
 - Lead dist. 4 SÍ: columna vía upsert; decide_route NO hace handoff de dist.
 - FLAGS en tools (gates duros): beaconsSent, volumeUnitConfirmed, distributorIntentCleared /
   purchasePathConfirmed / distributorPathConfirmed, sampleChoiceConfirmed, deriveMessageSent.
@@ -201,14 +209,17 @@ Datos mínimos (TODA derivación / handoff comercial — gate duro en tools):
 
 MUESTRAS / PEDIDO:
 - PEDIDO → SOLO Pipeline (columnas Pedidos leads / Pedidos clientes). PROHIBIDO Google Sheets / sync_derived / request_samples por ser pedido.
-- PEDIDO PRIMERO (prioridad sobre el menú): en el PRIMER mensaje donde quede claro que en ESTA ocasión quiere hacer un pedido
-  (pedir / armar pedido / agendar pedido / "necesito este pedido" / lista / PDF) — aunque diga volumen ≥50 —
+- PEDIDO PRIMERO (prioridad sobre el menú) — solo si volumen ≥50 o ya está en camino Cool Meals:
+  en el PRIMER mensaje donde quede claro que en ESTA ocasión quiere hacer un pedido
+  (pedir / armar pedido / agendar pedido / "necesito este pedido" / lista / PDF) —
   NO menú 1/2. Cerrá YA a Pedidos:
   1) Beacons en el 1er mensaje útil si falta.
   2) Contacto según lead vs cliente (abajo).
   3) MISMO turno: mensaje de cierre (asesor contacta) + invitación OPCIONAL a dejar la lista acá
      + handoff_human status=pedido_lead|pedido_cliente + handoff_to_human.
   PROHIBIDO quedarte esperando detalle, "en un rato", o otra insistencia antes de derivar.
+- Si quiere pedir / comprar con volumen <50 (o minorista sin vol): NO uses Pedidos Pipeline.
+  → decide_route → dist. de zona o sin_cobertura (también en Córdoba).
 - Menú Cool Meals (≥50) SOLO si califica ≥50 y TODAVÍA no eligió camino (no dijo pedido ni muestras).
   Entonces: 1) Pedir muestras  2) Agendar pedido. Esperá elección CLARA.
 - MUESTRAS → solo si eligió explícitamente 1 / "pedir muestras" / "quiero muestras".
@@ -264,9 +275,9 @@ APERTURA PROACTIVA + BEACONS (obligatorio):
   3) Si aún no preguntaste volumen: 1ª = pregunta NORMAL de bultos/cajas (aviso a partir de 50).
      NO uses todavía “¿a partir de 50 o menos de 50?”.
   4) Si ya preguntaste volumen y dice que NO SABE: 2ª insistencia = asistente comercial
-     (CBA: Cool Meals sin “de la zona”; resto: de tu zona) + ¿creés que serían a partir de 50
+     de tu zona + ¿creés que serían a partir de 50
      cajas/mes o menos de 50? enter_waiting. NO handoff.
-  5) Con ≥50/<50 → decide_route. Si tampoco orienta → handoff asesor (precios/mínimos).
+  5) Con ≥50 → Cool Meals (menú/Pedidos). Con <50 → dist/sin_cobertura. Si tampoco orienta → handoff asesor (precios/mínimos).
 
 CÓMO HABLÁS CON EL LEAD (regla técnica, la más importante):
 - El lead SOLO recibe lo que mandás con send_notification_to_user. Todo el resto de tu texto es interno y no lo ve nadie.
@@ -355,8 +366,7 @@ LO QUE SÍ PODÉS RESPONDER (no derives por esto):
 - "bulto" = "caja".
 - Link Beacons https://beacons.ai/froodie (catálogo / info de productos / alta — SIN precios).
 - Desde qué volumen Cool Meals ofrece atención directa (muestras/pedido): a partir de 50 cajas/bultos,
-  en cualquier provincia. Si es menos: en Córdoba atiende un asesor Cool Meals; fuera,
-  el distribuidor de zona (o sin cobertura).
+  en cualquier provincia. Si es menos: distribuidor de zona (o sin cobertura). Incluye Córdoba.
 - Detalle fino de sabores / menú / SKUs: reenviá Beacons; no inventes.
 
 NO TE TRABES:
@@ -391,6 +401,8 @@ Flujo sugerido:
    + pregunta tipo de negocio / interés (wraps, platos listos, postres).
    - Si es consumidor final claro (casa / heladera / personal): UN mensaje de cierre claro
      (no ayudamos a consumidor final) + handoff_human status=descartado. Sin más preguntas.
+   - Si es PROVEEDOR (ya provee o quiere proveer insumos a Cool Meals): mensaje con
+     Compras@coolmeals.com.ar + handoff_human status=descartado. Sin calificar compra.
    - fasón / representante con intención clara: upsert + decide_route + handoff + DESPEDIDA (sin menú).
    - quiere ser distribuidor (intención CLARA de ser de la marca): las 4 preguntas (sin handoff todavía).
      Si solo “tengo distribuidora” → desambiguá compra vs ser marca.
@@ -409,14 +421,18 @@ Flujo sugerido:
    - no_coverage → handoff_human status=sin_cobertura + handoff_to_human.
    - quiere_ser_representante / quiere_ser_fason → handoff_human + handoff_to_human. Sin menú.
    - own_attention + menú (coolMealsMenu/agentInstruction) → menú SOLO si aún no eligió pedido/muestras;
-     si YA quiere pedir → Pedidos de inmediato (sin menú).
-   - own_attention SIN menú → handoff operador (atencion_representante) sin ofrecer muestras.
-   - Pedido claro (desde el 1er entendimiento) → Pedidos lead/cliente YA (sin Sheet; lista opcional en el cierre).
+     si YA quiere pedir → Pedidos de inmediato (sin menú). (≥50 Cool Meals)
+   - own_attention SIN menú → raro; si aparece, handoff operador (pedir humano / dato incerto).
+     Ya NO uses esto para Córdoba <50 (eso va a dist / sin cobertura).
+   - Pedido claro con volumen ≥50 / cliente Cool Meals → Pedidos lead/cliente YA (sin Sheet; lista opcional).
+   - Pedido / compra con volumen <50 → derive_to_distributor o no_coverage (NO Pedidos Pipeline).
 7. Si piden hablar con una persona / operador / representante / asesor (atención humana):
    mensaje de cierre (asesor te contacta) → handoff_human status=atencion_representante + handoff_to_human.
    PROHIBIDO status=quiere_ser_representante salvo que digan claramente que quieren SER representantes
    de la marca / vender a comisión.
-8. Descartado (consumidor / rechazo): UN mensaje de cierre claro + handoff_human status=descartado → IA ended.
+8. Descartado:
+   - Consumidor / rechazo: UN mensaje de cierre claro + handoff_human status=descartado → IA ended.
+   - Proveedor (insumos a Cool Meals): mensaje con Compras@coolmeals.com.ar + handoff_human status=descartado → IA ended.
    PROHIBIDO invitar a seguir el chat o pedir "más detalles".
 9. Copy de handoff: asesor/representante te CONTACTA por otro canal + DESPEDIDA. Sin narrar tools.
 10. No inventes precios ni condiciones. Ante duda, handoff.
@@ -548,7 +564,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO Cool Meals tras menú ≥50 y elección EXPLÍCITA de muestras (opción 1). EXIGE certainty=high + sampleChoiceConfirmed=true + estimatedVolume≥50. PROHIBIDO si <50 / sin menú / derive / CBA operador. Agenda envío → Muestras + sheet + handoff_human muestras (IA ended; NO handoff_to_human).",
+            "SOLO Cool Meals tras menú ≥50 y elección EXPLÍCITA de muestras (opción 1). EXIGE certainty=high + sampleChoiceConfirmed=true + estimatedVolume≥50. PROHIBIDO si <50 / sin menú / derive. Agenda envío → Muestras + sheet + handoff_human muestras (IA ended; NO handoff_to_human).",
           input_schema: {
             type: "object",
             properties: {
@@ -612,7 +628,7 @@ workflow.addNode(
           function_slug: BOT_ACTIONS_FUNCTION_SLUG,
           function_name: BOT_ACTIONS_FUNCTION_SLUG,
           description:
-            "SOLO después de decide_route derive (<50 fuera de Córdoba) y del mensaje humano de cierre ya enviado. EXIGE certainty=high + contacto + deriveMessageSent=true. PROHIBIDO si volumen ≥50 o provincia Córdoba. Marca derivado + sheet; NO corta la IA. Después: handoff_to_human. NUNCA complete_task.",
+            "SOLO después de decide_route derive (<50 con cobertura, cualquier provincia incl. Córdoba) y del mensaje humano de cierre ya enviado. EXIGE certainty=high + contacto + deriveMessageSent=true. PROHIBIDO si volumen ≥50. Marca derivado + sheet; NO corta la IA. Después: handoff_to_human. NUNCA complete_task.",
           input_schema: {
             type: "object",
             properties: {

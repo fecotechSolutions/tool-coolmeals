@@ -36,7 +36,7 @@ Antes de cerrar: nombre + negocio + teléfono confirmado
 
 1. El bot hace las **4 preguntas** (congelados, depósito, logística, estructura).  
 2. **4 SÍ** → la card va a **Quiere ser distribuidor**, pero el bot **NO se pausa** (no hay handoff todavía).  
-3. Sigue: zona + volumen → ruteo → **ahí sí** handoff según el caso (≥50 menú, Córdoba &lt;50 asesor, fuera dist/sin cobertura).  
+3. Sigue: zona + volumen → ruteo → **ahí sí** handoff según el caso (≥50 menú, &lt;50 dist/sin cobertura también en Córdoba).  
 4. Si falta alguna de las 4 → no queda en esa columna; tipifica compra o Descartado.
 
 **En una frase:** los 4 SÍ solo marcan la columna; el handoff viene después, con el ruteo comercial.
@@ -94,12 +94,12 @@ Derivado / Muestras / Atención / Quiere ser… **no** se auto-descartan: cierra
 | Quiere ser **distribuidor** (solo 4 SÍ) | **No** | Solo marca columna |
 | Dist 4 SÍ → luego ≥50 / CBA &lt;50 / fuera | Sí | Al cerrar ese ruteo |
 | Volumen / dato clave inseguro | Sí → **Atención humana** | Lead no sabe cuánto / necesita más data; no inventar &lt;50 ni sin_cobertura |
-| **Atención humana** | Sí | Córdoba &lt;50, “hablar con alguien”, 2ª vez precio/dato desconocido |
+| **Atención humana** | Sí | “hablar con alguien”, 2ª vez precio/dato desconocido, rep/fasón |
 | **Pedidos (lead / cliente)** | Sí | Intención de pedir (menú 2 / lista / “quiero pedido” / cliente). **Sin Sheet.** Cliente: solo WA. Lead: pide datos en cierre pero igual deriva. Copy: asesor confirma stock/logística + lista opcional |
 | **Derivado** | Sí | Tras el **mensaje** de cierre + registro |
 | **Sin cobertura** | Sí | Al avisar sin zona |
 | **Muestras** | **No** (`ended`) | Tras agendar muestras — card sigue hasta Resultado |
-| **Descartado** (consumidor) | No `handoff_to_human` | IA a **ended** directo |
+| **Descartado** (consumidor **o proveedor**) | No `handoff_to_human` | IA **ended**. Proveedor: mensaje con `Compras@coolmeals.com.ar` |
 | Nuevo / IA atendiendo | No | Bot sigue |
 
 ### B) Cuándo se **cierra en Kapso** (execution → `ended`)
@@ -109,7 +109,7 @@ Derivado / Muestras / Atención / Quiere ser… **no** se auto-descartan: cierra
 | Operador elige **Resultado** | Sí |
 | Auto Sin cobertura ~**5 días** | Sí (`ended`) + card oculta; **no** Descartado |
 | Auto Esperando respuesta ~**24 h** | Sí (+ **Descartado**) |
-| Bot Descartado (consumidor) | Sí |
+| Bot Descartado (consumidor o proveedor) | Sí |
 | Bot **Muestras** (agendadas) | Sí — card sigue en **Muestras** hasta Resultado |
 | Solo handoff (Atención, Derivado, Quiere ser rep/fasón…) | **No** — queda en `handoff` hasta Resultado (o auto si aplica) |
 | Execution trabada en `running` ≥3 min | Sí (watchdog) |

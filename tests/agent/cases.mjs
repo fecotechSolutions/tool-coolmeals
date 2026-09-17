@@ -268,7 +268,7 @@ export const cases = [
   // --- Chats “vivos”: aperturas distintas como leads reales (correr con --case vivo-) ---
   {
     id: "vivo-precio-hotel-cordoba",
-    title: "Arranca pidiendo precio → hotel Córdoba bajo volumen → operador",
+    title: "Arranca pidiendo precio → hotel Córdoba bajo volumen → dist/sin_cobertura",
     turns: [
       "Hola, cuánto sale la caja de wraps?",
       "Es para el hotel, estamos en Córdoba capital",

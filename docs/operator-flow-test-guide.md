@@ -27,11 +27,12 @@ Entornos DEV/PROD: [`environments.md`](./environments.md).
 
 | Tipo | Resultado típico |
 |------|------------------|
-| Rep / fasón (SER) | Su columna + handoff; sin menú |
+| Proveedor insumos | Mensaje con `Compras@coolmeals.com.ar` + `descartado` (ended) |
+| Fasón / representante (SER) | Su columna + handoff; sin menú |
 | Dist 4 SÍ | Columna sin handoff → zona/volumen → contacto → ruteo |
 | ≥50 cualquier provincia | Menú Cool Meals |
-| Córdoba &lt;50 | Operador sin menú (no “asesor de la zona”) |
-| Fuera CBA &lt;50 | Dist (→ **sheet de ese dist.**) o sin cobertura → auto cierre ~**5 días** (oculto, no Descartado) |
+| Córdoba &lt;50 | Dist de zona / sin cobertura (igual que resto del país) |
+| &lt;50 cualquier provincia (incl. CBA) | Dist (→ **sheet de ese dist.**) o sin cobertura si no hay gestión → auto cierre ~**5 días** (oculto, no Descartado) |
 | Volumen / precios inciertos | 1ª insistir (a partir de 50); 2ª → operador; no inventar bultos |
 | Consumidor final | Descartado |
 
@@ -113,7 +114,7 @@ Hola, quiero ser distribuidor en Mendoza, tengo depósito y logística de congel
 2. Si respondés **sí a las 4**:
    - **Pipeline** → columna **Quiere ser distribuidor**.
    - El bot **sigue** (zona + volumen). **Todavía no** hay handoff Kapso.
-   - Después del ruteo (≥50 / Córdoba &lt;50 / fuera) → pide **contacto** (nombre + negocio + tel) → ahí sí handoff según el caso.
+   - Después del ruteo (≥50 Cool Meals / &lt;50 dist o sin cobertura) → pide **contacto** (nombre + negocio + tel) → ahí sí handoff según el caso.
 3. Si **falta alguna** de las 4:
    - No va a la columna Quiere ser distribuidor.
    - Tipifica camino de compra o Descartado si rechaza.
@@ -342,7 +343,7 @@ Hola, soy mayorista en Mendoza, compro unos 80 bultos por mes
 
 ---
 
-### 6.11 — Contacto obligatorio + copy Córdoba
+### 6.11 — Contacto obligatorio + Córdoba &lt;50 → dist / sin cobertura
 
 **Mensaje de prueba:**
 
@@ -354,12 +355,12 @@ Cuando pida datos, respondé nombre + negocio. Si confirma el mismo WA, está bi
 
 **Qué tiene que pasar**
 
-1. **Atención humana** (Córdoba &lt;50, sin menú).  
+1. Ruteo **&lt;50** → **dist. de zona** (si hay cobertura) o **sin_cobertura** (si no hay gestión).  
 2. Pide nombre completo + negocio + “¿este teléfono te sirve?”.  
-3. **No** dice “asesor/distribuidor de la zona”.  
+3. Si hay dist: nombra al dist. + sync_derived. Si no hay gestión: copy sin cobertura.  
 4. Mensaje de cierre + handoff. **No** se queda mudo después del nombre.
 
-**No debe:** cerrar solo con el nombre del perfil de WhatsApp.
+**No debe:** ir a operador Cool Meals solo por ser Córdoba &lt;50; ni cerrar solo con el nombre del perfil de WhatsApp.
 
 ---
 
@@ -453,7 +454,7 @@ Mandale a soporte / tech:
 | 7 | Fasón | ☐ | ☐ | Atención comercial ☐ | ☐ | |
 | E1 | ≥50 fuera CBA → menú Cool Meals | ☐ | ☐ | Atención ☐ | ☐ | |
 | E2 | Pedido Cool Meals | ☐ | Pedidos lead/cliente ☐ | — | ☐ | Sin Sheet |
-| E3 | Contacto + copy CBA | ☐ | Atención humana ☐ | — | ☐ | |
+| E3 | Contacto + CBA &lt;50 → dist/sin cob. | ☐ | Dist ☐ / Sin cob. ☐ | — | ☐ | |
 | E4 | Volumen incerto | ☐ | Atención humana ☐ | — | ☐ | |
 | D | Dashboard: 2 cards mismo tel = 1 KPI | ☐ | — | — | — | |
 
