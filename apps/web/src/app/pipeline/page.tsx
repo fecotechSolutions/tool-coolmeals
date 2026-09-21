@@ -636,11 +636,20 @@ export default function PipelinePage() {
                           ) : null}
 
                           <div className="pipeline-card-foot">
-                            <span>
-                              {new Date(card.updatedAt).toLocaleDateString(
-                                "es-AR",
-                              )}
-                            </span>
+                            <div className="pipeline-card-dates">
+                              <span title="Primer contacto">
+                                Inicio{" "}
+                                {new Date(card.createdAt).toLocaleDateString(
+                                  "es-AR",
+                                )}
+                              </span>
+                              <span title="Última actividad">
+                                Última{" "}
+                                {new Date(card.updatedAt).toLocaleDateString(
+                                  "es-AR",
+                                )}
+                              </span>
+                            </div>
                             <div className="pipeline-card-actions">
                               <select
                                 aria-label={`Resultado de ${card.name}`}

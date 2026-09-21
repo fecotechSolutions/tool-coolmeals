@@ -987,9 +987,18 @@ table.data tr:hover td {
   border-top: 1px solid var(--line);
 }
 
-.pipeline-card-foot span {
+.pipeline-card-dates {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.pipeline-card-dates span,
+.pipeline-card-foot > span {
   font-size: 0.7rem;
   color: var(--ink-muted);
+  line-height: 1.25;
 }
 
 .pipeline-card-actions {
