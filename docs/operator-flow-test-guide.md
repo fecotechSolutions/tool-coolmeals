@@ -88,7 +88,7 @@ Hacé los casos **en este orden**. Cada uno es independiente; tachá al completa
 | 7 | Fasón / marca propia | §6.8 |
 | Extra | Mayorista ≥50 **fuera** de Córdoba → menú Cool Meals | CSV C11 |
 | Extra | Pedido (opción del menú Cool Meals) | §6.10 |
-| Extra | Contacto obligatorio + Córdoba copy | §6.11 |
+| Extra | Contacto obligatorio + Córdoba &lt;50 → dist/sin cob. | §6.11 |
 | Extra | Volumen incerto → operador | §6.12 |
 | Cierre | Dashboard / métricas | §7 |
 

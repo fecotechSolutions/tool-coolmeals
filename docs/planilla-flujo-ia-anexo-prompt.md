@@ -1,7 +1,7 @@
 # Anexo: planilla + prompt + Pipeline
 
 Compañero de [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
-Actualizado: **15 sep 2026** (Pedidos lead/cliente sin Sheet; gates + sheets por dist. + abandono 20/24/Descartado + sin cobertura 5d oculto).
+Actualizado: **21 sep 2026** (Córdoba &lt;50 = dist/sin_cobertura; ≥50 Cool Meals; Pedidos lead/cliente sin Sheet; proveedor→Compras).
 
 ---
 
@@ -45,7 +45,7 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | Situación | `conversation.status` | Tools |
 |---|---|---|
 | Calificando | `ia_atendiendo` | `upsert_conversation` |
-| ≥50 menú / operador CBA | `atencion_representante` **o** `pedido_*` / `muestras` | `decide_route` → menú **o** Pedidos si ya quiere pedir |
+| ≥50 Cool Meals | `atencion_representante` **o** `pedido_*` / `muestras` | `decide_route` → menú **o** Pedidos si ya quiere pedir |
 | Pedido lead | `pedido_lead` | `handoff_human` + `handoff_to_human` (sin Sheet; gate contacto no bloquea) |
 | Pedido cliente | `pedido_cliente` | igual; skip contacto (alcanza WA) |
 | Derivado | `derivado_distribuidor` | mensaje → `sync_derived` → `handoff_to_human` |
@@ -79,9 +79,8 @@ flowchart TD
   V1 -->|2ª sin número| H2[Operador SIN menú]
   R -->|volumen incerto ya insistido| H2
   R -->|≥50 cualquier provincia| M{Muestras o pedido?}
-  R -->|<50 Córdoba| CT2[Contacto] --> H2
-  R -->|<50 fuera + dist| CT3[Contacto] --> Dist[Mensaje dist → sync_derived → handoff]
-  R -->|<50 fuera sin dist| CT4[Contacto] --> SC[sin_cobertura → oculto 5d]
+  R -->|<50 + dist| CT3[Contacto] --> Dist[Mensaje dist → sync_derived → handoff]
+  R -->|<50 sin dist| CT4[Contacto] --> SC[sin_cobertura → oculto 5d]
   M -->|Muestras| MS[Datos + request_samples + Kapso ended]
   M -->|Pedido / ya quiere pedir| PD[pedido_lead o pedido_cliente sin Sheet]
   PD -->|Cliente| PC[Sin pedir datos → Pedidos clientes]
@@ -96,16 +95,10 @@ flowchart TD
 > ¡Hola! Gracias por escribir a Froodie / Cool Meals. Catálogo e info: https://beacons.ai/froodie  
 > ¿Qué tipo de negocio tenés y te interesan wraps, platos listos o postres congelados?
 
-**Volumen (1ª pregunta — siempre esta primero)** — Córdoba  
-> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende directo a partir de 50; si es menos te contacta un asesor Cool Meals.
+**Volumen (1ª pregunta — siempre esta primero)**  
+> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende a partir de 50; si es menos te conectamos con el distribuidor de tu zona (o te avisamos si aún no hay cobertura).
 
-**Volumen (1ª pregunta)** — fuera CBA / zona no clara  
-> ¿Cuántos bultos/cajas por mes aproximadamente? Cool Meals atiende a partir de 50; si es menos te conectamos con el distribuidor de tu zona (o un asesor Cool Meals si estás en Córdoba).
-
-**2ª insistencia — SOLO si dijo que no sabe** — Córdoba  
-> Entiendo. Los precios, mínimos de compra y condiciones comerciales te los detalla un asistente comercial Cool Meals. Para poder derivarte bien, ¿creés que serían a partir de 50 cajas al mes, o menos de 50? Con esa orientación alcanza.
-
-**2ª insistencia — SOLO si dijo que no sabe** — fuera CBA  
+**2ª insistencia — SOLO si dijo que no sabe**  
 > Entiendo. Los precios, mínimos de compra y condiciones comerciales te los detalla un asistente comercial de tu zona. Para poder derivarte bien, ¿creés que serían a partir de 50 cajas al mes, o menos de 50? Con esa orientación alcanza.
 
 **Sin orientar tampoco (tras la 2ª) → operador**  

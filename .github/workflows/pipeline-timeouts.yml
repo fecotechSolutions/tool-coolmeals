@@ -1,0 +1,46 @@
+# Pipeline timeouts: recontacto 20h + escalate + finalize.
+# Vercel Hobby = 1 cron/día; este workflow refuerza el mismo endpoint 1×/día.
+name: Pipeline timeouts
+
+on:
+  schedule:
+    # 14:00 UTC ≈ 11:00 Argentina
+    - cron: "0 14 * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call pipeline-timeouts
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing CRON_SECRET repo secret" >&2
+            exit 1
+          fi
+          curl -sS -f --connect-timeout 10 --max-time 90 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "https://tool-coolmeals-api-ten.vercel.app/api/cron/pipeline-timeouts" \
+            | tee /tmp/pipeline-timeouts.json
+          python3 - <<'PY'
+          import json, sys
+          data = json.load(open("/tmp/pipeline-timeouts.json"))
+          if "error" in data:
+              print(data)
+              sys.exit(1)
+          payload = data.get("data", data)
+          nudged = (payload.get("nudged") or {})
+          escalated = (payload.get("escalated") or {})
+          finalized = (payload.get("finalized") or {})
+          print(
+              "ok nudged={}/{} escalated={}/{} finalized={}/{}".format(
+                  nudged.get("sent"), nudged.get("scanned"),
+                  escalated.get("moved"), escalated.get("scanned"),
+                  finalized.get("finalized"), finalized.get("scanned"),
+              )
+          )
+          PY

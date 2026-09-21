@@ -24,9 +24,8 @@ Antes de cerrar: nombre + negocio + teléfono confirmado
 | Situación | Qué pasa | Qué ves en Pipeline |
 |-----------|----------|---------------------|
 | Volumen **a partir de 50** cajas (cualquier provincia) | Si aún no eligió: menú muestras/pedido. Si **ya** quiere pedir → Pedidos directo | **Muestras** (opción 1) o **Pedidos** lead/cliente |
-| **Córdoba** y **&lt; 50** (o sin volumen tras insistir) | Asesor Cool Meals (sin menú). **No** dice “asesor/distribuidor de la zona” | **Atención humana** |
-| **Otra provincia** y **&lt; 50** | Distribuidor de zona | **Derivado** (+ hashtag naranja) |
-| Sin distribuidor en la zona | Aviso sin cobertura | **Sin cobertura** → ~**5 días** desaparece + ended (no Descartado) |
+| **&lt; 50** (cualquier provincia, **incluye Córdoba**) | Distribuidor de zona | **Derivado** (+ hashtag naranja) |
+| Sin distribuidor / sin gestión en la zona | Aviso sin cobertura | **Sin cobertura** → ~**5 días** desaparece + ended (no Descartado) |
 | Volumen / precios inciertos | **1ª:** volumen normal. **Si no sabe → 2ª:** ¿a partir de 50 o menos? Si tampoco → operador | Según orientación / **Atención humana** |
 | Quiere **ser** rep / fasón | Cierre rápido + **handoff** | Columna correspondiente |
 | Quiere **ser** distribuidor | Ver §1b | Columna + luego cierre por vol/zona |
@@ -92,7 +91,7 @@ Derivado / Muestras / Atención / Quiere ser… **no** se auto-descartan: cierra
 | Quiere ser **representante** | Sí | Al confirmar *ser* rep (después del contacto) |
 | Quiere ser **fasón** | Sí | Al confirmar fasón (después del contacto) |
 | Quiere ser **distribuidor** (solo 4 SÍ) | **No** | Solo marca columna |
-| Dist 4 SÍ → luego ≥50 / CBA &lt;50 / fuera | Sí | Al cerrar ese ruteo |
+| Dist 4 SÍ → luego ≥50 / &lt;50 (cualquier provincia) | Sí | Al cerrar ese ruteo |
 | Volumen / dato clave inseguro | Sí → **Atención humana** | Lead no sabe cuánto / necesita más data; no inventar &lt;50 ni sin_cobertura |
 | **Atención humana** | Sí | “hablar con alguien”, 2ª vez precio/dato desconocido, rep/fasón |
 | **Pedidos (lead / cliente)** | Sí | Intención de pedir (menú 2 / lista / “quiero pedido” / cliente). **Sin Sheet.** Cliente: solo WA. Lead: pide datos en cierre pero igual deriva. Copy: asesor confirma stock/logística + lista opcional |

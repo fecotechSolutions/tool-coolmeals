@@ -98,7 +98,7 @@ Dos proyectos del mismo repo:
    Build: `npm run build -w @coolmeals/shared && npm run build:api:handler`  
    Antes de deploy CLI: `npm run build:api:handler`
 
-**Cron / Hobby:** Vercel Hobby solo permite crons **1×/día**. Timeouts de Pipeline van por el cron diario de Vercel. El wipe de sandbox **no** debe quedar en schedule: ver [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) §7.
+**Cron / timeouts:** el recontacto 20h + escalate + finalize corre vía GitHub Actions [`.github/workflows/pipeline-timeouts.yml`](.github/workflows/pipeline-timeouts.yml) (1×/día ~11:00 ART → `/api/cron/pipeline-timeouts`). También está declarado en `vercel.api.json` (Hobby 1×/día). El wipe de sandbox **no** debe quedar en schedule: ver [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) §7.
 
 ## Seguridad
 

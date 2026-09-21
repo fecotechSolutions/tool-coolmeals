@@ -31,7 +31,7 @@ CASO_PRUEBA,1,C06,Fasón,fason,—,—,"Quiero marca propia / fasón",Cierre + h
 CASO_PRUEBA,2,C07,Dist 4 SÍ luego ≥50 CBA,distribuidor,Córdoba,60,4 SÍ + CBA + 60 cajas,Menú muestras/pedido,upsert columna + decide_route menú,quiere_ser_distribuidor → atencion/muestras,—,Sin handoff solo por 4 SÍ
 CASO_PRUEBA,2,C08,Dist 4 SÍ luego <50 Mendoza,distribuidor,Mendoza,20,4 SÍ + Mendoza 20,Derivar a dist zona,upsert + decide_route derive,quiere_ser_distribuidor → derivado_distribuidor,—,
 CASO_PRUEBA,2,C09,Córdoba mayorista ≥50,mayorista,Córdoba,60,~60 bultos Córdoba,Menú muestras/pedido,decide_route coolMealsMenu,atencion_representante → muestras|pedido,—,
-CASO_PRUEBA,2,C10,Córdoba mayorista <50,mayorista,Córdoba,20,~20 bultos Córdoba,Operador SIN menú,decide_route + handoff,atencion_representante,—,
+CASO_PRUEBA,2,C10,Córdoba mayorista <50,mayorista,Córdoba,20,~20 bultos Córdoba,Dist de zona o sin_cobertura,decide_route → derive o no_coverage,derivado_distribuidor|sin_cobertura,—,"Misma regla que resto del país; ya no operador solo por CBA"
 CASO_PRUEBA,2,C11,Mendoza ≥50 (fuera CBA),mayorista,Mendoza,120,~120 cajas Mendoza,Menú muestras/pedido (volumen gana),decide_route coolMealsMenu,atencion_representante → muestras|pedido,—,"ANTES: iba a dist; AHORA menú Cool Meals"
 CASO_PRUEBA,2,C12,Mendoza <50 con dist,minorista,Mendoza,null o <50,Rotisería Mendoza,Contacto + mensaje dist + despedida,mensaje → sync_derived → handoff,derivado_distribuidor,—,Sin request_samples Cool Meals; no hang post-contacto
 CASO_PRUEBA,2,C13,Provincia sin cobertura,mayorista,La Rioja,20,Zona sin dist,Sin cobertura + aviso,handoff sin_cobertura,sin_cobertura,→ auto oculto ~5d (no Descartado),
@@ -55,7 +55,7 @@ UI,—,U01,Menú lateral web,—,—,—,—,Visibles: Dashboard Pipeline Distri
 UI,—,U02,URLs y entornos,—,—,—,—,—,—,—,—,"Web https://tool-coolmeals-web.vercel.app | API https://tool-coolmeals-api-ten.vercel.app | WA prod +54 9 351 549-5440 | DEV=localhost+sandbox Kapso | docs/environments.md | Team Vercel FEcotech | Deploy CLI"
 CASO_PRUEBA,4,C22,Recontacto <1 año ya calificado (no muestras),—,—,—,Mismo WA tras handoff (Atención/Derivado/etc.),Mensaje corto ya en proceso,upsert recontactLocked,misma card,—,No métrica nueva
 CASO_PRUEBA,4,C22b,Recontacto tras Muestras,—,—,—,Mismo WA con card en Muestras (IA ended),Tipifica de cero,upsert 2ª card (spawnedAfterMuestras),muestras (1ª) + nueva,—,Pipeline rojo 1/2; Dashboard cuenta solo la 1ª
-CASO_PRUEBA,4,C23,Contacto + copy Córdoba,mayorista,Córdoba,20,~20 bultos CBA,Pide nombre/negocio/tel; NO dice asesor de la zona,handoff atencion_representante,atencion_representante,—,No cerrar solo con perfil WA
+CASO_PRUEBA,4,C23,Contacto + Córdoba <50,mayorista,Córdoba,20,~20 bultos CBA,Pide nombre/negocio/tel; dist de zona o sin_cobertura,decide_route derive|no_coverage,derivado_distribuidor|sin_cobertura,—,"Ya no operador solo por CBA; no cerrar solo con perfil WA"
 CASO_PRUEBA,4,C24,Volumen incerto Mendoza,mayorista,Mendoza,incierto,~20 pero no sé / precios,1ª: insistir aproximado (a partir de 50); 2ª sin nº → operador no dist,2ª: handoff atencion_representante,atencion_representante,—,No inventar bultos; no dist en 1ª negativa
 CASO_PRUEBA,4,C25,Mismo tel 351 vs 54351,—,—,—,Cards 3513053755 y 543513053755,Pipeline rojo 1/2,canonicalizeArPhone,ambas cards,—,KPI = 1 (card más antigua)
 UI,—,U03,Cards mismo teléfono Pipeline,—,—,—,—,Rojas + badge 1 (primera) / 2 (segunda) por teléfono canónico,—,—,—,Cerrar ambas con Resultado. 351… y 54351… = mismo.

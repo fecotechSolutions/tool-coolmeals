@@ -2,7 +2,7 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: **15 sep 2026** (Pedidos lead/cliente sin Sheet; abandono 20h→24h→Descartado; sheets **por distribuidor**; sin cobertura 5 días sin Descartado).
+Actualizado: **21 sep 2026** (Córdoba &lt;50 = dist/sin_cobertura; ≥50 Cool Meals; Pedidos lead/cliente sin Sheet; abandono 20h→24h→Descartado; sheets **por distribuidor**; sin cobertura 5 días sin Descartado).
 
 > **One-pager para operadores:** [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md)  
 > **Entornos DEV/PROD:** [`environments.md`](./environments.md)  
@@ -93,7 +93,7 @@ Si hay **2+ cards** con el mismo número canónico:
 |-------|-----------|
 | Quiere ser representante / fasón | Sí, al confirmar |
 | Quiere ser distribuidor (solo 4 SÍ) | **No** — solo columna |
-| Dist → ruteo posterior (≥50 / CBA / fuera) | Sí, al cerrar ese camino (después del contacto) |
+| Dist → ruteo posterior (≥50 / &lt;50 dist o sin cobertura) | Sí, al cerrar ese camino (después del contacto) |
 | Volumen / precios inciertos | 1ª insistir (a partir de 50); 2ª → Atención humana |
 | Atención humana / Derivado / Sin cobertura / pedido | Sí |
 | Muestras (agendadas) | **No** — Kapso `ended`; card sigue hasta Resultado |
@@ -268,7 +268,7 @@ Resumen rápido:
 | 3 | Minorista Mendoza | Rotisería Mendoza poco | **Derivado** |
 | 4 | ≥50 Córdoba | Mayorista CBA ~60 | Menú muestras/pedido |
 | 5 | ≥50 Mendoza | Mayorista Mendoza ~80 | Menú Cool Meals (volumen gana) |
-| 6 | &lt;50 Córdoba | Mayorista CBA ~20 | **Atención humana** sin menú |
+| 6 | &lt;50 Córdoba | Mayorista CBA ~20 | Dist de zona o sin cobertura (igual que resto del país) |
 | 7 | Representante SER | Quiero ser representante… | Columna rep |
 | 8 | Hablar con humano | Quiero hablar con un representante | **Atención humana** (no columna rep) |
 | 9 | Consumidor | 1 wrap a domicilio | **Descartado** |
