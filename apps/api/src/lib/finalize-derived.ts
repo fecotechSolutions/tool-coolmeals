@@ -10,7 +10,7 @@ import { getSupabase } from "./supabase";
 import type { DbConversation } from "./mappers";
 
 const DEFAULT_NUDGE =
-  "Hola! ¿Seguís por acá? Quedamos atentos a tu respuesta para continuar. Si no recibimos novedades, vamos a cerrar esta conversación.";
+  "Hola! ¿Seguís por acá? Quedamos atentos a tu respuesta para continuar.";
 
 const STUCK_RECOVERY_MESSAGE =
   "Disculpá — tuve un problema técnico y no pude responder. ¿Me repetís tu último mensaje?";
