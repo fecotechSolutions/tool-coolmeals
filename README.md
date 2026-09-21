@@ -92,13 +92,17 @@ Dos proyectos del mismo repo:
 1. **tool-coolmeals-web** — `vercel.web.json` desde la raíz  
    Env: `NEXT_PUBLIC_*` (+ `NEXT_PUBLIC_API_URL` = URL de la API)
 
-2. **tool-coolmeals-api** — `vercel.api.json` desde la **raíz del repo** (`api/index.ts` → `api/handler.js`)  
-   Env: `SUPABASE_*`, `CORS_ORIGINS` (incluye la URL de la web)  
+2. **tool-coolmeals-api** — `vercel.json` (= `vercel.api.json`) desde la **raíz del repo** (`api/handler.js` + `api/cron/pipeline-timeouts.js`)  
+   Env: `SUPABASE_*`, `CORS_ORIGINS`, `CRON_SECRET`, `ABANDONED_NUDGE_HOURS`  
    **Root Directory** en Vercel = `.` (vacío / repo root), **no** `apps/api`  
    Build: `npm run build -w @coolmeals/shared && npm run build:api:handler`  
-   Antes de deploy CLI: `npm run build:api:handler`
+   Antes de deploy CLI: `npm run build:api:handler`  
+   Cron Vercel exige archivo `vercel.json` en el deploy (Hobby: 1×/día). Web siempre con `--local-config vercel.web.json`.
 
-**Cron / timeouts:** el recontacto 20h + escalate + finalize corre vía GitHub Actions [`.github/workflows/pipeline-timeouts.yml`](.github/workflows/pipeline-timeouts.yml) (1×/día ~11:00 ART → `/api/cron/pipeline-timeouts`). También está declarado en `vercel.api.json` (Hobby 1×/día). El wipe de sandbox **no** debe quedar en schedule: ver [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) §7.
+**Cron / timeouts:** recontacto 20h + escalate + finalize → `/api/cron/pipeline-timeouts`  
+- Vercel Cron: `0 14 * * *` (~11:00 ART)  
+- Backup GitHub Actions: [`.github/workflows/pipeline-timeouts.yml`](.github/workflows/pipeline-timeouts.yml)  
+El wipe de sandbox **no** debe quedar en schedule: ver [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) §7.
 
 ## Seguridad
 
