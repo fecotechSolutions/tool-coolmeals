@@ -307,6 +307,38 @@ function requireHighCertainty(input, contextHint) {
   return disambiguationBlock(contextHint);
 }
 
+/** Extrae bultos/cajas de texto libre ("50 cajas", "50 o 100", "a partir de 50"). */
+function inferVolumeFromText(text) {
+  const blob = normalize(text || "");
+  if (!blob) return null;
+  let m = blob.match(
+    /\b(\d{1,4})\s*(o|\/|-|a)\s*(\d{1,4})\s*(cajas?|bultos?)\b/,
+  );
+  if (m) {
+    const a = Number(m[1]);
+    const b = Number(m[3]);
+    if (!Number.isNaN(a) && !Number.isNaN(b)) return Math.min(a, b);
+  }
+  m = blob.match(
+    /\b(a partir de|desde|unas?|alrededor de|aprox(?:imadamente)?)\s*(\d{1,4})\s*(cajas?|bultos?)\b/,
+  );
+  if (m) {
+    const n = Number(m[2]);
+    return Number.isNaN(n) ? null : n;
+  }
+  m = blob.match(/\b(\d{1,4})\s*(cajas?|bultos?)(?:\s*(\/|al)\s*mes)?\b/);
+  if (m) {
+    const n = Number(m[1]);
+    return Number.isNaN(n) ? null : n;
+  }
+  m = blob.match(/\binversi[oó]n\s*(de\s*)?(\d{1,4})\b/);
+  if (m) {
+    const n = Number(m[2]);
+    return Number.isNaN(n) ? null : n;
+  }
+  return null;
+}
+
 function resolveEstimatedVolume(input, conv) {
   if (input && input.estimatedVolume !== undefined && input.estimatedVolume !== null) {
     return Number(input.estimatedVolume);
@@ -314,7 +346,73 @@ function resolveEstimatedVolume(input, conv) {
   if (conv && conv.estimated_volume !== undefined && conv.estimated_volume !== null) {
     return Number(conv.estimated_volume);
   }
+  const blob = [
+    input && input.lastMessage,
+    input && input.aiSummary,
+    input && input.reason,
+    input && input.notes,
+    conv && conv.ai_summary,
+    conv && conv.notes,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const inferred = inferVolumeFromText(blob);
+  if (inferred !== null) return inferred;
   return null;
+}
+
+function isTruthyToolFlag(v) {
+  if (v === true) return true;
+  const n = normalize(v);
+  return n === "true" || n === "1" || n === "yes" || n === "si" || n === "sí";
+}
+
+/**
+ * Escape anti-loop precios (caso Jorge): handoff a operador sin trabarse en contacto.
+ * Flags explícitos o copy de cierre tras 2 insistencias sin número.
+ */
+function isPriceLoopEscape(input) {
+  if (!input) return false;
+  if (
+    isTruthyToolFlag(input.priceLoopEscape) ||
+    isTruthyToolFlag(input.volumeInsisted) ||
+    isTruthyToolFlag(input.priceInsisted)
+  ) {
+    return true;
+  }
+  const blob = normalize(
+    [input.reason, input.notes, input.aiSummary, input.lastMessage]
+      .filter(Boolean)
+      .join(" "),
+  );
+  if (!blob) return false;
+  if (
+    /(anti[- ]?loop|price[- ]?loop|escape[- ]?precios|volumen sin orient|sigue sin (n[uú]mero|orientar)|2a? insist|segunda insist)/.test(
+      blob,
+    )
+  ) {
+    return true;
+  }
+  return (
+    /(precio|cotiz|m[ií]nimo|condiciones comerciales|ejemplo de (lo que )?vale|inversi[oó]n|margen)/.test(
+      blob,
+    ) &&
+    /(no (se|sabe|puedo)|nunca (lo )?vend|sin (volumen|n[uú]mero)|despu[eé]s vemos|atencion_representante|operador)/.test(
+      blob,
+    )
+  );
+}
+
+function looksLikePriceAsk(input) {
+  if (!input) return false;
+  const blob = normalize(
+    [input.reason, input.notes, input.aiSummary, input.lastMessage]
+      .filter(Boolean)
+      .join(" "),
+  );
+  return /(precio|cotiz|m[ií]nimo|condiciones comerciales|ejemplo de (lo que )?vale|inversi[oó]n)/.test(
+    blob,
+  );
 }
 
 /** ≥50 → Cool Meals directo en cualquier provincia; sync_derived a dist. queda bloqueado. */
@@ -775,14 +873,19 @@ function buildQualification(input, conv) {
     input && input.notes,
   );
   const volume = resolveEstimatedVolume(input, conv);
-  const volumeUncertain = isVolumeUncertain(input);
   const hasVolume = volume !== null && !Number.isNaN(volume);
+  // Número claro (o inferido "50 cajas") gana sobre flags/texto de "no sé / precios".
+  const volumeUncertain = hasVolume ? false : isVolumeUncertain(input);
 
   return {
     clientType: clientType,
     province: province,
     volume: hasVolume ? volume : null,
     volumeUncertain: volumeUncertain,
+    volumeInsisted:
+      isTruthyToolFlag(input && input.volumeInsisted) ||
+      isTruthyToolFlag(input && input.priceInsisted) ||
+      isTruthyToolFlag(input && input.priceLoopEscape),
     needsVolume: needsVolumeForClientType(clientType),
   };
 }
@@ -798,6 +901,16 @@ function nextStepAfterDistributorColumn(q) {
   }
   if (q.volumeUncertain || q.volume === null) {
     if (q.volumeUncertain) {
+      if (q.volumeInsisted) {
+        return {
+          nextStep: "handoff_operator",
+          agentInstruction:
+            "CHECKLIST dist. anti-loop: YA insististe volumen sin número. " +
+            contactChecklistInstruction() +
+            " O con contactRefused=true priceLoopEscape=true si no hay datos. " +
+            "Mensaje asesor + handoff_human status=atencion_representante + handoff_to_human YA.",
+        };
+      }
       return {
         nextStep: "ask_volume_insist",
         agentInstruction:
@@ -807,7 +920,8 @@ function nextStepAfterDistributorColumn(q) {
           "Si YA insististe y sigue sin número: " +
           contactChecklistInstruction() +
           " Mensaje: un asesor te contacta para precios/mínimos/condiciones + despedida. " +
-          "Silencio: handoff_human status=atencion_representante + handoff_to_human " +
+          "Silencio: handoff_human status=atencion_representante contactRefused=true " +
+          "priceLoopEscape=true + handoff_to_human " +
           "(PROHIBIDO status=quiere_ser_distribuidor).",
       };
     }
@@ -883,6 +997,7 @@ function resolveExplicitCompany(input) {
  * Antes de cualquier derivación/handoff comercial: nombre + negocio + tel confirmado.
  * No alcanza el phone del contexto WA ni el name del perfil.
  * Si contactRefused=true → se permite (operador sin esos datos).
+ * Escape anti-loop precios (handoff): no bloquear por contacto (caso Jorge).
  */
 function gateContactBeforeClose(input, forAction) {
   if (isContactRefused(input)) {
@@ -892,6 +1007,17 @@ function gateContactBeforeClose(input, forAction) {
       agentInstruction:
         "Lead se negó a dar datos de contacto. Cerrá a operador: mensaje breve + " +
         "handoff_human status=atencion_representante contactRefused=true + handoff_to_human.",
+    };
+  }
+  if (forAction === "handoff" && isPriceLoopEscape(input)) {
+    return {
+      ok: true,
+      contactRefused: true,
+      priceLoopEscape: true,
+      agentInstruction:
+        "Escape anti-loop precios: NO pedís más datos. Mensaje cierre (asesor te contacta) + " +
+        "handoff_human status=atencion_representante contactRefused=true priceLoopEscape=true + " +
+        "handoff_to_human EN ESTE TURNO.",
     };
   }
   const missing = [];
@@ -911,7 +1037,13 @@ function gateContactBeforeClose(input, forAction) {
     forAction: forAction || "close",
     reason:
       "Faltan datos de contacto obligatorios antes de derivar/handoff (nombre, negocio, teléfono confirmado).",
-    agentInstruction: contactChecklistInstruction(),
+    agentInstruction: looksLikePriceAsk(input)
+      ? "GATE contacto + precios: PROHIBIDO otra vuelta de 'no puedo dar precios'. " +
+        "Si ya insististe volumen/orientación: handoff_human status=atencion_representante " +
+        "contactRefused=true priceLoopEscape=true + handoff_to_human YA. " +
+        "Si todavía no pediste contacto y el lead cooperó: pedí nombre+negocio+tel en UN mensaje, " +
+        "después handoff. Si sigue pidiendo precio sin datos → contactRefused=true y handoff."
+      : contactChecklistInstruction(),
   };
 }
 
@@ -949,6 +1081,21 @@ function gateDecideRouteQualification(input, conv) {
     };
   }
   if (q.needsVolume && q.volumeUncertain) {
+    if (q.volumeInsisted) {
+      return {
+        ok: false,
+        gate: "force_operator_price_loop",
+        needData: false,
+        nextStep: "handoff_operator",
+        reason:
+          "Anti-loop precios: ya se insistió volumen/orientación sin número → operador.",
+        agentInstruction:
+          "GATE force_operator_price_loop (caso Jorge): PROHIBIDO otra pregunta de volumen/precios/Beacons. " +
+          "Mensaje de cierre (asesor te contacta por otro canal) + despedida. " +
+          "Silencio: handoff_human status=atencion_representante contactRefused=true " +
+          "priceLoopEscape=true + handoff_to_human EN ESTE TURNO.",
+      };
+    }
     return {
       ok: false,
       gate: "volume_uncertain",
@@ -961,8 +1108,9 @@ function gateDecideRouteQualification(input, conv) {
         "los detalla un asistente comercial de tu zona + " +
         "¿creés que serían a partir de 50 cajas/mes o menos de 50? + enter_waiting. NO handoff. " +
         "Si responde ≥50 → Cool Meals (menú/Pedidos). Si <50 → dist/sin_cobertura. " +
-        "Si YA hiciste esa 2ª y sigue sin orientar: " +
-        "handoff_human status=atencion_representante + handoff_to_human.",
+        "Si YA hiciste esa 2ª y sigue sin orientar: decide_route otra vez con volumeInsisted=true " +
+        "O directo handoff_human status=atencion_representante contactRefused=true " +
+        "priceLoopEscape=true + handoff_to_human.",
     };
   }
   if (q.needsVolume && q.volume === null) {
@@ -1880,6 +2028,9 @@ async function handoff(input, phoneFromCtx, supabaseUrl, supabaseKey, ctx, env) 
     handoffCompany ? "Negocio/empresa: " + handoffCompany : null,
     isContactRefused(input)
       ? "Contacto incompleto: el lead se negó a dar nombre/negocio/teléfono confirmado."
+      : null,
+    isPriceLoopEscape(input)
+      ? "Anti-loop precios: handoff a operador sin completar checklist de contacto."
       : null,
     normalize(input.status) === "quiere_ser_distribuidor"
       ? "Handoff operador (no usar columna Quiere ser distribuidor para handoff): " +

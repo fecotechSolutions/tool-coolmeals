@@ -79,6 +79,18 @@ function assertSourceAligned() {
     "mock y prod deben exigir Beacons antes de decide_route",
   );
   assert(
+    /force_operator_price_loop/.test(mock) && /force_operator_price_loop/.test(prod),
+    "mock y prod deben tener gate anti-loop precios (force_operator_price_loop)",
+  );
+  assert(
+    /isPriceLoopEscape/.test(mock) && /isPriceLoopEscape/.test(prod),
+    "mock y prod deben permitir handoff escape precios sin contacto",
+  );
+  assert(
+    /inferVolumeFromText/.test(mock) && /inferVolumeFromText/.test(prod),
+    "mock y prod deben inferir volumen desde '50 cajas' / '50 o 100'",
+  );
+  assert(
     /nextStepAfterDistributorColumn/.test(mock) && /nextStepAfterDistributorColumn/.test(prod),
     "mock y prod deben devolver nextStep tras columna quiere_ser_distribuidor",
   );
@@ -229,6 +241,49 @@ async function assertRuntimeContract() {
   assert(
     refused?.ok === true && refused.status === "atencion_representante",
     `contactRefused debía permitir handoff: ${JSON.stringify(refused)}`,
+  );
+
+  // Anti-loop precios: handoff sin contacto con priceLoopEscape
+  const priceEscape = await invokeMock({
+    action: "handoff",
+    status: "atencion_representante",
+    reason: "anti-loop precios: sigue sin orientar",
+    priceLoopEscape: true,
+  });
+  assert(
+    priceEscape?.ok === true && priceEscape.status === "atencion_representante",
+    `priceLoopEscape debía permitir handoff sin contacto: ${JSON.stringify(priceEscape)}`,
+  );
+
+  // volumeInsisted + volumeUncertain → force_operator_price_loop
+  const forced = await invokeMock({
+    action: "decide_route",
+    certainty: "high",
+    clientType: "mayorista",
+    province: "Córdoba",
+    volumeUncertain: true,
+    volumeInsisted: true,
+    ...routeBase,
+  });
+  assert(
+    forced?.ok === false && forced.gate === "force_operator_price_loop",
+    `volumeInsisted debía force_operator_price_loop: ${JSON.stringify(forced)}`,
+  );
+
+  // "50 o 100 cajas" en lastMessage → volumen inferido ≥50 (Cool Meals)
+  const inferred = await invokeMock({
+    action: "decide_route",
+    certainty: "high",
+    clientType: "mayorista",
+    province: "Córdoba",
+    lastMessage: "qué inversión es 50 o 100 cajas",
+    ...routeBase,
+  });
+  assert(
+    inferred?.ok === true &&
+      inferred.action === "own_attention" &&
+      inferred.coolMealsMenu === true,
+    `50 o 100 cajas debía rutear Cool Meals: ${JSON.stringify(inferred)}`,
   );
 }
 
