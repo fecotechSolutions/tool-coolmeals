@@ -98,7 +98,7 @@ Derivado / Muestras / Atención / Quiere ser… **no** se auto-descartan: cierra
 | **Derivado** | Sí | Tras el **mensaje** de cierre + registro |
 | **Sin cobertura** | Sí | Al avisar sin zona |
 | **Muestras** | **No** (`ended`) | Tras agendar muestras — card sigue hasta Resultado |
-| **Descartado** (consumidor **o proveedor**) | No `handoff_to_human` | IA **ended**. Proveedor: mensaje con `Compras@coolmeals.com.ar` |
+| **Descartado** (consumidor **o proveedor**) | No `handoff_to_human` | IA **ended**. Proveedor (nos ofrece insumos/servicios): mensaje con `Compras@coolmeals.com.ar`. No es un mail catch-all para todo lo fuera de flujo. |
 | Nuevo / IA atendiendo | No | Bot sigue |
 
 ### B) Cuándo se **cierra en Kapso** (execution → `ended`)

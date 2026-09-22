@@ -2,7 +2,7 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: **21 sep 2026** (Córdoba &lt;50 = dist/sin_cobertura; ≥50 Cool Meals; Pedidos lead/cliente sin Sheet; abandono 20h→24h→Descartado; sheets **por distribuidor**; sin cobertura 5 días sin Descartado).
+Actualizado: **22 sep 2026** (fechas en card; hilo WA en Kapso; proveedor → Compras; Córdoba &lt;50 = dist/sin_cobertura; ≥50 Cool Meals; Pedidos sin Sheet; abandono 20h→24h→Descartado).
 
 > **One-pager para operadores:** [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md)  
 > **Entornos DEV/PROD:** [`environments.md`](./environments.md)  
@@ -185,6 +185,30 @@ Cool Meals **no** agenda muestras; el dist se hace cargo.
 1. Mensaje: “Te va a contactar [nombre del dist]…” + despedida.  
 2. Registro (`sync_derived`).  
 3. Handoff (bot se pausa).
+
+## Fechas en la card (Inicio / Última)
+
+En cada card del Pipeline:
+
+| Etiqueta | Campo | Significado |
+|----------|--------|-------------|
+| **Inicio** | `createdAt` | Primer contacto / alta de la conversación |
+| **Última** | `updatedAt` | **Última actividad** del registro (cualquier update: mensaje, status, auto-handoff, notas, etc.) |
+
+**No** es “fecha de cierre comercial”. Si Inicio y Última salen el **mismo día**, suele ser normal (todo pasó el mismo día calendario) o la card casi no tuvo updates después del alta. Al usar **Resultado**, solo se actualiza `updatedAt` (no hay un `closedAt` aparte todavía).
+
+## Hilo de WhatsApp vs card
+
+La card a veces tiene `messages` vacío aunque el chat exista. El hilo real vive en **Kapso** (conversation / messages). Antes de decidir follow-up, mirá Kapso — no solo el summary / `lastMessage` de la card.
+
+## Quién recibe “nos ofrecen algo” (proveedores)
+
+Si el lead **quiere vender / proveer insumos** a Cool Meals (no comprar producto):
+
+1. El bot responde con el mail **`Compras@coolmeals.com.ar`**
+2. Cierra en **Descartado** (Kapso **ended**)
+
+No hay un mail genérico para “todo lo que salga del flujo”. Otros casos (rep, fasón, atención humana, sin cobertura) van a sus columnas / handoffs.
 
 ## Hashtags en la card
 
