@@ -2,7 +2,7 @@
 
 Documento para el equipo comercial y operadores. Explica **cómo se usa** el Pipeline y qué hace el bot de WhatsApp, sin entrar en código.
 
-Actualizado: **22 sep 2026** (fechas en card; hilo WA en Kapso; proveedor → Compras; Córdoba &lt;50 = dist/sin_cobertura; ≥50 Cool Meals; Pedidos sin Sheet; abandono 20h→24h→Descartado).
+Actualizado: **2 oct 2026** (login del panel; columna **En espera**; packs de datos en un mensaje; 2ª insistencia → Atención humana).
 
 > **One-pager para operadores:** [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md)  
 > **Entornos DEV/PROD:** [`environments.md`](./environments.md)  
@@ -24,7 +24,9 @@ Un lead escribe al WhatsApp de Cool Meals / Froodie. Un bot (Kapso) lo atiende, 
 - **Cliente** que quiere pedir → **no** pide más datos (alcanza el WhatsApp).
 - **Lead** que quiere pedir → pide datos en el cierre, pero **igual** mueve la card a Pedidos.
 
-En handoffs el bot se pausa. **Auto-cierre:** **Sin cobertura** → card desaparece + ended (~**5 días**, **no** Descartado); **Esperando respuesta** → **Descartado** + ended (~**24 h**). El resto queda hasta el desplegable **Resultado** (`Finalizado con éxito` / `sin éxito` / `Descartado`).
+**Cómo pide datos:** si faltan provincia y volumen, van juntos en un mensaje, con una línea de por qué (para derivarlo o pasarle los precios que corresponden). Un dato bloqueante se pide como máximo dos veces (la pregunta y una insistencia). A la segunda sin respuesta → **Atención humana**. No hay tercera pregunta del mismo dato.
+
+En handoffs el bot se pausa. **Auto-cierre:** **Sin cobertura** → card desaparece + ended (~**5 días**, **no** Descartado); **Esperando respuesta** → **Descartado** + ended (~**24 h**). **En espera** (la mueve el operador) cierra la IA (`ended`, sin handoff) y la card **queda** hasta que ops la mueva. El resto queda hasta el desplegable **Resultado** (`En espera` / `Finalizado con éxito` / `sin éxito` / `Descartado`).
 
 Todo se ve en el **Pipeline** (`/pipeline`). Las métricas viven en el **Dashboard** (`/`).
 
@@ -39,8 +41,11 @@ Sheets: **uno por cada distribuidor** (cuando se deriva), más muestras, [atenci
 | **Distribuidores** | Red comercial por provincia |
 | **Config comercial** | Umbral de bultos (default 50) |
 | **Kapso → Executions** | `waiting` / `handoff` / `ended` |
+| **Usuarios** (`/usuarios`) | Solo el superadmin: crear y eliminar admins |
 
-> Menú web oculto por ahora: Muestras, Base de conocimiento, Prompt Manager (las rutas siguen existiendo).
+El panel pide login (`/login`). Si no recuerda la clave, **Olvidé mi contraseña** manda un enlace al correo de esa cuenta y **no pide la contraseña anterior**. Hay un solo superadmin. Detalle de cuentas y de qué está en DEV vs PROD: [`environments.md`](./environments.md) §3.
+
+> Menú web oculto por ahora: Muestras, Base de conocimiento, Prompt Manager (las rutas siguen existiendo). **Usuarios** se ve en el menú; la pantalla solo la usa el superadmin.
 
 Canvas sandbox:  
 https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
@@ -59,9 +64,10 @@ https://app.kapso.ai/workflows/454904ce-8fba-423f-bf08-32135f694b14/canvas
 | Sin cobertura | Sin dist. activo en esa provincia | Sí (~**5 días**): card **desaparece** + IA **ended** (no Descartado; métricas se conservan) |
 | Muestras | Cool Meals agendó envío de muestras (logística) | No — cierre manual |
 | Pedido lead / Pedido cliente | Intención clara de pedir (menú 2, lista/PDF, “quiero armar pedido”, cliente existente). **Sin Sheet.** Cliente = no pide datos extra; lead = pide en el cierre pero igual deriva. Asesor confirma stock/logística. | No — cierre manual |
+| En espera | El operador la deja acá cuando el caso avanzó y el cliente todavía no decide. La IA queda **ended** (no handoff). La card **sigue visible** hasta que ops la mueva. | No — queda hasta que ops la saque |
 | Finalizado | Cerrada con **Resultado** (éxito / sin éxito) o cierre oculto de sin cobertura. **Visible 5 días** en Pipeline; después solo Dashboard | Terminal |
 | Descartado | Basura / consumidor / **proveedor** (mail Compras) / abandono Esperando / Resultado Descartado. **Visible 2 días** desde alta de la card; después solo Dashboard | Terminal |
-| Resultado (desplegable en card) | `Finalizado con éxito` / `Finalizado sin éxito` / `Descartado` | Cierra → Finalizado o Descartado + Kapso ended |
+| Resultado (desplegable en card) | `En espera` / `Finalizado con éxito` / `Finalizado sin éxito` / `Descartado` | En espera → columna En espera + Kapso `ended`. Éxito / sin éxito → Finalizado + `ended`. Descartado → Descartado + `ended`. |
 
 ## Recontacto mismo teléfono (métricas)
 
@@ -219,6 +225,8 @@ No hay un mail genérico para “todo lo que salga del flujo”. Otros casos (re
 
 Desplegable o drag a **Atención humana** / **Quiere ser distribuidor** / **Quiere ser representante** / **Quiere ser fasón** / **Sin cobertura** / **Muestras** según corresponda → handoff Kapso (`POST /bot/handoff`). Eso **pausa o cierra** el bot: el lead deja de ser atendido por la IA en ese hilo. **Sin cobertura** agenda auto-cierre (~**5 días**: card desaparece + ended, no Descartado); el resto queda hasta cierre manual con **Resultado**.
 
+Arrastrar a **En espera** (o elegirla en Resultado) es distinto: Kapso pasa a `ended` (**no** handoff) y la card se queda en esa columna hasta que el operador la mueva. Sirve cuando el caso avanzó y el cliente todavía no decide.
+
 > **Pausa automática (fase E, parcial):** si contestás desde la **app WhatsApp Business** (no Kapso Inbox), el sistema puede pausar solo al detectar el mensaje outbound (`origin=business_app`). Si contestás desde **Kapso Inbox**, mové la card a **Atención humana** antes — ese canal se ve igual que el bot (`cloud_api`) y no se puede distinguir todavía.
 
 Si movés una card a **Muestras** (aunque venga de Quiere ser distribuidor / handoff ya cerrado):
@@ -258,7 +266,7 @@ Si el bot esperaba respuesta del lead y este no contesta:
 2. ~**24 h** desde la última actividad real → **Esperando respuesta** + handoff (bot se pausa)  
 3. ~**24 h** más en Esperando → **Descartado** + Kapso `ended`
 
-**No aplica** a Derivado, Muestras, Atención, Quiere ser…: esas quedan hasta **Resultado** manual.
+**No aplica** a Derivado, Muestras, Atención, Quiere ser…, ni a **En espera**: esas quedan hasta que ops las mueva (**En espera** ya tiene la IA en `ended`).
 
 > En Vercel Hobby el cron puede correr **1×/día**: los umbrales se aplican cuando corre el cron (no al minuto exacto).
 

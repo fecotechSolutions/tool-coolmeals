@@ -1,0 +1,22 @@
+---
+description: Trabajar siempre en DEV y, al cerrar la docu, avisar qué falta para PROD
+alwaysApply: true
+---
+
+# DEV primero, recordatorio de PROD
+
+Un solo código. Dos bases: Supabase DEV (`otbyuvbdajqrcrtwlwvy`, local + sandbox) y PROD (`jrsvfyujpuuhnwzjubow`, Vercel + WhatsApp …5440). Detalle: `docs/environments.md`.
+
+- Implementá y probá en **DEV**. No apuntes el `.env` local a PROD.
+- No hagas deploy, migraciones ni cambios de env en PROD salvo que lo pidan.
+
+Cuando digan que cerraron la docu («añadí los cambios a la docu», «cambios a la docu», o equivalente) y el trabajo **no** está en PROD, respondé con un recordatorio concreto. No despliegues vos. Listá solo lo que aplica a los archivos de este cambio:
+
+1. **Git** — commit y push si hay cambios sin subir.
+2. **SQL** — migraciones en `supabase/migrations/` que PROD todavía no tiene (SQL Editor de `jrsvfyujpuuhnwzjubow`). Datos de `app_users` no se copian: en PROD el superadmin se crea ahí.
+3. **Vercel** — si cambió API o web: `npm run build:api:handler` y `vercel deploy --prod --scope fecotech --project tool-coolmeals-api` y/o `tool-coolmeals-web -A vercel.web.json`.
+4. **Env de la API en Vercel** — keys nuevas de `.env.example` que PROD no tiene (`SUPERADMIN_*`, `SESSION_SECRET`, `APP_PUBLIC_URL`, `SMTP_*`, etc.).
+5. **Kapso** — si cambió `workflows/coolmeals-leads/` o `functions/coolmeals-bot-actions/`: push del workflow y de la function. El número …5440 sigue en PROD; el sandbox en DEV.
+6. **Sheets** — solo si el cambio escribe planillas; sandbox no escribe.
+
+Cerrá el recordatorio con: la docu ya describe el comportamiento; PROD sigue en la versión anterior hasta completar esa lista.

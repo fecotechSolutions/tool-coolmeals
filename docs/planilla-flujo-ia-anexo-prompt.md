@@ -1,7 +1,7 @@
 # Anexo: planilla + prompt + Pipeline
 
 Compañero de [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
-Actualizado: **21 sep 2026** (Córdoba &lt;50 = dist/sin_cobertura; ≥50 Cool Meals; Pedidos lead/cliente sin Sheet; proveedor→Compras).
+Actualizado: **2 oct 2026** (packs provincia+volumen y contacto en un mensaje; 2ª insistencia → Atención humana; columna **En espera** solo operador). Login del panel: [`environments.md`](./environments.md) §3.
 
 ---
 
@@ -23,13 +23,15 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | P3b compra vs ser dist | “tengo distribuidora / soy dist” sin aclarar → gate `distributor_intent_ambiguous`. Flags: `distributorIntentCleared` + `purchasePathConfirmed` o `distributorPathConfirmed` |
 | Sticky dist → compra | Card en `quiere_ser_distribuidor` pero chat actual de compra → gate `sticky_distributor_purchase_recontact` |
 | Volumen incerto / quiere precios | **1ª:** pregunta NORMAL de volumen (aviso **a partir de 50**). **Si dice no sé → 2ª:** asistente comercial de tu zona + ¿**a partir de 50** o **menos**?. Con orientación → `decide_route`. Si tampoco → operador. **"50 cajas" / "50 o 100"** cuenta como ≥50. Máx. 2 evasivas de precio; la 3ª → handoff real. **PROHIBIDO** inventar bultos |
-| Contacto | Toda derivación/handoff comercial: `fullName` + `company` + `contactPhone` + `phoneConfirmed=true`. Si se niega: `contactRefused=true` → operador. No alcanza el perfil WA |
+| Packs de datos | Si faltan provincia y volumen: **un mensaje** (`ask_qualification_pack`) + línea de por qué (derivarlo / precios que corresponden). Contacto al cerrar: nombre + negocio + tel confirmado, también en un mensaje. Máximo **2** pedidos del mismo dato (`provinceInsisted` / `volumeInsisted` / `contactRefused`). A la 2ª sin dato → `atencion_representante` + `handoff_to_human` en ese turno. Prohibido “sin eso no avanzamos”. |
+| Contacto | Toda derivación/handoff comercial: `fullName` + `company` + `contactPhone` + `phoneConfirmed=true`. Si se niega o no responde tras 1 insistencia: `contactRefused=true` → operador. No alcanza el perfil WA |
 | Copy Córdoba | **PROHIBIDO** “asesor/distribuidor de la zona” cuando la provincia ya es Córdoba. **`sync_derived` bloqueado en Córdoba** (gate P5) |
 | Derive | **Orden:** 1) mensaje humano  2) `sync_derived` con `deriveMessageSent=true`  3) `handoff_to_human`. Gate `derive_message_first` si falta el mensaje. `sync_derived` **no** corta Kapso. Sheet = **planilla de ese dist.** (`derived-distributor-sheets.ts`) |
 | Promesa = handoff | Si prometés que un asesor contacta → mismo turno `handoff_human` + `handoff_to_human` (salvo muestras/descartado) |
 | Pausa bot (humano) | Pipeline → **Atención humana** → `POST /bot/handoff`. **Fase E (parcial):** si el operador escribe desde **WhatsApp Business App**, Kapso manda `whatsapp.message.sent` con `origin=business_app` → `POST /api/webhooks/kapso` pausa el bot y mueve la card. **No** cubre respuestas desde Kapso Inbox (`cloud_api`, igual que el bot) |
 | Desambiguación | Si **cualquier** dato/camino no está claro → **1 pregunta** antes de avanzar. Gate duro: `decide_route` / `request_samples` / `sync_derived` exigen `certainty=high`; si no, `needDisambiguation` |
-| Auto-cierre | `sin_cobertura` ~**5 días** → card oculta + ended (**no** Descartado); mid-flujo (`nuevo`/`ia_atendiendo`) ~20h recontacto → ~24h Esperando → +24h **Descartado**. Derivado/Muestras/Atención/Quiere ser… = solo Resultado manual |
+| En espera (ops) | No lo elige el bot. Drag o Resultado `en_espera` → `status=en_espera` + Kapso **`ended`** (no handoff) + `finalize_at` null. La card queda hasta que ops la mueva. |
+| Auto-cierre | `sin_cobertura` ~**5 días** → card oculta + ended (**no** Descartado); mid-flujo (`nuevo`/`ia_atendiendo`) ~20h recontacto → ~24h Esperando → +24h **Descartado**. Derivado/Muestras/Atención/Quiere ser…/**En espera** = hasta que ops mueva (Resultado). |
 | Sheets | Derivados → 1 sheet por dist.; master viejo solo webhook; sandbox no escribe sheets |
 | Teléfono canónico | `351…` / `54351…` / `549351…` = mismo lead (`54` + nacional, sin 9 móvil) |
 | Recontacto mismo WA &lt;1 año (ya calificado, **no** muestras) | No tipificar de nuevo; no lead nuevo en métricas |
@@ -55,7 +57,8 @@ Fuente de verdad: `apps/api/src/lib/routing.ts` **y** `functions/coolmeals-bot-a
 | Quiere ser rep / fasón | `quiere_ser_*` | contacto → `handoff_human` + `handoff_to_human` |
 | Volumen incerto | `atencion_representante` | contacto → `handoff_human` (no `quiere_ser_distribuidor`) |
 | Basura | `descartado` | solo `handoff_human` |
-| Abandono | `esperando_respuesta` → `finalizado` | cron |
+| Abandono | `esperando_respuesta` → `descartado` | cron |
+| En espera (ops) | `en_espera` | Resultado o drag → `POST /bot/finalize` `result=en_espera` (ended, no handoff) |
 
 ---
 

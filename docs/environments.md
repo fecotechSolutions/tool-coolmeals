@@ -73,7 +73,7 @@ No se puede crear un segundo superadmin desde la UI. Crear usuario siempre sale 
 | Pieza | Detalle |
 |-------|---------|
 | Login | `/login` — email + password |
-| Olvidé contraseña | `/forgot-password` → mail vía **SMTP Symbionet** (`SMTP_*`) |
+| Olvidé contraseña | `/forgot-password` → mail vía **SMTP Symbionet** (`SMTP_*`). El enlace **no pide la contraseña anterior**; vale ~60 min. `APP_PUBLIC_URL` tiene que ser una URL que esa persona pueda abrir. |
 | Reset | `/reset-password?token=…` |
 | Cambiar | `/change-password` (también obligatorio si `must_change_password`) |
 | Usuarios (UI) | `/usuarios` — solo superadmin: alta de admin + **Eliminar** en filas `admin` |
@@ -115,6 +115,7 @@ Correr en SQL Editor del proyecto correspondiente:
 
 1. `supabase/migrations/20260930120000_app_users_auth.sql` — tablas `app_users` + `password_reset_tokens`
 2. `supabase/migrations/20261002120000_one_superadmin.sql` — deja un solo superadmin + índice único
+3. `supabase/migrations/20261003120000_en_espera_status.sql` — columna Pipeline **En espera** (`conversation_status = en_espera`). Hace falta en el mismo proyecto que usa el panel (DEV ya; PROD cuando actives el Pipeline nuevo).
 
 | Entorno | Estado |
 |---------|--------|
@@ -264,6 +265,15 @@ Sacá el flag cuando DEV vuelva. No dejarlo “para siempre”.
 4. OK → build handler + deploy CLI (`--project` web y api).
 5. Apagá sandbox si no seguís probando.
 6. Clientes reales solo por …5440 + panel Vercel (login prod cuando auth esté migrado).
+
+Cuando la docu ya describe el cambio y PROD no, el cierre es la frase **«Añadí los cambios a la docu»**. Ahí se revisa qué falta subir (no se despliega solo). Checklist según qué tocó el cambio:
+
+1. Git: commit y push.
+2. SQL en Supabase **PROD** (`jrsvfyuj…`), solo migraciones nuevas. Los usuarios de `app_users` no se copian de DEV.
+3. Deploy Vercel (API y/o web), §6.
+4. Env nuevos en la API de Vercel.
+5. Kapso: push de workflow / function si cambió el bot. Sandbox = DEV; …5440 = PROD.
+6. Sheets, solo si el cambio escribe planillas.
 
 ---
 

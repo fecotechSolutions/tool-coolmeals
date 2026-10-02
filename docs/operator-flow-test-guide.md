@@ -3,7 +3,7 @@
 Documento para el **operador comercial** (o quien valide el bot).  
 Objetivo: probar **cada flujo** de punta a punta y saber **dónde mirar** si algo no cuadra.
 
-Actualizado: **15 sep 2026**.
+Actualizado: **2 oct 2026**.
 
 Planilla lógica + casos: [`planilla-flujo-ia-definitiva.csv`](./planilla-flujo-ia-definitiva.csv).  
 Entornos DEV/PROD: [`environments.md`](./environments.md).
@@ -16,7 +16,7 @@ Entornos DEV/PROD: [`environments.md`](./environments.md).
 |-------------|----------|
 | **WhatsApp Sandbox** (Kapso) | Actuar como lead de **prueba** → data en **DEV** |
 | **WhatsApp …5440** | Solo operación real → data en **PROD** (no uses esto para tipificar casos de test) |
-| **Pipeline local** (`localhost:3000`) | Ver cards de pruebas (badge **DEV**) |
+| **Pipeline local** (`localhost:3000/login`) | Ver cards de pruebas (badge **DEV**). Login del panel; un superadmin + admins. |
 | **Pipeline prod** (Vercel) | Ver clientes reales (badge **PROD**) |
 | **Distribuidores** | Cobertura |
 | **Dashboard** | Métricas |
@@ -34,6 +34,7 @@ Entornos DEV/PROD: [`environments.md`](./environments.md).
 | Córdoba &lt;50 | Dist de zona / sin cobertura (igual que resto del país) |
 | &lt;50 cualquier provincia (incl. CBA) | Dist (→ **sheet de ese dist.**) o sin cobertura si no hay gestión → auto cierre ~**5 días** (oculto, no Descartado) |
 | Volumen / precios inciertos | 1ª insistir (a partir de 50); 2ª → operador; no inventar bultos |
+| Datos que faltan | Provincia y volumen en **un** mensaje. El mismo dato, como máximo dos veces; a la segunda → Atención humana |
 | Consumidor final | Descartado |
 
 **Cierre comercial:** el bot debe pedir nombre + negocio + tel confirmado **antes** de pausarse (salvo Descartado consumidor / ficha de Muestras).
@@ -416,12 +417,13 @@ Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 | Card en **Descartado** | Visible **2 días** desde que se creó la card; después **desaparece del Pipeline** (sigue en DB / Dashboard; las métricas se conservan). |
 | Desplegable **Resultado** en cualquier card | `En espera` → `en_espera` + ended; `Finalizado con éxito` / `sin éxito` → `finalizado` + ended; `Descartado` → `descartado` + ended. |
 | Querés tomar el caso a mano | Arrastrá / cambiá estado a la columna que corresponda (handoff manual) |
+| No recordás la contraseña | En el login, **Olvidé mi contraseña**. El mail no pide la clave anterior. Cuentas: [`environments.md`](./environments.md) §3. |
 
 ### Qué no hace el sistema (aún)
 
 - Reabrir automáticamente un chat ya Finalizado.  
 - Estados de envío de muestras (enviado / entregado) en la UI.  
-- Login de operadores con roles reales (`app_users`: un `superadmin` + `admin`s). Ver [`environments.md`](./environments.md) §3.
+- Login nuevo en **PROD** (en DEV ya está: un superadmin + admins). Ver [`environments.md`](./environments.md) §3.
 
 **Prod WhatsApp:** `+54 9 351 549-5440`. **Pruebas:** Kapso Sandbox → Pipeline local (DEV). Ver [`environments.md`](./environments.md).
 

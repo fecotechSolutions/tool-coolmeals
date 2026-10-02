@@ -1,6 +1,6 @@
 # Cool Meals — Cómo trabaja el bot (para operadores)
 
-Una hoja para mostrar / imprimir. Actualizado: **15 sep 2026**.
+Una hoja para mostrar / imprimir. Actualizado: **2 oct 2026**.
 
 > Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md) · Entornos, **cuentas** y login del panel (`app_users`, un superadmin): [`environments.md`](./environments.md)
 
@@ -130,7 +130,7 @@ Derivado / Muestras / Atención / Quiere ser… **no** se auto-descartan: cierra
 | Bot consumidor | **Descartado** | Bot |
 | Card en Atención / Derivado / Muestras / Quiere ser… | Sigue **abierta** | Ustedes con Resultado |
 
-**Resumen:** handoff = bot pausado · Kapso `ended` = hilo técnico muerto · cierre ops = Finalizado o Descartado.
+**Resumen:** handoff = bot pausado · Kapso `ended` = hilo técnico muerto · **En espera** = IA cerrada y la card queda · cierre ops = Finalizado o Descartado.
 
 **Visibilidad Pipeline:** Finalizado ~5 días desde el cierre; Descartado ~2 días desde el alta de la card. Después desaparecen del tablero pero **siguen en Dashboard/métricas** (no se borran).
 

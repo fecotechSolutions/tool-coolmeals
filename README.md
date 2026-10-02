@@ -60,7 +60,8 @@ En SQL Editor, en orden:
 5. `supabase/migrations/20260724120000_sample_request_extra_fields.sql`
 6. `supabase/migrations/20260930120000_app_users_auth.sql` (login panel: `app_users`)
 7. `supabase/migrations/20261002120000_one_superadmin.sql` (un solo superadmin)
-8. Opcional: `supabase/seed.sql`
+8. `supabase/migrations/20261003120000_en_espera_status.sql` (columna Pipeline En espera)
+9. Opcional: `supabase/seed.sql`
 
 Auth del panel (oct 2026): **activo en DEV**; PROD pendiente. Detalle: [`docs/environments.md`](docs/environments.md) §3.
 
@@ -76,6 +77,7 @@ Auth del panel (oct 2026): **activo en DEV**; PROD pendiente. Detalle: [`docs/en
 | Uso diario Pipeline | [`docs/pipeline-bot-user-guide.md`](docs/pipeline-bot-user-guide.md) |
 | Desarrolladores | [`docs/phase0-bot-developer-guide.md`](docs/phase0-bot-developer-guide.md) |
 
+**Pipeline (oct 2026):** columna **En espera** (drag o Resultado) cierra la IA (`ended`, sin handoff) y deja la card hasta que ops la mueva. Resultado: En espera / éxito / sin éxito / Descartado.  
 **Ruteo vigente (sep 2026):** ≥50 → menú Cool Meals **o Pedidos** si ya quiere pedir (`pedido_lead` / `pedido_cliente`, **sin Sheet**; cliente skip contacto); **&lt;50 cualquier provincia (incl. Córdoba)** → dist (**sheet por dist.**) / **sin_cobertura** si no hay gestión en la zona (→ oculto ~5 días, no Descartado). Abandono mid-flujo: ~20 h recontacto → ~24 h Esperando → +24 h **Descartado**. Contacto (nombre+negocio+tel) en cierres normales. Teléfonos AR canónicos; KPIs = 1ª card.  
 **WhatsApp:** prod `+54 9 351 549-5440` (…5440); pruebas = Kapso **sandbox** → Supabase DEV.  
 **Prod:** [web](https://tool-coolmeals-web.vercel.app) · [api](https://tool-coolmeals-api-ten.vercel.app) (Vercel team **FEcotech**; deploy CLI con `--project`). Detalle entornos: [`docs/environments.md`](docs/environments.md).

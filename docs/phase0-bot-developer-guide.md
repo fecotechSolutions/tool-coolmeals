@@ -2,7 +2,7 @@
 
 Para quien mantenga o extienda el monorepo. Complementa [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md).
 
-Actualizado: **15 sep 2026**. One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
+Actualizado: **2 oct 2026** (auth `app_users`; columna `en_espera`; packs de calificación/contacto). One-pager ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md).
 
 **Entornos DEV/PROD:** [`environments.md`](./environments.md).
 
@@ -41,6 +41,7 @@ WhatsApp (Meta / Kapso)
 | Teléfonos AR | `packages/shared/src/phone.ts` (`canonicalizeArPhone`, `phoneLookupVariants`) |
 | Dominio compartido | `packages/shared/src/domain.ts` |
 | Pipeline UI | `apps/web/src/app/pipeline/page.tsx` |
+| Login panel | `apps/api/src/routes/auth.ts` + `apps/web/src/app/login` · cuentas: [`environments.md`](./environments.md) §3 |
 | Badge DEV/PROD | `apps/web/src/lib/app-env.ts` + `AppShell` |
 | Dashboard | `apps/web/src/app/page.tsx` + `apps/api/src/routes/dashboard.ts` |
 | Sheets Apps Script | `apps/api/scripts/google-sheets-append.gs` |
@@ -135,8 +136,13 @@ Aplicar en **cada** proyecto (DEV y PROD), en SQL Editor, en orden:
 3. `supabase/migrations/20260720000000_derive_handoff_window.sql` ← `derived_at`, `finalize_at`
 4. `supabase/migrations/20260720140000_quiere_ser_representante_fason.sql` ← columnas Pipeline
 5. `supabase/migrations/20260724120000_sample_request_extra_fields.sql` (campos extra muestras)
-6. Opcional solo **DEV**: `supabase/seed.sql`  
+6. `supabase/migrations/20260930120000_app_users_auth.sql` — login panel (`app_users`, reset)
+7. `supabase/migrations/20261002120000_one_superadmin.sql` — un solo superadmin
+8. `supabase/migrations/20261003120000_en_espera_status.sql` — enum `en_espera`
+9. Opcional solo **DEV**: `supabase/seed.sql`  
    Atajo DEV: `supabase/dev_bootstrap_otbyuvbdajqrcrtwlwvy.sql` (migrations + seed).
+
+Auth del panel está **activo en DEV**; PROD pendiente hasta migrar + SMTP + `SUPERADMIN_*` / `SESSION_SECRET`. `SUPERADMIN_PASSWORD` solo crea el primer usuario si la tabla está vacía. “Olvidé contraseña” no pide la clave anterior: manda un enlace al mail de la cuenta (`APP_PUBLIC_URL`).
 
 Sin (3), el código hace **fallback** a `updated_at` para timeouts; conviene aplicarla igual.
 
@@ -201,8 +207,8 @@ Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7 · entor
 
 1. Primer mensaje → `upsert_conversation` + Beacons + tipificación.
 2. Fasón / representante (SER) → `decide_route` + **contacto** + handoff (sin menú).
-3. Quiere ser distribuidor → 4 preguntas; **4 SÍ** → `upsert` columna **sin** handoff → zona/volumen → `decide_route`.
-4. Gates en function: `certainty=high`, provincia/volumen si aplica, `gateContactBeforeClose` en handoff/`sync_derived` (**excepto** `pedido_lead` / `pedido_cliente` y muestras/descartado).
+3. Quiere ser distribuidor → 4 preguntas; **4 SÍ** → `upsert` columna **sin** handoff → pack provincia+volumen → `decide_route`.
+4. Packs: si faltan provincia y volumen, un solo mensaje (más una línea de por qué se piden). Contacto al cerrar también en un mensaje. Máximo 2 pedidos del mismo dato bloqueante (`provinceInsisted` / `volumeInsisted` / `contactRefused`); a la 2ª sin dato → `atencion_representante` + handoff en ese turno. Gates: `certainty=high`, `gateContactBeforeClose` en handoff/`sync_derived` (**excepto** `pedido_lead` / `pedido_cliente` y muestras/descartado).
 5. Según `decide_route` (seguir `agentInstruction` / `coolMealsMenu`):
 
 | action | Comportamiento |
@@ -224,6 +230,8 @@ Ops: [`operator-cheat-sheet-bot.md`](./operator-cheat-sheet-bot.md) §7 · entor
 **Proveedor de insumos:** mensaje con `Compras@coolmeals.com.ar` → `handoff_human` `descartado` (Kapso **ended**). No menú / Pedidos / dist. Distinto de cliente que compra producto.
 
 **Muestras (≥50):** datos envío → `request_samples` → mensaje representante → `handoff_human` `muestras` (**Kapso ended**, sin `handoff_to_human`). Card queda hasta Resultado. Nuevo WA → 2ª card fresca.
+
+**En espera (solo operador, no el bot):** drag o Resultado `en_espera` → `finalizeConversationWithResult` pone `status=en_espera`, `outcome=en_espera`, `finalize_at=null` y Kapso **`ended`** (no handoff). La card permanece en Pipeline hasta que ops la mueva. No entra en los crons de sin cobertura ni de esperando.
 
 ## Ruteo comercial
 
