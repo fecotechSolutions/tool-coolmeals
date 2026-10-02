@@ -2,7 +2,7 @@
 
 Una hoja para mostrar / imprimir. Actualizado: **15 sep 2026**.
 
-> Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md) · Entornos: [`environments.md`](./environments.md)
+> Guía larga: [`pipeline-bot-user-guide.md`](./pipeline-bot-user-guide.md) · Entornos, **cuentas** y login del panel (`app_users`, un superadmin): [`environments.md`](./environments.md)
 
 ---
 
@@ -13,10 +13,10 @@ Lead escribe por WhatsApp
         ↓
 Saludo + link Beacons (catálogo, SIN precios)
         ↓
-Califica: tipo de negocio + zona (+ volumen si aplica)
-  (si algo no está claro → pregunta de desambiguación)
+Califica: tipo + **provincia** + volumen si aplica (pack en un mensaje cuando se pueda)
+  (si algo no está claro → 1 pregunta de desambiguación; 2ª sin dato → Atención humana)
         ↓
-Antes de cerrar: nombre + negocio + teléfono confirmado
+Antes de cerrar: nombre + negocio + teléfono confirmado (pack) → handoff en ese cierre
         ↓
 ¿Qué decide el sistema?
 ```
@@ -35,7 +35,7 @@ Antes de cerrar: nombre + negocio + teléfono confirmado
 
 1. El bot hace las **4 preguntas** (congelados, depósito, logística, estructura).  
 2. **4 SÍ** → la card va a **Quiere ser distribuidor**, pero el bot **NO se pausa** (no hay handoff todavía).  
-3. Sigue: zona + volumen → ruteo → **ahí sí** handoff según el caso (≥50 menú, &lt;50 dist/sin cobertura también en Córdoba).  
+3. Sigue **en este orden**: **provincia** (obligatoria, sin default) → **volumen** → ruteo → **ahí sí** handoff (≥50 menú, &lt;50 dist/sin cobertura también en Córdoba).  
 4. Si falta alguna de las 4 → no queda en esa columna; tipifica compra o Descartado.
 
 **En una frase:** los 4 SÍ solo marcan la columna; el handoff viene después, con el ruteo comercial.

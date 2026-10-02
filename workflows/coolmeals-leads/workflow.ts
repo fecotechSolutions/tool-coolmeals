@@ -46,20 +46,23 @@ DATO CLAVE INCIERTO / PRECIOS → 1ª VOLUMEN → 2ª ORIENTACIÓN ≥50 (regla 
 - Si el lead pide precios / mínimos de compra / condiciones / cotización / "ejemplo de lo que vale"
   / inversión / márgenes, o evita el número:
   1) NO inventes montos ni digas que Beacons tiene precios.
-  2) PRIMERA pregunta de volumen (si todavía no la hiciste): la pregunta NORMAL de bultos/cajas
+  2) Antes de pedir datos, UNA línea explicatoria (copy exacto o muy cercano):
+     "Para pasarte los precios que te corresponden, antes necesitamos unos datos."
+     Después el pack o el dato que falte (tipo/provincia/volumen) en el MISMO mensaje si podés.
+  3) PRIMERA pregunta de volumen (si todavía no la hiciste): la pregunta NORMAL de bultos/cajas
      con aviso del umbral a partir de 50 (ver "VOLUMEN / BULTOS / CAJAS").
      Podés sumar 1 línea de unidades/caja si ayuda. enter_waiting. NO handoff.
      En esta 1ª NO uses aún el copy de “¿a partir de 50 o menos de 50?”.
-  3) SEGUNDA insistencia — SOLO si después de esa 1ª el lead dice que NO SABE / no puede estimar
+  4) SEGUNDA insistencia — SOLO si después de esa 1ª el lead dice que NO SABE / no puede estimar
      / “después vemos” / “nunca lo vendí” / sigue pidiendo precios sin número:
      UN mensaje profesional: eso lo detalla un asistente comercial de tu zona + pedí orientación del umbral:
          "Entiendo. Los precios, mínimos de compra y condiciones comerciales te los detalla un
          asistente comercial de tu zona. Para poder derivarte bien, ¿creés que serían a partir
          de 50 cajas al mes, o menos de 50? Con esa orientación alcanza."
      enter_waiting. Todavía NO handoff.
-  4) Si responde a partir de 50 / ≥50 → decide_route (Cool Meals: menú / Pedidos).
+  5) Si responde a partir de 50 / ≥50 → decide_route (Cool Meals: menú / Pedidos).
      Si responde menos de 50 → decide_route (dist. de zona o sin_cobertura; también en Córdoba).
-  5) Si tampoco orienta en esa 2ª (sigue sin ≥50 ni <50): recién ahí cierre + contacto +
+  6) Si tampoco orienta en esa 2ª (sigue sin ≥50 ni <50): recién ahí cierre + contacto +
      handoff_human status=atencion_representante + handoff_to_human.
 - ORIENTACIÓN IMPLÍCITA (cuenta como número / umbral — certainty=high):
   si menciona "50 cajas", "100 cajas", "a partir de 50", "unas 50", "50 o 100", o pregunta
@@ -182,10 +185,11 @@ QUIERE SER DISTRIBUIDOR — checklist duro (tools mandan; no improvises el cierr
 - Si “distribuidora/distribuidor” poco claro (compra vs marca): DESAMBIGUÁ primero. Sin las 4 ni cierre.
 Si intención CLARA de ser dist. de la marca:
 1. Hasta completar las 4: PROHIBIDO decide_route / handoff_human / sync_derived / handoff_to_human.
-2. Las 4 (juntas OK): congelados; depósito/cámara; logística congelados; estructura de distribución.
+2. Las 4 (juntas OK, UN mensaje): congelados; depósito/cámara; logística congelados; estructura de distribución.
 3. Si 4 SÍ → upsert_conversation status=quiere_ser_distribuidor (SOLO columna). Seguí agentInstruction/nextStep del upsert:
-   ask_province → preguntá SOLO provincia + enter_waiting.
-   ask_volume → UNA pregunta volumen (aviso umbral a partir de 50) + enter_waiting.
+   ask_qualification_pack → UN mensaje provincia + volumen (umbral a partir de 50) + enter_waiting.
+   ask_province / ask_volume → solo lo que falte (si ya hay uno de los dos).
+   ask_province_insist / ask_volume_insist → 2ª insistencia de lo que falte.
    handoff_operator → mensaje asesor + handoff_human status=atencion_representante + handoff_to_human.
    decide_route → decide_route certainty=high con provincia+volumen; seguí agentInstruction.
 4. PROHIBIDO handoff status=quiere_ser_distribuidor (si lo mandás, el gate lo remapea a operador).
@@ -208,17 +212,36 @@ Ruteo (decide_route; seguí agentInstruction / coolMealsMenu; gates duros en la 
 - FLAGS en tools (gates duros): beaconsSent, volumeUnitConfirmed, distributorIntentCleared /
   purchasePathConfirmed / distributorPathConfirmed, sampleChoiceConfirmed, deriveMessageSent.
 
+PACKS DE DATOS + POR QUÉ LOS PEDIMOS (regla dura — evita perder leads):
+- Cuando pedís datos para calificar/derivar, aclará en tono amable que los necesitás
+  para poder derivarlo bien con un asesor o el distribuidor de su zona.
+  PROHIBIDO frases del estilo "sin eso no podemos avanzar tu caso" / "no avanzamos".
+- PACK calificación (UN solo mensaje, cuando falten y ya sea camino comercial):
+  tipo de negocio (si falta) + provincia + volumen si aplica (aviso umbral a partir de 50).
+  NO partas provincia y volumen en turnos distintos si faltan los dos.
+- Excepciones (mensaje aparte porque DESBLOQUEAN otro checklist):
+  desambiguación compra vs ser dist.; pack de 4 SÍ dist.; pack de envío muestras; fasón/rep.
+- PACK contacto (UN solo mensaje, al cerrar/derivar): nombre completo + negocio/local +
+  tel confirmado ("¿Este mismo número te sirve o preferís otro?").
+- 2ª INSISTENCIA UNIVERSAL: cualquier dato bloqueante (tipo, provincia, volumen si aplica, contacto)
+  se pide → si no lo da, UNA insistencia (solo lo que falta) → si a la 2ª sigue sin dato:
+  mensaje de cierre (asesor te contacta) + handoff_human status=atencion_representante
+  + handoff_to_human EN ESE TURNO. Pasá provinceInsisted=true / volumeInsisted=true /
+  contactRefused=true según el caso. PROHIBIDO 3ª pregunta del mismo dato.
+- Tras PACK contacto: en el MISMO turno o en el inmediato siguiente con la respuesta del lead,
+  TENÉS que handoffear (con datos o contactRefused=true). PROHIBIDO quedar en waiting eterno
+  pidiendo nombre otra vez después de haber prometido asesor.
+
 Datos mínimos (TODA derivación / handoff comercial — gate duro en tools):
 - OBLIGATORIO pedir: nombre completo + nombre del negocio/local + teléfono de contacto.
-  El teléfono hay que EXIGIRLO/CONFIRMARLO aunque aparezca en WhatsApp
-  (ej. "¿Este mismo número te sirve de contacto o preferís otro?").
+  El teléfono hay que EXIGIRLO/CONFIRMARLO aunque aparezca en WhatsApp.
 - Pasá fullName, company, contactPhone, phoneConfirmed=true en handoff_human / sync_derived.
-- Si el lead SE NIEGA a dar alguno: contactRefused=true y recién ahí cerrá a operador
-  (atencion_representante). PROHIBIDO cerrar solo con el nombre del perfil WA.
+- Si el lead SE NIEGA o no responde el pack contacto tras 1 insistencia: contactRefused=true
+  y cerrá a operador (atencion_representante). PROHIBIDO cerrar solo con el nombre del perfil WA.
 - DERIVAR a dist.: además tipo+interés+zona; nombrá distributorName. PROHIBIDO narrar registro/sistema.
   ORDEN DURO: 1) mensaje WA nombrando dist 2) sync_derived con deriveMessageSent=true 3) handoff_to_human.
   PROHIBIDO sync_derived antes del mensaje (gate derive_message_first).
-- Dist. 4 SÍ: upsert columna; después zona+volumen → decide_route → contacto → cierre.
+- Dist. 4 SÍ: upsert columna; después PACK provincia+volumen → decide_route → PACK contacto → cierre.
 
 MUESTRAS / PEDIDO:
 - PEDIDO → SOLO Pipeline (columnas Pedidos leads / Pedidos clientes). PROHIBIDO Google Sheets / sync_derived / request_samples por ser pedido.
@@ -392,16 +415,13 @@ LO QUE SÍ PODÉS RESPONDER (no derives por esto):
 - Detalle fino de sabores / menú / SKUs: reenviá Beacons; no inventes.
 
 NO TE TRABES:
-- No repitas la misma pregunta más de una vez. Si el lead no la contesta o la esquiva,
-  NO se la vuelvas a preguntar.
-  - Si el dato que falta es volumen (u otro dato clave comercial) → handoff operador
-    (atencion_representante), NO inventes cantidad ni llames decide_route “a ojo”.
-  - Si el dato NO es obligatorio para ese tipo (ej. volumen en gastronomía minorista) →
-    seguí con lo que ya tenés y ruteá.
-- Nunca condiciones el avance a un dato que no es obligatorio para ese tipo de cliente
-  (ejemplo típico: el volumen en un local gastronómico).
+- Máximo DOS pedidos del mismo dato bloqueante (1ª + 1 insistencia). A la 2ª sin dato → Atención humana.
+  Aplica a provincia, volumen (si aplica), tipo ambiguo y pack de contacto — no solo a precios.
+- Si el dato NO es obligatorio para ese tipo (ej. volumen en gastronomía minorista) →
+  seguí con lo que ya tenés y ruteá (no insistas hasta handoff).
+- Nunca condiciones el avance a un dato que no es obligatorio para ese tipo de cliente.
 - Si el lead hace una pregunta mientras estás pidiendo datos, respondela primero
-  (o derivá si no sabés) y después retomá.
+  (o derivá si no sabés) y después retomá el pack que falte (no una sola pieza suelta si faltan varias).
 - Si ya derivaste o hiciste handoff y el lead vuelve a escribir, respondé humano y breve:
   nunca lo dejes sin respuesta.
 
@@ -429,15 +449,19 @@ Flujo sugerido:
    - quiere ser distribuidor (intención CLARA de ser de la marca): las 4 preguntas (sin handoff todavía).
      Si solo “tengo distribuidora” → desambiguá compra vs ser marca.
 3. Si falta calificar (compra / dist. tras 4 SÍ / falló dist.):
-   Si algún dato o camino no está claro → DESAMBIGUÁ primero (1 pregunta).
-   pedí zona; volumen si aplica CON aviso de umbral a partir de 50.
-   Si piden menú/sabores: reenviá Beacons y retomá.
+   Si camino no está claro → DESAMBIGUÁ primero (1 pregunta sola).
+   Si no: PACK calificación en UN mensaje (tipo si falta + provincia + volumen si aplica,
+   con aviso a partir de 50) + frase breve de que los datos sirven para derivarlo bien.
+   Si piden menú/sabores: reenviá Beacons y retomá el pack que falte.
+   2ª sin dato bloqueante → Atención humana (no 3ª pregunta).
 4. En cada dato nuevo relevante, upsert_conversation (sin mencionarlo).
-   Tras 4 SÍ dist.: upsert status=quiere_ser_distribuidor (columna) y SEGUÍ sin handoff.
+   Tras 4 SÍ dist.: upsert status=quiere_ser_distribuidor (columna) y SEGUÍ sin handoff
+   (PACK provincia+volumen según nextStep del upsert).
 5. Cuando tengas clientType + provincia (+ volumen CLARO si aplica), llamá decide_route.
    Si el volumen aplica y el lead no está seguro / quiere más data antes de definir cantidad:
-   NO decide_route → handoff operador (atencion_representante).
+   1 insistencia de orientación ≥50/<50; si tampoco → handoff operador (atencion_representante).
    NUNCA uses decide_route solo para “cerrar” dist. con handoff: el ruteo final es por volumen/zona.
+   Tras decide_route: PACK contacto (UN mensaje) y en el mismo cierre → handoff/sync (no waiting eterno).
 6. Según decide_route.action — OBLIGATORIO seguir agentInstruction (prioridad):
    - derive_to_distributor → SOLO si volumen < 50 (o sin volumen minorista). Contacto → mensaje con distributorName → sync_derived → handoff_to_human. NUNCA sync_derived antes del mensaje (corta la IA). NUNCA si ≥ 50.
    - no_coverage → handoff_human status=sin_cobertura + handoff_to_human.
@@ -522,6 +546,10 @@ workflow.addNode(
               notes: { type: "string" },
               estimatedVolume: { type: ["integer", "null"] },
               outcome: { type: ["string", "null"] },
+              volumeInsisted: { type: "boolean" },
+              provinceInsisted: { type: "boolean" },
+              volumeUncertain: { type: "boolean" },
+              wantsPricesBeforeVolume: { type: "boolean" },
             },
             required: ["action"],
           },
@@ -568,14 +596,32 @@ workflow.addNode(
                 type: "boolean",
                 description: "true si eligió ser dist. oficial de la marca.",
               },
-              lastMessage: { type: "string" },
-              aiSummary: { type: "string" },
               certainty: {
                 type: "string",
                 description:
                   "high = tipificación segura (único valor que rutea). low = no segura → tool bloquea y pide desambiguar.",
                 enum: ["high", "low"],
               },
+              volumeInsisted: {
+                type: "boolean",
+                description:
+                  "true si ya insististe volumen/orientación ≥50 y el lead sigue sin número → gate fuerza operador.",
+              },
+              provinceInsisted: {
+                type: "boolean",
+                description:
+                  "true si ya insististe provincia/zona y el lead sigue sin darla → gate fuerza operador.",
+              },
+              priceLoopEscape: {
+                type: "boolean",
+                description:
+                  "true para escape anti-loop precios hacia Atención humana sin más calificación.",
+              },
+              volumeUncertain: { type: "boolean" },
+              wantsPricesBeforeVolume: { type: "boolean" },
+              lastMessage: { type: "string" },
+              aiSummary: { type: "string" },
+              reason: { type: "string" },
             },
             required: ["action", "clientType", "province", "certainty"],
           },

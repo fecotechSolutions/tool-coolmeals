@@ -1,12 +1,18 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DEMO_MODE } from "@/data/repository";
 import { APP_ENV, APP_ENV_LABEL } from "@/lib/app-env";
+import { clearSession, getSessionUser } from "@/lib/auth";
+import { apiRequest } from "@/lib/http";
 
 const NAV = [
   { href: "/", label: "Dashboard", id: "dashboard" },
   { href: "/pipeline", label: "Pipeline", id: "pipeline" },
   { href: "/distribuidores", label: "Distribuidores", id: "distribuidores" },
   { href: "/comercial", label: "Config. comercial", id: "comercial" },
+  { href: "/usuarios", label: "Usuarios", id: "usuarios" },
   // Ocultos por ahora; las rutas siguen existiendo para reactivar después.
   { href: "/muestras", label: "Muestras", id: "muestras", hidden: true },
   {
@@ -34,7 +40,19 @@ export function AppShell({
   children: React.ReactNode;
   current: NavId;
 }) {
+  const router = useRouter();
   const visibleNav = NAV.filter((item) => !("hidden" in item && item.hidden));
+  const user = getSessionUser();
+
+  async function logout() {
+    try {
+      await apiRequest("/auth/logout", { method: "POST" });
+    } catch {
+      /* ignore */
+    }
+    clearSession();
+    router.replace("/login");
+  }
 
   return (
     <div className="app-shell">
@@ -98,7 +116,25 @@ export function AppShell({
               {APP_ENV_LABEL[APP_ENV]}
             </span>
             <span className="chip">superadmin</span>
-            <span className="chip chip-soft">sin auth aún</span>
+            {user?.email ? (
+              <span className="chip chip-soft">{user.email}</span>
+            ) : null}
+            {!DEMO_MODE ? (
+              <>
+                <Link className="btn btn-ghost btn-sm" href="/change-password">
+                  Contraseña
+                </Link>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => void logout()}
+                >
+                  Salir
+                </button>
+              </>
+            ) : (
+              <span className="chip chip-soft">demo</span>
+            )}
           </div>
         </header>
         <main className="main">{children}</main>

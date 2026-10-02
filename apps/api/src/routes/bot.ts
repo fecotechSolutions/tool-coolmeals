@@ -191,7 +191,8 @@ botRoutes.post(
         origin: body.origin,
         status: body.status ?? "ia_atendiendo",
         client_type: body.clientType ?? "minorista",
-        province: body.province ?? "Córdoba",
+        // Sin default de provincia: el bot debe preguntarla; Córdoba era un atajo de Phase 0.
+        province: body.province ?? "",
         distributor_id: body.distributorId ?? null,
         ai_summary: body.aiSummary ?? "",
         last_message: body.lastMessage ?? body.message?.content ?? "",

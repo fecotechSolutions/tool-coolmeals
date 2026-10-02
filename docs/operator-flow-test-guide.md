@@ -420,7 +420,7 @@ Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 
 - Reabrir automáticamente un chat ya Finalizado.  
 - Estados de envío de muestras (enviado / entregado) en la UI.  
-- Login de operadores con roles reales (auth stub).
+- Login de operadores con roles reales (`app_users`: un `superadmin` + `admin`s). Ver [`environments.md`](./environments.md) §3.
 
 **Prod WhatsApp:** `+54 9 351 549-5440`. **Pruebas:** Kapso Sandbox → Pipeline local (DEV). Ver [`environments.md`](./environments.md).
 

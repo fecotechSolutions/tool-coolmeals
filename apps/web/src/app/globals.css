@@ -1349,3 +1349,173 @@ table.data tr:hover td {
   background: #eef3f6;
   color: var(--ink-muted);
 }
+
+/* —— Auth / login —— */
+.auth-loading {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--ink-muted);
+}
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 0%, rgba(15, 143, 179, 0.18), transparent),
+    linear-gradient(165deg, var(--navy-deep) 0%, var(--navy) 45%, #0a5a7a 100%);
+}
+
+.login-card {
+  width: min(100%, 400px);
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.75rem 1.5rem 1.5rem;
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: 1.35rem;
+}
+
+.login-brand .brand-mark {
+  justify-content: center;
+  font-size: 1.35rem;
+}
+
+.login-brand .cool {
+  color: var(--navy);
+}
+
+.login-brand .meals {
+  color: var(--cyan);
+}
+
+.login-sub {
+  margin: 0.35rem 0 0.75rem;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.login-form input {
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  font-weight: 500;
+}
+
+.login-form input:focus {
+  outline: 2px solid color-mix(in srgb, var(--cyan) 35%, white);
+  border-color: var(--cyan);
+}
+
+.login-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 0.88rem;
+}
+
+.login-form .btn {
+  margin-top: 0.35rem;
+  width: 100%;
+}
+
+.login-links {
+  margin: 0.25rem 0 0;
+  text-align: center;
+  font-size: 0.88rem;
+}
+
+.login-links a {
+  color: var(--cyan);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Usuarios */
+.users-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
+  gap: 0.95rem;
+  align-items: start;
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.05rem 0.55rem;
+}
+
+.panel-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--navy);
+  letter-spacing: -0.02em;
+}
+
+.users-create {
+  position: sticky;
+  top: 1rem;
+}
+
+.users-create-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.users-create-form .btn {
+  width: 100%;
+}
+
+.flash {
+  margin: 0 0 0.95rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.flash-error {
+  background: #fde8e6;
+  color: #9f1f16;
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, white);
+}
+
+.flash-ok {
+  background: #e6f6e5;
+  color: #146612;
+  border: 1px solid color-mix(in srgb, var(--ok) 25%, white);
+}
+
+@media (max-width: 980px) {
+  .users-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .users-create {
+    position: static;
+  }
+}

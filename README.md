@@ -43,6 +43,7 @@ Web y API leen el **mismo** `.env` de la raíz. En Vercel, las mismas keys se co
 | `NEXT_PUBLIC_API_URL` | Web |
 | `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` | Web (cliente) |
 | `SUPABASE_URL` / `SERVICE_ROLE_KEY` | API (servidor) |
+| `SUPERADMIN_*` / `SESSION_SECRET` / `APP_PUBLIC_URL` / `SMTP_*` | API — auth panel (`app_users`) |
 | `CORS_ORIGINS` | API |
 | Kapso / Sheets | API (opcionales según features) |
 
@@ -57,13 +58,17 @@ En SQL Editor, en orden:
 3. `supabase/migrations/20260720000000_derive_handoff_window.sql` (`derived_at` / `finalize_at`)
 4. `supabase/migrations/20260720140000_quiere_ser_representante_fason.sql`
 5. `supabase/migrations/20260724120000_sample_request_extra_fields.sql`
-6. Opcional: `supabase/seed.sql`
+6. `supabase/migrations/20260930120000_app_users_auth.sql` (login panel: `app_users`)
+7. `supabase/migrations/20261002120000_one_superadmin.sql` (un solo superadmin)
+8. Opcional: `supabase/seed.sql`
+
+Auth del panel (oct 2026): **activo en DEV**; PROD pendiente. Detalle: [`docs/environments.md`](docs/environments.md) §3.
 
 ## Documentación (bot WhatsApp + Pipeline)
 
 | Audiencia | Doc |
 |-----------|-----|
-| **DEV vs PROD (entornos)** | [`docs/environments.md`](docs/environments.md) |
+| **Cuentas + DEV/PROD + login** | [`docs/environments.md`](docs/environments.md) |
 | **Operador — one-pager** | [`docs/operator-cheat-sheet-bot.md`](docs/operator-cheat-sheet-bot.md) |
 | **Planilla lógica + casos + prioridades** | [`docs/planilla-flujo-ia-definitiva.csv`](docs/planilla-flujo-ia-definitiva.csv) |
 | Anexo prompt / diagrama | [`docs/planilla-flujo-ia-anexo-prompt.md`](docs/planilla-flujo-ia-anexo-prompt.md) |

@@ -4,7 +4,8 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { secureHeaders } from "hono/secure-headers";
 import { getEnv } from "./env";
-import { optionalInternalAuth } from "./middleware/auth";
+import { requireSession } from "./middleware/auth";
+import { authRoutes } from "./routes/auth";
 import { botRoutes } from "./routes/bot";
 import { commercialRoutes } from "./routes/commercial";
 import { conversationsRoutes } from "./routes/conversations";
@@ -43,6 +44,7 @@ export function createApp() {
   );
 
   app.route("/health", healthRoutes);
+  app.route("/auth", authRoutes);
   app.route("/cron", cronRoutes);
   /** Público: Kapso firma con KAPSO_WEBHOOK_SECRET (HMAC). */
   app.route("/webhooks/kapso", kapsoWebhookRoutes);
@@ -60,8 +62,8 @@ export function createApp() {
   ] as const;
 
   for (const path of protectedPaths) {
-    app.use(`${path}/*`, optionalInternalAuth);
-    app.use(path, optionalInternalAuth);
+    app.use(`${path}/*`, requireSession);
+    app.use(path, requireSession);
   }
 
   app.route("/leads", leadsRoutes);

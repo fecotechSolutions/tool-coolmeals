@@ -9,6 +9,14 @@ const envSchema = z.object({
   APP_ENV: z
     .enum(["development", "staging", "production"])
     .default("development"),
+  /**
+   * Escape hatch: permitir Supabase PROD con APP_ENV local.
+   * Solo consciente y temporal (ej. DEV caído). Sin esto, local + URL prod = crash.
+   */
+  ALLOW_PROD_SUPABASE_LOCALLY: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
   API_PORT: z.coerce.number().int().positive().default(3001),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
@@ -23,6 +31,26 @@ const envSchema = z.object({
     ),
   /** Optional gate until Supabase Auth is wired. */
   INTERNAL_API_SECRET: z.string().min(8).optional(),
+
+  /**
+   * Bootstrap del primer superadmin (si app_users está vacío).
+   * Después el login usa la tabla app_users.
+   */
+  SUPERADMIN_EMAIL: z.string().email(),
+  SUPERADMIN_PASSWORD: z.string().min(8),
+  /** HMAC para firmar tokens de sesión (Bearer). */
+  SESSION_SECRET: z.string().min(16),
+  /**
+   * URL pública del panel (links de reset). Local: http://localhost:3000
+   */
+  APP_PUBLIC_URL: z.string().url().default("http://localhost:3000"),
+
+  /** SMTP (Google Workspace Symbionet) — reset de contraseña por mail */
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
 
   /** Kapso (WhatsApp automation) */
   KAPSO_API_BASE_URL: z.string().url().optional(),
@@ -126,6 +154,37 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+/** Project ref de Supabase PROD (coolmeals operativo). Local no debe usarlo. */
+export const PROD_SUPABASE_PROJECT_REF = "jrsvfyujpuuhnwzjubow";
+
+function assertLocalNotOnProdSupabase(env: Env): void {
+  if (env.APP_ENV === "production") return;
+  if (env.ALLOW_PROD_SUPABASE_LOCALLY) {
+    console.warn(
+      `[env] ALLOW_PROD_SUPABASE_LOCALLY=true — APP_ENV=${env.APP_ENV} está usando Supabase PROD. Sacá este flag cuando DEV vuelva.`,
+    );
+    return;
+  }
+
+  let host = "";
+  try {
+    host = new URL(env.SUPABASE_URL).hostname.toLowerCase();
+  } catch {
+    return;
+  }
+
+  if (!host.includes(PROD_SUPABASE_PROJECT_REF)) return;
+
+  throw new Error(
+    [
+      `Local/APP_ENV=${env.APP_ENV} no puede usar Supabase PROD (${PROD_SUPABASE_PROJECT_REF}).`,
+      "Poné SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY del proyecto DEV en el `.env` de la raíz.",
+      "Si necesitás prod de forma consciente y temporal: ALLOW_PROD_SUPABASE_LOCALLY=true",
+      "Guía: docs/environments.md",
+    ].join(" "),
+  );
+}
+
 let cached: Env | null = null;
 
 export function getEnv(): Env {
@@ -139,6 +198,7 @@ export function getEnv(): Env {
     throw new Error(`Invalid API environment: ${message}`);
   }
 
+  assertLocalNotOnProdSupabase(parsed.data);
   cached = parsed.data;
   return cached;
 }

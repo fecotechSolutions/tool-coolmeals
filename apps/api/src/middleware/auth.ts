@@ -1,40 +1,61 @@
 import { fail } from "@coolmeals/shared";
-import type { Context, Next } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { getEnv } from "../env";
+import { type SessionUser, verifySessionToken } from "../lib/session";
 
-/**
- * Temporary internal gate until Supabase Auth is connected.
- * If INTERNAL_API_SECRET is set, requests must send header:
- *   x-internal-secret: <value>
- * When Auth lands, replace this with JWT verification + role checks.
- */
-export async function optionalInternalAuth(c: Context, next: Next) {
-  const { INTERNAL_API_SECRET } = getEnv();
-
-  if (!INTERNAL_API_SECRET) {
-    await next();
-    return;
-  }
-
-  const provided = c.req.header("x-internal-secret");
-  if (provided !== INTERNAL_API_SECRET) {
-    return c.json(fail("UNAUTHORIZED", "Invalid or missing internal secret"), 401);
-  }
-
-  await next();
+function readBearer(c: Context): string | null {
+  const header = c.req.header("authorization") ?? c.req.header("Authorization");
+  if (!header) return null;
+  const m = header.match(/^Bearer\s+(.+)$/i);
+  return m?.[1]?.trim() || null;
 }
 
-/**
- * Placeholder for future role-based access.
- * Usage after Auth: requireRole("superadmin")(c, next)
- */
-export function requireRole(..._allowed: Array<"superadmin" | "admin">) {
-  return async (c: Context, next: Next) => {
-    // TODO: read user from JWT / session and enforce role
-    // const user = c.get("user");
-    // if (!user || !allowed.includes(user.role)) {
-    //   return c.json(fail("FORBIDDEN", "Insufficient role"), 403);
-    // }
+function resolveUser(c: Context): SessionUser | null {
+  const token = readBearer(c);
+  if (token) {
+    const user = verifySessionToken(token);
+    if (user) return user;
+  }
+
+  const { INTERNAL_API_SECRET } = getEnv();
+  if (INTERNAL_API_SECRET) {
+    const provided = c.req.header("x-internal-secret");
+    if (provided === INTERNAL_API_SECRET) {
+      return {
+        id: "00000000-0000-0000-0000-000000000000",
+        email: "internal@tooling",
+        role: "superadmin",
+        mustChangePassword: false,
+      };
+    }
+  }
+
+  return null;
+}
+
+export const requireSession: MiddlewareHandler = async (c, next) => {
+  const user = resolveUser(c);
+  if (!user) {
+    return c.json(fail("UNAUTHORIZED", "Login requerido"), 401);
+  }
+  c.set("user", user);
+  await next();
+};
+
+export function requireRole(
+  ...allowed: Array<"superadmin" | "admin">
+): MiddlewareHandler {
+  return async (c, next) => {
+    let user = c.get("user") as SessionUser | undefined;
+    if (!user) {
+      user = resolveUser(c) ?? undefined;
+      if (user) c.set("user", user);
+    }
+    if (!user || !allowed.includes(user.role)) {
+      return c.json(fail("FORBIDDEN", "Insufficient role"), 403);
+    }
     await next();
   };
 }
+
+export const optionalInternalAuth = requireSession;

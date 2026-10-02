@@ -886,17 +886,49 @@ function buildQualification(input, conv) {
       isTruthyToolFlag(input && input.volumeInsisted) ||
       isTruthyToolFlag(input && input.priceInsisted) ||
       isTruthyToolFlag(input && input.priceLoopEscape),
+    provinceInsisted: isTruthyToolFlag(input && input.provinceInsisted),
     needsVolume: needsVolumeForClientType(clientType),
   };
 }
 
 function nextStepAfterDistributorColumn(q) {
-  if (!q.province) {
+  const missingProvince = !q.province;
+  const missingVolume = q.volumeUncertain || q.volume === null;
+
+  if (missingProvince && q.provinceInsisted) {
+    return {
+      nextStep: "handoff_operator",
+      agentInstruction:
+        "CHECKLIST dist. anti-loop: YA insististe provincia sin zona clara. " +
+        "Mensaje asesor + handoff_human status=atencion_representante " +
+        "(contactRefused=true si faltan datos) + handoff_to_human YA. " +
+        "PROHIBIDO otra pregunta de provincia.",
+    };
+  }
+
+  // Pack: provincia + volumen juntos cuando faltan ambos (1 mensaje).
+  if (missingProvince && missingVolume) {
+    return {
+      nextStep: "ask_qualification_pack",
+      agentInstruction:
+        "CHECKLIST dist. (gate). Columna Quiere ser distribuidor OK. Faltan PROVINCIA y VOLUMEN. " +
+        "UN solo mensaje amable: aclará que esos datos sirven para derivarlo bien con un asesor " +
+        "o el distribuidor de su zona (PROHIBIDO 'sin eso no avanzamos') + pedí provincia Y " +
+        "bultos/cajas/mes con aviso umbral a partir de 50 + enter_waiting. " +
+        "PROHIBIDO partir en dos turnos. PROHIBIDO handoff/decide_route todavía. " +
+        "Si responde parcial: pedí solo lo que falte. Si a la 2ª sigue sin provincia: " +
+        "upsert/decide con provinceInsisted=true → operador. Si sin volumen tras insistir: volumeInsisted=true.",
+    };
+  }
+
+  if (missingProvince) {
     return {
       nextStep: "ask_province",
       agentInstruction:
-        "CHECKLIST dist. (gate). Columna Quiere ser distribuidor OK. Falta PROVINCIA. " +
-        "Preguntá SOLO la provincia + enter_waiting. PROHIBIDO handoff, decide_route, prometer asesor todavía.",
+        "CHECKLIST dist. (gate). Columna Quiere ser distribuidor OK. Falta PROVINCIA (volumen ya OK). " +
+        "Preguntá la provincia en UN mensaje (podés aclarar que sirve para derivarlo bien) + enter_waiting. " +
+        "PROHIBIDO handoff, decide_route, prometer asesor todavía. " +
+        "Si ya insististe una vez y sigue sin zona: provinceInsisted=true → handoff operador.",
     };
   }
   if (q.volumeUncertain || q.volume === null) {
@@ -951,13 +983,14 @@ function nextStepAfterDistributorColumn(q) {
 /** Texto fijo: cualquier cierre comercial exige contacto (o negativa explícita). */
 function contactChecklistInstruction() {
   return (
-    "CONTACTO OBLIGATORIO antes de cerrar (gate duro): " +
-    "pedí nombre completo + nombre del negocio/local + teléfono de contacto. " +
-    "El teléfono hay que EXIGIRLO/CONFIRMARLO aunque aparezca en WhatsApp " +
-    "(ej. '¿Este mismo número te sirve de contacto o preferís otro?'). " +
-    "Después handoff_human o sync_derived con fullName, company, contactPhone y phoneConfirmed=true. " +
-    "Si el lead SE NIEGA a dar alguno: contactRefused=true y recién ahí cerrá " +
-    "(operador atencion_representante). PROHIBIDO cerrar solo con el nombre del perfil WA."
+    "CONTACTO en UN solo mensaje (pack): nombre completo + nombre del negocio/local + " +
+    "teléfono de contacto confirmado (ej. '¿Este mismo número te sirve o preferís otro?'). " +
+    "Aclará que sirve para pasarle el caso al equipo. PROHIBIDO 'sin eso no avanzamos'. " +
+    "Después handoff_human o sync_derived con fullName, company, contactPhone y phoneConfirmed=true " +
+    "EN EL MISMO TURNO de cierre (o el inmediato tras la respuesta). " +
+    "Si el lead SE NIEGA o no responde tras 1 insistencia: contactRefused=true y cerrá " +
+    "(operador atencion_representante). PROHIBIDO pedir contacto otra vez y quedar en waiting. " +
+    "PROHIBIDO cerrar solo con el nombre del perfil WA."
   );
 }
 
@@ -1069,15 +1102,38 @@ function gateDecideRouteQualification(input, conv) {
 
   const q = buildQualification(input, conv);
   if (!q.province) {
+    if (q.provinceInsisted) {
+      return {
+        ok: false,
+        gate: "force_operator_missing_province",
+        needData: false,
+        nextStep: "handoff_operator",
+        reason: "Anti-loop: ya se insistió provincia sin zona → operador.",
+        agentInstruction:
+          "GATE force_operator_missing_province: PROHIBIDO otra pregunta de zona. " +
+          "Mensaje de cierre (asesor te contacta) + despedida. " +
+          "Silencio: handoff_human status=atencion_representante contactRefused=true + " +
+          "handoff_to_human EN ESTE TURNO.",
+      };
+    }
+    const alsoNeedsVolume =
+      q.needsVolume && (q.volumeUncertain || q.volume === null);
     return {
       ok: false,
       gate: "missing_province",
       needData: true,
-      missing: ["province"],
-      reason: "Falta provincia/zona antes de rutear.",
-      agentInstruction:
-        "GATE: falta provincia. NO inventes zona. Preguntá SOLO provincia + enter_waiting. " +
-        "Después volvé a decide_route con province y certainty=high.",
+      missing: alsoNeedsVolume ? ["province", "estimatedVolume"] : ["province"],
+      reason: alsoNeedsVolume
+        ? "Faltan provincia y volumen antes de rutear."
+        : "Falta provincia/zona antes de rutear.",
+      agentInstruction: alsoNeedsVolume
+        ? "GATE: faltan provincia y volumen. UN solo mensaje (pack): pedí provincia Y " +
+          "bultos/cajas/mes (aviso a partir de 50); aclará que sirven para derivarlo bien. " +
+          "enter_waiting. PROHIBIDO inventar zona/volumen. Si ya insististe provincia: " +
+          "provinceInsisted=true. Si ya insististe volumen: volumeInsisted=true."
+        : "GATE: falta provincia. NO inventes zona. Preguntá provincia + enter_waiting. " +
+          "Si ya insististe una vez sin respuesta: decide_route/upsert con provinceInsisted=true " +
+          "→ operador. Después volvé a decide_route con province y certainty=high.",
     };
   }
   if (q.needsVolume && q.volumeUncertain) {
@@ -1329,7 +1385,8 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
       origin: input.origin || "whatsapp",
       status: input.status || "ia_atendiendo",
       client_type: sanitizeClientType(input.clientType) || "otro",
-      province: input.province || "Córdoba",
+      // Nunca defaultear provincia: sin dato real el gate debe pedirla (ask_province).
+      province: resolveProvince(input.province) || "",
       distributor_id: input.distributorId || null,
       ai_summary: input.aiSummary || "",
       last_message: input.lastMessage || (input.message && input.message.content) || "",

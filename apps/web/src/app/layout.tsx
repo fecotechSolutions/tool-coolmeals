@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Sora } from "next/font/google";
+import { AuthGate } from "@/components/AuthGate";
 import "./globals.css";
 
 const display = Sora({
@@ -34,7 +35,7 @@ export default function RootLayout({
             --font-body: var(--font-body-loaded), "Plus Jakarta Sans", sans-serif;
           }
         `}</style>
-        {children}
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );
