@@ -412,8 +412,9 @@ Si el filtro dice “Hoy” y no ves un caso de ayer: es correcto.
 | Lead en **Esperando respuesta** | Abandono mid-flujo; ~**24 h** → **Descartado** |
 | Lead en **Muestras** | Logística mira `/muestras` + sheet muestras. Si el operador arrastra la card a Muestras desde otra columna (ej. Quiere ser distribuidor), se registra fecha/nombre/teléfono/**tipo de cliente**/empresa/provincia/dni/correo/CP/dirección (vacíos si no hay). |
 | Card en **Finalizado** | Visible **5 días** en la columna Finalizado; después **desaparece del Pipeline** (sigue en DB / Dashboard). |
+| Card en **En espera** | Queda visible **hasta que el operador la mueva**. Al entrar: Kapso `ended` (IA cierra; **no** handoff). |
 | Card en **Descartado** | Visible **2 días** desde que se creó la card; después **desaparece del Pipeline** (sigue en DB / Dashboard; las métricas se conservan). |
-| Desplegable **Resultado** en cualquier card | `Finalizado con éxito` / `Finalizado sin éxito` → status `finalizado` + outcome + Kapso `ended` si el bot estaba activo; la card desaparece. |
+| Desplegable **Resultado** en cualquier card | `En espera` → `en_espera` + ended; `Finalizado con éxito` / `sin éxito` → `finalizado` + ended; `Descartado` → `descartado` + ended. |
 | Querés tomar el caso a mano | Arrastrá / cambiá estado a la columna que corresponda (handoff manual) |
 
 ### Qué no hace el sistema (aún)

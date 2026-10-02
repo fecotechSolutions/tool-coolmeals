@@ -52,6 +52,9 @@ function statusSubtitle(status: ConversationStatus) {
   if (status === "atencion_representante") {
     return "Seguimiento humano Cool Meals";
   }
+  if (status === "en_espera") {
+    return "IA cerrada · queda hasta que ops mueva";
+  }
   if (status === "finalizado") {
     return "Cierre con resultado (éxito / sin éxito) o auto";
   }
@@ -344,6 +347,16 @@ export default function PipelinePage() {
       return;
     }
 
+    if (column.status === "en_espera") {
+      await finalizeWithResult(current, "en_espera");
+      return;
+    }
+
+    if (column.status === "finalizado" || column.status === "descartado") {
+      // Cierres formales: usar el desplegable Resultado (éxito / sin éxito / Descartado).
+      return;
+    }
+
     const clearDistributor =
       column.status === "nuevo" ||
       column.status === "ia_atendiendo" ||
@@ -425,8 +438,12 @@ export default function PipelinePage() {
   async function finalizeWithResult(card: Conversation, result: FinalizeResult) {
     const previous = conversations;
     const nextStatus =
-      result === "descartado" ? "descartado" : "finalizado";
-    // Optimistic: mueve a Finalizado o Descartado.
+      result === "descartado"
+        ? "descartado"
+        : result === "en_espera"
+          ? "en_espera"
+          : "finalizado";
+    // Optimistic: mueve a En espera / Finalizado / Descartado.
     setConversations((prev) =>
       prev.map((c) =>
         c.id === card.id
@@ -456,7 +473,7 @@ export default function PipelinePage() {
     <AppShell current="pipeline">
       <PageHeader
         title="Pipeline"
-        description="Arrastrá cards entre columnas. El desplegable Resultado cierra el lead (éxito / sin éxito → Finalizado, o Descartado), corta el bot si estaba activo."
+        description="Arrastrá cards entre columnas. En espera cierra la IA (sin handoff) y deja la card. Resultado: En espera / éxito / sin éxito / Descartado."
       />
 
       <div className="pipeline-legend">
@@ -661,6 +678,7 @@ export default function PipelinePage() {
                                     .value as FinalizeResult | "";
                                   event.target.value = "";
                                   if (
+                                    value === "en_espera" ||
                                     value === "finalizado_exito" ||
                                     value === "finalizado_sin_exito" ||
                                     value === "descartado"

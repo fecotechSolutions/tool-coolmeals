@@ -91,6 +91,8 @@ export const ConversationStatus = {
   MUESTRAS: "muestras",
   PEDIDO_LEAD: "pedido_lead",
   PEDIDO_CLIENTE: "pedido_cliente",
+  /** Avance con cliente; IA cerrada; card queda hasta que ops mueva. */
+  EN_ESPERA: "en_espera",
   FINALIZADO: "finalizado",
   DESCARTADO: "descartado",
 } as const;
@@ -111,6 +113,7 @@ export const conversationStatusSchema = z.enum([
   "muestras",
   "pedido_lead",
   "pedido_cliente",
+  "en_espera",
   "finalizado",
   "descartado",
 ]);
@@ -127,6 +130,8 @@ export const ConversationOutcome = {
   QUIERE_SER_REPRESENTANTE: "quiere_ser_representante",
   QUIERE_SER_FASON: "quiere_ser_fason",
   INFO_ENTREGADA: "info_entregada",
+  /** Parking ops: avanzó, cliente sin decisión; IA cerrada. */
+  EN_ESPERA: "en_espera",
   /** Cierre manual: venta / conversión exitosa. */
   FINALIZADO_EXITO: "finalizado_exito",
   /** Cierre manual: sin venta / sin conversión. */
@@ -146,12 +151,14 @@ export const conversationOutcomeSchema = z.enum([
   "quiere_ser_representante",
   "quiere_ser_fason",
   "info_entregada",
+  "en_espera",
   "finalizado_exito",
   "finalizado_sin_exito",
 ]);
 
 /** Resultados de cierre manual desde Pipeline (métricas de conversión). */
 export const FINALIZE_RESULT_OUTCOMES = [
+  "en_espera",
   "finalizado_exito",
   "finalizado_sin_exito",
   "descartado",
@@ -571,7 +578,12 @@ export type BotHandoffInput = z.infer<typeof botHandoffSchema>;
 /** Cierre manual con resultado comercial (éxito / sin éxito / descartado). */
 export const botFinalizeSchema = z.object({
   conversationId: z.string().uuid(),
-  result: z.enum(["finalizado_exito", "finalizado_sin_exito", "descartado"]),
+  result: z.enum([
+    "en_espera",
+    "finalizado_exito",
+    "finalizado_sin_exito",
+    "descartado",
+  ]),
   reason: z.string().trim().max(1000).optional(),
   kapsoExecutionId: z.string().optional(),
 });
@@ -579,8 +591,8 @@ export type BotFinalizeInput = z.infer<typeof botFinalizeSchema>;
 
 /**
  * Columnas del Pipeline.
- * Incluye Finalizado / Descartado para ver cierres; el desplegable Resultado
- * mueve a finalizado (éxito/sin éxito) o descartado.
+ * Incluye En espera / Finalizado / Descartado; Resultado mueve a en_espera,
+ * finalizado (éxito/sin éxito) o descartado.
  */
 export const PIPELINE_STATUSES = [
   "nuevo",
@@ -595,6 +607,7 @@ export const PIPELINE_STATUSES = [
   "muestras",
   "pedido_lead",
   "pedido_cliente",
+  "en_espera",
   "finalizado",
   "descartado",
 ] as const satisfies readonly ConversationStatus[];
@@ -643,6 +656,7 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
   muestras: "Muestras",
   pedido_lead: "Pedidos (leads)",
   pedido_cliente: "Pedidos (clientes)",
+  en_espera: "En espera",
   finalizado: "Finalizado",
   descartado: "Descartado",
 };
@@ -658,6 +672,7 @@ export const CONVERSATION_OUTCOME_LABELS: Record<ConversationOutcome, string> = 
   quiere_ser_representante: "Quiere ser representante",
   quiere_ser_fason: "Quiere ser fasón",
   info_entregada: "Info entregada",
+  en_espera: "En espera",
   finalizado_exito: "Finalizado con éxito",
   finalizado_sin_exito: "Finalizado sin éxito",
 };

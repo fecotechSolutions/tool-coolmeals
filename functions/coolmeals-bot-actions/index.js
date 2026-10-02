@@ -1303,7 +1303,7 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
         agentInstruction:
           "RECONTACTO (<1 año, ya calificado). NO vuelvas a tipificar ni llames decide_route / request_samples / sync_derived como lead nuevo. " +
           "UN mensaje corto: ya estás en proceso / un asesor o el distribuidor te contacta según tu caso + despedida. " +
-          "Si status es finalizado/descartado: agradecé y ofrecé que un asesor retome si hace falta; NO armes menú ni samples. " +
+          "Si status es en_espera/finalizado/descartado: agradecé y ofrecé que un asesor retome si hace falta; NO armes menú ni samples. " +
           "No crees métricas nuevas: es la misma card.",
       };
     }
@@ -1323,6 +1323,7 @@ async function upsertConversation(input, phoneFromCtx, supabaseUrl, supabaseKey,
 
   const protectedStatuses = {
     derivado_distribuidor: true,
+    en_espera: true,
     finalizado: true,
     atencion_representante: true,
     quiere_ser_distribuidor: true,

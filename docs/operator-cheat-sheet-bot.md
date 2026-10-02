@@ -123,6 +123,7 @@ Derivado / Muestras / Atención / Quiere ser… **no** se auto-descartan: cierra
 | Situación | Columna final | Quién |
 |-----------|---------------|-------|
 | Resultado éxito / sin éxito | **Finalizado** | Operador |
+| **En espera** (drag o Resultado) | **En espera** | Ops: avanzó, cliente sin decisión · IA **ended** (no handoff) · card **queda** hasta que ops mueva |
 | Resultado Descartado | **Descartado** | Operador |
 | Auto Sin cobertura | Card oculta + ended | Sistema ~**5 días** (no Descartado) |
 | Auto Esperando respuesta | **Descartado** | Sistema ~**24 h** |

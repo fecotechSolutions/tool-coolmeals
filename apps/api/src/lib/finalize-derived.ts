@@ -625,21 +625,30 @@ export function sinCoberturaFinalizeAt(from = new Date()): Date {
 }
 
 /**
- * Cierre manual desde Pipeline:
+ * Cierre / parking desde Pipeline:
+ * - en_espera → status=en_espera + outcome (IA ended; card queda)
  * - éxito / sin éxito → status=finalizado + outcome
  * - descartado → status=descartado + outcome=descartado
- * En todos los casos: Kapso ended.
+ * En todos los casos: Kapso ended (no handoff).
  */
 export async function finalizeConversationWithResult(input: {
   conversationId: string;
-  result: "finalizado_exito" | "finalizado_sin_exito" | "descartado";
+  result:
+    | "en_espera"
+    | "finalizado_exito"
+    | "finalizado_sin_exito"
+    | "descartado";
   reason?: string;
   kapsoExecutionId?: string | null;
 }): Promise<{
   ok: true;
   row: DbConversation;
   fromStatus: string;
-  outcome: "finalizado_exito" | "finalizado_sin_exito" | "descartado";
+  outcome:
+    | "en_espera"
+    | "finalizado_exito"
+    | "finalizado_sin_exito"
+    | "descartado";
   kapsoExecutionId: string | null;
   kapsoEnded: boolean;
   kapsoError?: string;
@@ -681,19 +690,28 @@ export async function finalizeConversationWithResult(input: {
   }
 
   const isDescartado = input.result === "descartado";
+  const isEnEspera = input.result === "en_espera";
   const label = isDescartado
     ? "Descartado"
-    : input.result === "finalizado_exito"
-      ? "Finalizado con éxito"
-      : "Finalizado sin éxito";
+    : isEnEspera
+      ? "En espera"
+      : input.result === "finalizado_exito"
+        ? "Finalizado con éxito"
+        : "Finalizado sin éxito";
   const note = [`Pipeline: ${label}`, input.reason?.trim() || null]
     .filter(Boolean)
     .join(" — ");
 
+  const nextStatus = isDescartado
+    ? "descartado"
+    : isEnEspera
+      ? "en_espera"
+      : "finalizado";
+
   const { data: updated, error: updateError } = await supabase
     .from("conversations")
     .update({
-      status: isDescartado ? "descartado" : "finalizado",
+      status: nextStatus,
       outcome: input.result,
       finalize_at: null,
       notes: [row.notes, note].filter(Boolean).join("\n"),

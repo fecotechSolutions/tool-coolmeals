@@ -162,7 +162,11 @@ const mockApi = {
 
   async finalizeConversation(
     id: string,
-    result: "finalizado_exito" | "finalizado_sin_exito" | "descartado",
+    result:
+      | "en_espera"
+      | "finalizado_exito"
+      | "finalizado_sin_exito"
+      | "descartado",
     reason?: string,
   ): Promise<Conversation | null> {
     await delay();
@@ -170,14 +174,21 @@ const mockApi = {
     if (idx < 0) return null;
     const current = store.conversations[idx]!;
     const isDescartado = result === "descartado";
+    const isEnEspera = result === "en_espera";
     const label = isDescartado
       ? "Descartado"
-      : result === "finalizado_exito"
-        ? "Finalizado con éxito"
-        : "Finalizado sin éxito";
+      : isEnEspera
+        ? "En espera"
+        : result === "finalizado_exito"
+          ? "Finalizado con éxito"
+          : "Finalizado sin éxito";
     store.conversations[idx] = {
       ...current,
-      status: isDescartado ? "descartado" : "finalizado",
+      status: isDescartado
+        ? "descartado"
+        : isEnEspera
+          ? "en_espera"
+          : "finalizado",
       outcome: result,
       notes: [current.notes, `Pipeline: ${label}${reason ? ` — ${reason}` : ""}`]
         .filter(Boolean)
@@ -394,7 +405,11 @@ const liveApi = {
 
   async finalizeConversation(
     id: string,
-    result: "finalizado_exito" | "finalizado_sin_exito" | "descartado",
+    result:
+      | "en_espera"
+      | "finalizado_exito"
+      | "finalizado_sin_exito"
+      | "descartado",
     reason?: string,
   ) {
     const res = await apiRequest<{

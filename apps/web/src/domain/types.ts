@@ -58,6 +58,7 @@ export const ConversationStatus = {
   MUESTRAS: "muestras",
   PEDIDO_LEAD: "pedido_lead",
   PEDIDO_CLIENTE: "pedido_cliente",
+  EN_ESPERA: "en_espera",
   FINALIZADO: "finalizado",
   DESCARTADO: "descartado",
 } as const;
@@ -350,12 +351,13 @@ export const CONVERSATION_STATUS_LABELS: Record<ConversationStatus, string> = {
   muestras: "Muestras",
   pedido_lead: "Pedidos (leads)",
   pedido_cliente: "Pedidos (clientes)",
+  en_espera: "En espera",
   finalizado: "Finalizado",
   descartado: "Descartado",
 };
 
 /**
- * Columnas del Pipeline (incluye Finalizado / Descartado).
+ * Columnas del Pipeline (incluye En espera / Finalizado / Descartado).
  */
 export const PIPELINE_STATUSES = [
   "nuevo",
@@ -370,11 +372,13 @@ export const PIPELINE_STATUSES = [
   "muestras",
   "pedido_lead",
   "pedido_cliente",
+  "en_espera",
   "finalizado",
   "descartado",
 ] as const satisfies readonly ConversationStatus[];
 
 export const FINALIZE_RESULT_LABELS = {
+  en_espera: "En espera",
   finalizado_exito: "Finalizado con éxito",
   finalizado_sin_exito: "Finalizado sin éxito",
   descartado: "Descartado",

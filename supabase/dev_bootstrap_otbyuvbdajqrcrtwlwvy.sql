@@ -58,6 +58,7 @@ create type public.conversation_status as enum (
   'muestras',
   'pedido_lead',
   'pedido_cliente',
+  'en_espera',
   'finalizado',
   'descartado'
 );
@@ -344,6 +345,7 @@ create index if not exists conversations_finalize_at_idx
 -- Columnas Pipeline: interés representante / fasón (handoff comercial)
 alter type public.conversation_status add value if not exists 'quiere_ser_representante';
 alter type public.conversation_status add value if not exists 'quiere_ser_fason';
+alter type public.conversation_status add value if not exists 'en_espera';
 
 
 -- ========== 20260724120000_sample_request_extra_fields.sql ==========
